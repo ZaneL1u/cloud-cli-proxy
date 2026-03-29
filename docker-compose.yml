@@ -11,6 +11,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - cloudproxy-postgres:/var/lib/postgresql
 
@@ -21,6 +23,7 @@ services:
     restart: unless-stopped
     privileged: true
     pid: host
+    network_mode: host
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,6 +51,8 @@ services:
       context: .
       dockerfile: deploy/docker/admin/Dockerfile
     restart: unless-stopped
+    extra_hosts:
+      - "control-plane:host-gateway"
     depends_on:
       control-plane:
         condition: service_healthy
