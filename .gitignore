@@ -1,6 +1,6 @@
 # Compiled binaries
 bin/
-control-plane
+/control-plane
 *.exe
 *.dll
 *.so
