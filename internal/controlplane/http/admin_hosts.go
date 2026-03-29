@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math/big"
 	nethttp "net/http"
@@ -85,6 +86,11 @@ func getDockerStatuses() map[string]string {
 	return result
 }
 
+type adminHostDetailResponse struct {
+	repository.HostDetail
+	ConnectionInfo *repository.ConnectionInfo `json:"connection_info,omitempty"`
+}
+
 func (h *AdminHostsHandler) Get() nethttp.Handler {
 	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		hostID := r.PathValue("hostID")
@@ -98,7 +104,22 @@ func (h *AdminHostsHandler) Get() nethttp.Handler {
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "get host detail failed"})
 			return
 		}
-		writeJSON(w, nethttp.StatusOK, detail)
+
+		resp := adminHostDetailResponse{HostDetail: detail}
+		if detail.User.ShortID != "" {
+			scheme := "https"
+			if r.TLS == nil {
+				scheme = "http"
+			}
+			baseURL := fmt.Sprintf("%s://%s", scheme, r.Host)
+			resp.ConnectionInfo = &repository.ConnectionInfo{
+				CurlCommand: fmt.Sprintf("curl -sSL %s/entry/%s | bash", baseURL, detail.User.ShortID),
+				SSHCommand:  fmt.Sprintf("ssh %s@%s -p 2222", detail.User.ShortID, r.Host),
+				SSHPort:     2222,
+			}
+		}
+
+		writeJSON(w, nethttp.StatusOK, resp)
 	})
 }
 

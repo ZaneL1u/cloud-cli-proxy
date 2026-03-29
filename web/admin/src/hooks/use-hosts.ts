@@ -33,6 +33,12 @@ export interface HostBinding {
   created_at: string;
 }
 
+export interface ConnectionInfo {
+  curl_command: string;
+  ssh_command: string;
+  ssh_port: number;
+}
+
 export interface HostDetail {
   host: {
     id: string;
@@ -46,6 +52,7 @@ export interface HostDetail {
   };
   user: HostUser;
   bindings: HostBinding[];
+  connection_info?: ConnectionInfo;
 }
 
 export function useHosts() {
