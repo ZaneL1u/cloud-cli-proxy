@@ -42,10 +42,10 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 	gwName := gatewayContainerName(hostID)
 
 	third := subnetThirdOctet(hostID)
-	subnet := fmt.Sprintf("172.25.%d.0/24", third)
-	bridgeGW := fmt.Sprintf("172.25.%d.1", third)
-	gwIP := fmt.Sprintf("172.25.%d.2", third)
-	workerIP := fmt.Sprintf("172.25.%d.3", third)
+	subnet := fmt.Sprintf("10.99.%d.0/24", third)
+	bridgeGW := fmt.Sprintf("10.99.%d.1", third)
+	gwIP := fmt.Sprintf("10.99.%d.2", third)
+	workerIP := fmt.Sprintf("10.99.%d.3", third)
 
 	proxyRaw := spec.Egress.Proxy.OutboundConfig
 	serverIP, _, err := extractProxyServer(proxyRaw)
