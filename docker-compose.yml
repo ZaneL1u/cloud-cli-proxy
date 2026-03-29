@@ -31,6 +31,8 @@ services:
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?Set ADMIN_JWT_SECRET in .env}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/healthz"]
       interval: 10s

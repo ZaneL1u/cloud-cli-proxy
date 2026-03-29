@@ -1,10 +1,6 @@
-FROM golang:1.26.1
+FROM golang:1.26.1 AS builder
 
 WORKDIR /app
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
 
 COPY go.mod go.sum ./
 RUN go mod download
@@ -12,7 +8,18 @@ RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 
-RUN go build -o /usr/local/bin/control-plane ./cmd/control-plane
+RUN CGO_ENABLED=0 go build -o /usr/local/bin/control-plane ./cmd/control-plane
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local/bin/control-plane /usr/local/bin/control-plane
+
+WORKDIR /app
+COPY deploy/docker/managed-user/image.lock deploy/docker/managed-user/image.lock
 
 EXPOSE 8080
 
