@@ -34,7 +34,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - cloudproxy-data:/var/lib/cloud-cli-proxy
+      - /var/lib/cloud-cli-proxy:/var/lib/cloud-cli-proxy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/healthz"]
       interval: 10s
@@ -63,4 +63,3 @@ services:
 
 volumes:
   cloudproxy-postgres:
-  cloudproxy-data:
