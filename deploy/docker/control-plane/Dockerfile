@@ -13,7 +13,9 @@ RUN CGO_ENABLED=0 go build -o /usr/local/bin/control-plane ./cmd/control-plane
 FROM debian:bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates docker.io \
+    && apt-get install -y --no-install-recommends \
+       curl ca-certificates docker.io \
+       iproute2 procps nftables wireguard-tools \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/bin/control-plane /usr/local/bin/control-plane
