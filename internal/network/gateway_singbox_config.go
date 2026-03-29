@@ -12,7 +12,7 @@ func buildGatewaySingBoxConfig(outboundRaw json.RawMessage, dnsServer, proxyServ
 		dnsServer = "1.1.1.1"
 	}
 
-	proxyOut, err := buildGatewayProxyOutbound(outboundRaw)
+	proxyOut, err := buildGatewayProxyOutbound(outboundRaw, proxyServerIP)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func buildGatewaySingBoxConfig(outboundRaw json.RawMessage, dnsServer, proxyServ
 	return json.MarshalIndent(cfg, "", "  ")
 }
 
-func buildGatewayProxyOutbound(userConfig json.RawMessage) (json.RawMessage, error) {
+func buildGatewayProxyOutbound(userConfig json.RawMessage, resolvedIP string) (json.RawMessage, error) {
 	var m map[string]any
 	if err := json.Unmarshal(userConfig, &m); err != nil {
 		return nil, fmt.Errorf("parse outbound config: %w", err)
@@ -71,6 +71,9 @@ func buildGatewayProxyOutbound(userConfig json.RawMessage) (json.RawMessage, err
 	delete(m, "dns_server")
 	delete(m, "bind_interface")
 	m["tag"] = "proxy-out"
+	if resolvedIP != "" {
+		m["server"] = resolvedIP
+	}
 
 	if tls, ok := m["tls"].(map[string]any); ok {
 		if reality, ok := tls["reality"].(map[string]any); ok {
