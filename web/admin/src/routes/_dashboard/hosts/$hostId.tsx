@@ -5,7 +5,6 @@ import {
   Copy,
   KeyRound,
   Monitor,
-  PanelTop,
   Terminal,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -199,43 +198,35 @@ function HostDetailPage() {
               连接方式
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6 pt-6">
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">
-                一键连接（curl 入口）
-              </p>
-              <CopyableCommand command={data.connection_info.curl_command} />
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">
-                SSH 直连（需要这台主机的 SSH 密码）
-              </p>
-              <CopyableCommand command={data.connection_info.ssh_command} />
-            </div>
-            {data.connection_info.vnc_url && (
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-muted-foreground">
-                  VNC 登录入口
-                </p>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
-                  <div className="min-w-0 flex-1">
-                    <CopyableCommand command={data.connection_info.vnc_url} />
-                  </div>
+          <CardContent className="p-0">
+            <div className="divide-y divide-border/60">
+              <ConnectionBlock
+                label="一键连接（curl 入口）"
+                command={data.connection_info.curl_command}
+              />
+              <ConnectionBlock
+                label="SSH 直连（需要这台主机的 SSH 密码）"
+                command={data.connection_info.ssh_command}
+              />
+              {data.connection_info.vnc_url && (
+                <div className="space-y-4 p-6">
+                  <ConnectionBlock
+                    label="VNC 登录入口"
+                    command={data.connection_info.vnc_url}
+                    inline
+                  />
                   <Button
                     type="button"
-                    variant="secondary"
-                    className="h-auto shrink-0 flex-col gap-2 py-4 sm:w-40"
+                    variant="outline"
+                    className="h-10 gap-2"
                     onClick={openVNC}
                   >
-                    <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-background shadow-sm ring-1 ring-border">
-                      <PanelTop className="h-6 w-6 text-muted-foreground/80" />
-                      <Monitor className="absolute bottom-1.5 right-1.5 h-4 w-4 text-primary" />
-                    </div>
-                    <span className="text-xs font-medium">打开浏览器桌面</span>
+                    <Monitor className="h-4 w-4" />
+                    打开浏览器桌面
                   </Button>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -332,7 +323,15 @@ function HostDetailPage() {
   );
 }
 
-function CopyableCommand({ command }: { command: string }) {
+function ConnectionBlock({
+  label,
+  command,
+  inline,
+}: {
+  label: string;
+  command: string;
+  inline?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
 
   function handleCopy() {
@@ -343,23 +342,31 @@ function CopyableCommand({ command }: { command: string }) {
     });
   }
 
-  return (
-    <div className="flex items-stretch gap-2 overflow-hidden rounded-lg border border-white/10 bg-sidebar px-3 py-2.5 text-sidebar-foreground shadow-inner">
-      <code className="flex-1 break-all font-mono text-sm leading-relaxed">
-        {command}
-      </code>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-9 w-9 shrink-0 hover:bg-white/10"
-        onClick={handleCopy}
-      >
-        {copied ? (
-          <Check className="h-4 w-4 text-emerald-400" />
-        ) : (
-          <Copy className="h-4 w-4" />
-        )}
-      </Button>
+  const content = (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <div className="group relative overflow-hidden rounded-lg border border-border/60 bg-muted/40 transition-colors hover:bg-muted/60">
+        <code className="block break-all px-4 py-3 pr-12 font-mono text-sm leading-relaxed text-foreground">
+          {command}
+        </code>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 opacity-60 transition-opacity hover:opacity-100 group-hover:opacity-100"
+          onClick={handleCopy}
+        >
+          {copied ? (
+            <Check className="h-4 w-4 text-emerald-500" />
+          ) : (
+            <Copy className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
     </div>
   );
+
+  if (inline) return content;
+  return <div className="p-6">{content}</div>;
 }
