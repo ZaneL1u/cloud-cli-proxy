@@ -31,6 +31,7 @@ type RuntimeSpec struct {
 type Service struct {
 	repo interface {
 		GetHost(context.Context, string) (repository.Host, error)
+		GetUser(context.Context, string) (repository.User, error)
 		CreateTask(context.Context, repository.CreateTaskParams) (repository.Task, error)
 	}
 	dispatcher interface {
@@ -43,6 +44,7 @@ type Service struct {
 func NewService(
 	repo interface {
 		GetHost(context.Context, string) (repository.Host, error)
+		GetUser(context.Context, string) (repository.User, error)
 		CreateTask(context.Context, repository.CreateTaskParams) (repository.Task, error)
 	},
 	dispatcher interface {
@@ -81,6 +83,14 @@ func (s *Service) QueueHostAction(ctx context.Context, hostID string, action age
 		return repository.Task{}, fmt.Errorf("load image.lock runtime spec: %w", err)
 	}
 
+	owner, err := s.repo.GetUser(ctx, host.UserID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return repository.Task{}, fmt.Errorf("host owner user %s not found: %w", host.UserID, err)
+		}
+		return repository.Task{}, fmt.Errorf("load host owner user: %w", err)
+	}
+
 	task, err := s.repo.CreateTask(ctx, repository.CreateTaskParams{
 		HostID:      &host.ID,
 		Kind:        string(action),
@@ -109,6 +119,8 @@ func (s *Service) QueueHostAction(ctx context.Context, hostID string, action age
 		Hostname:      host.Hostname,
 		MemoryLimitMB: defaultIntIfZero(host.MemoryLimitMB, 4096),
 		CPULimit:      defaultFloatIfZero(host.CPULimit, 2.0),
+		Username:      owner.Username,
+		EntryPassword: host.EntryPassword,
 	}
 
 	go func() {

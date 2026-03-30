@@ -51,6 +51,10 @@ func (s *stubHostStore) DeleteHost(_ context.Context, _ string) error {
 	return nil
 }
 
+func (s *stubHostStore) UpdateHostEntryPassword(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
 func TestAdminHostsHandler(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 	sampleHost := repository.HostWithUsername{

@@ -25,6 +25,8 @@ type HostActionRequest struct {
 	Hostname      string            `json:"hostname"`
 	MemoryLimitMB int               `json:"memory_limit_mb,omitempty"`
 	CPULimit      float64           `json:"cpu_limit,omitempty"`
+	Username      string            `json:"username,omitempty"`
+	EntryPassword string            `json:"entry_password,omitempty"`
 }
 
 type TaskStatusUpdate struct {

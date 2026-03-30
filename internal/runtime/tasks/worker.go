@@ -171,6 +171,8 @@ func (w *Worker) createHost(ctx context.Context, request agentapi.HostActionRequ
 		"-e", "LANG=en_US.UTF-8",
 		"-e", "LANGUAGE=en_US:en",
 		"-e", "LC_ALL=en_US.UTF-8",
+		"-e", "CONTAINER_USER="+firstNonEmpty(request.Username, "workspace"),
+		"-e", "CONTAINER_SSH_PASSWORD="+firstNonEmpty(request.EntryPassword, "workspace"),
 		"-v", fmt.Sprintf("%s:%s", homeDir, firstNonEmpty(request.HomeMount, defaultWorkspaceMount)),
 	)
 

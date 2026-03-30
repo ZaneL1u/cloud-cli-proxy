@@ -1207,13 +1207,13 @@ func (r *Repository) CreateUserWithRole(ctx context.Context, params CreateUserWi
 func (r *Repository) GetHostByShortID(ctx context.Context, shortID string) (HostSSHAuth, error) {
 	var item HostSSHAuth
 	if err := r.db.QueryRow(ctx, `
-		SELECT h.id::text, h.short_id, h.entry_password, h.status, h.user_id::text, u.status
+		SELECT h.id::text, h.short_id, h.entry_password, h.status, h.user_id::text, u.status, u.username
 		FROM hosts h
 		JOIN users u ON u.id = h.user_id
 		WHERE h.short_id = $1
 	`, shortID).Scan(
 		&item.HostID, &item.HostShortID, &item.EntryPassword,
-		&item.HostStatus, &item.UserID, &item.UserStatus,
+		&item.HostStatus, &item.UserID, &item.UserStatus, &item.Username,
 	); err != nil {
 		return HostSSHAuth{}, fmt.Errorf("get host by short_id: %w", err)
 	}

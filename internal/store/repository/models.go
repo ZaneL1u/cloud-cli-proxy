@@ -54,6 +54,7 @@ type HostSSHAuth struct {
 	HostStatus    string
 	UserID        string
 	UserStatus    string
+	Username      string // 关联用户的 username，用于连接容器内 sshd
 }
 
 type HostBinding struct {

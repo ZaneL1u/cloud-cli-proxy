@@ -39,7 +39,7 @@ show_mounts=0
 CONF
 
   chmod 0755 "${DESKTOP_DIR}/Chrome.desktop"
-  chown -R workspace:workspace "${DESKTOP_DIR}" /workspace/.config /workspace/.chrome-data
+  chown -R "${RUN_USER}:${RUN_USER}" "${DESKTOP_DIR}" /workspace/.config /workspace/.chrome-data
 }
 
 wait_for_x_display() {
@@ -62,12 +62,25 @@ mkdir -p /var/run/sshd
 if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
   ssh-keygen -A
 fi
+
+CONTAINER_USER="${CONTAINER_USER:-workspace}"
+CONTAINER_PASSWORD="${CONTAINER_SSH_PASSWORD:-workspace}"
+
+if [ "$CONTAINER_USER" != "workspace" ] && id workspace >/dev/null 2>&1; then
+  usermod -l "$CONTAINER_USER" workspace
+  groupmod -n "$CONTAINER_USER" workspace 2>/dev/null || true
+  if [ -f /etc/sudoers.d/workspace ]; then
+    sed -i "s/^workspace /${CONTAINER_USER} /" /etc/sudoers.d/workspace
+  fi
+fi
+
+RUN_USER="${CONTAINER_USER:-workspace}"
+
 mkdir -p /workspace/.ssh
-chown -R workspace:workspace /workspace
+chown -R "${RUN_USER}:${RUN_USER}" /workspace
 chmod 0700 /workspace/.ssh
 
-CONTAINER_PASSWORD="${CONTAINER_SSH_PASSWORD:-workspace}"
-echo "workspace:${CONTAINER_PASSWORD}" | chpasswd
+echo "${RUN_USER}:${CONTAINER_PASSWORD}" | chpasswd
 
 # 禁用 IPv6（防止 IPv6 泄漏真实 IP）
 sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true
@@ -113,13 +126,13 @@ encoding:
     consider_lossless_quality: 10
     rectangle_compress_threads: 4
 YAML
-chown -R workspace:workspace /workspace/.vnc
+chown -R "${RUN_USER}:${RUN_USER}" /workspace/.vnc
 touch "${XVNC_LOG}" "${FLUXBOX_LOG}" "${DESKTOP_LOG}" "${CHROMIUM_LOG}"
-chown workspace:workspace "${XVNC_LOG}" "${FLUXBOX_LOG}" "${DESKTOP_LOG}" "${CHROMIUM_LOG}"
+chown "${RUN_USER}:${RUN_USER}" "${XVNC_LOG}" "${FLUXBOX_LOG}" "${DESKTOP_LOG}" "${CHROMIUM_LOG}"
 
 # 创建 KasmVNC 用户（非交互，避免卡在 TUI 提示）
-echo -e "kasmpass\nkasmpass\n" | kasmvncpasswd -u workspace -w /workspace/.vnc/passwd 2>/dev/null || true
-chown workspace:workspace /workspace/.vnc/passwd
+echo -e "kasmpass\nkasmpass\n" | kasmvncpasswd -u "${RUN_USER}" -w /workspace/.vnc/passwd 2>/dev/null || true
+chown "${RUN_USER}:${RUN_USER}" /workspace/.vnc/passwd
 
 # 创建 /tmp/.X11-unix（非 root 用户启动 Xvnc 需要）
 mkdir -p /tmp/.X11-unix
@@ -127,7 +140,7 @@ chmod 1777 /tmp/.X11-unix
 
 # 启动 KasmVNC（Xvnc 直接启动，跳过 vncserver perl 脚本的交互提示）
 export DISPLAY=:99
-su workspace -c 'Xvnc :99 \
+su "${RUN_USER}" -c 'Xvnc :99 \
   -geometry 1920x1080 \
   -depth 24 \
   -websocketPort 6080 \
@@ -149,11 +162,11 @@ write_desktop_config
 # 提前设置根窗口背景，pcmanfm 接管前也不会闪成纯黑。
 DISPLAY=:99 xsetroot -solid "#17324d" >/dev/null 2>&1 || true
 
-su workspace -c 'DISPLAY=:99 fluxbox' >>"${FLUXBOX_LOG}" 2>&1 &
-su workspace -c 'DISPLAY=:99 HOME=/workspace pcmanfm --desktop --profile default' >>"${DESKTOP_LOG}" 2>&1 &
+su "${RUN_USER}" -c 'DISPLAY=:99 fluxbox' >>"${FLUXBOX_LOG}" 2>&1 &
+su "${RUN_USER}" -c 'DISPLAY=:99 HOME=/workspace pcmanfm --desktop --profile default' >>"${DESKTOP_LOG}" 2>&1 &
 
 # 预热一遍 Chromium 检测，方便排查图标点击失败。
-su workspace -c 'HOME=/workspace /usr/local/bin/launch-chromium.sh --version' >>"${CHROMIUM_LOG}" 2>&1 || true
+su "${RUN_USER}" -c 'HOME=/workspace /usr/local/bin/launch-chromium.sh --version' >>"${CHROMIUM_LOG}" 2>&1 || true
 
 # Foreground: sshd
 exec /usr/sbin/sshd -D -e

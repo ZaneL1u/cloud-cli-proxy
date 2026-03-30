@@ -19,9 +19,9 @@ import (
 )
 
 // ContainerResolver maps an SSH login (host_short_id + entry_password)
-// to the target container's SSH address (host:port).
+// to the target container's SSH address and credentials.
 type ContainerResolver interface {
-	ResolveContainer(ctx context.Context, hostShortID, password string) (targetAddr string, err error)
+	ResolveContainer(ctx context.Context, hostShortID, password string) (ContainerTarget, error)
 }
 
 type Server struct {
@@ -112,13 +112,17 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 			authCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
 
-			targetAddr, err := s.resolver.ResolveContainer(authCtx, conn.User(), string(password))
+			target, err := s.resolver.ResolveContainer(authCtx, conn.User(), string(password))
 			if err != nil {
 				s.logger.Debug("SSH auth failed", "user", conn.User(), "remote", conn.RemoteAddr(), "reason", err)
 				return nil, fmt.Errorf("auth failed")
 			}
 			return &ssh.Permissions{
-				Extensions: map[string]string{"target_addr": targetAddr},
+				Extensions: map[string]string{
+					"target_addr":     target.Addr,
+					"target_user":     target.User,
+					"target_password": target.Password,
+				},
 			}, nil
 		},
 	}
@@ -159,8 +163,11 @@ func (s *Server) handleConnection(netConn net.Conn, config *ssh.ServerConfig) {
 	}
 	defer sshConn.Close()
 
-	targetAddr := sshConn.Permissions.Extensions["target_addr"]
-	s.logger.Info("SSH proxy session", "user", sshConn.User(), "target", targetAddr, "remote", netConn.RemoteAddr())
+	ext := sshConn.Permissions.Extensions
+	targetAddr := ext["target_addr"]
+	targetUser := ext["target_user"]
+	targetPassword := ext["target_password"]
+	s.logger.Info("SSH proxy session", "user", sshConn.User(), "target", targetAddr, "container_user", targetUser, "remote", netConn.RemoteAddr())
 
 	go ssh.DiscardRequests(globalReqs)
 
@@ -169,11 +176,11 @@ func (s *Server) handleConnection(netConn net.Conn, config *ssh.ServerConfig) {
 			newChan.Reject(ssh.UnknownChannelType, "only session channels supported")
 			continue
 		}
-		go s.handleChannel(newChan, targetAddr)
+		go s.handleChannel(newChan, targetAddr, targetUser, targetPassword)
 	}
 }
 
-func (s *Server) handleChannel(newChan ssh.NewChannel, targetAddr string) {
+func (s *Server) handleChannel(newChan ssh.NewChannel, targetAddr, targetUser, targetPassword string) {
 	clientChan, clientReqs, err := newChan.Accept()
 	if err != nil {
 		s.logger.Error("accept channel failed", "error", err)
@@ -181,9 +188,18 @@ func (s *Server) handleChannel(newChan ssh.NewChannel, targetAddr string) {
 	}
 	defer clientChan.Close()
 
+	user := targetUser
+	if user == "" {
+		user = s.containerUser
+	}
+	pass := targetPassword
+	if pass == "" {
+		pass = s.containerPassword
+	}
+
 	targetConfig := &ssh.ClientConfig{
-		User:            s.containerUser,
-		Auth:            []ssh.AuthMethod{ssh.Password(s.containerPassword)},
+		User:            user,
+		Auth:            []ssh.AuthMethod{ssh.Password(pass)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         10 * time.Second,
 	}

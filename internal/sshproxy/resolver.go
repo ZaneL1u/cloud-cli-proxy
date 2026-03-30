@@ -14,6 +14,13 @@ type resolverRepo interface {
 	GetHostByShortID(ctx context.Context, shortID string) (repository.HostSSHAuth, error)
 }
 
+// ContainerTarget is the SSH endpoint and credentials for dialing the user container.
+type ContainerTarget struct {
+	Addr     string
+	User     string
+	Password string
+}
+
 // RepoResolver implements ContainerResolver using the database repository.
 // It validates the host's entry_password, checks that the owning user is
 // active and the host is running, then resolves the container's SSH address.
@@ -25,31 +32,40 @@ func NewRepoResolver(repo resolverRepo) *RepoResolver {
 	return &RepoResolver{repo: repo}
 }
 
-func (r *RepoResolver) ResolveContainer(ctx context.Context, hostShortID, password string) (string, error) {
+func (r *RepoResolver) ResolveContainer(ctx context.Context, hostShortID, password string) (ContainerTarget, error) {
 	auth, err := r.repo.GetHostByShortID(ctx, hostShortID)
 	if err != nil {
-		return "", fmt.Errorf("host not found")
+		return ContainerTarget{}, fmt.Errorf("host not found")
 	}
 
 	if auth.EntryPassword == "" || subtle.ConstantTimeCompare([]byte(auth.EntryPassword), []byte(password)) != 1 {
-		return "", fmt.Errorf("invalid credentials")
+		return ContainerTarget{}, fmt.Errorf("invalid credentials")
 	}
 
 	if auth.UserStatus != "active" {
-		return "", fmt.Errorf("user suspended")
+		return ContainerTarget{}, fmt.Errorf("user suspended")
 	}
 
 	if auth.HostStatus != "running" {
-		return "", fmt.Errorf("host not running (status: %s)", auth.HostStatus)
+		return ContainerTarget{}, fmt.Errorf("host not running (status: %s)", auth.HostStatus)
 	}
 
 	containerName := fmt.Sprintf("cloudproxy-%s", auth.HostID)
 	containerIP, err := getContainerIP(ctx, containerName)
 	if err != nil {
-		return "", fmt.Errorf("cannot resolve container address: %w", err)
+		return ContainerTarget{}, fmt.Errorf("cannot resolve container address: %w", err)
 	}
 
-	return fmt.Sprintf("%s:22", containerIP), nil
+	user := auth.Username
+	if user == "" {
+		user = "workspace"
+	}
+
+	return ContainerTarget{
+		Addr:     fmt.Sprintf("%s:22", containerIP),
+		User:     user,
+		Password: auth.EntryPassword,
+	}, nil
 }
 
 func getContainerIP(ctx context.Context, containerName string) (string, error) {
