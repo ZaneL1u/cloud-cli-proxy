@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -246,6 +248,8 @@ func (a *App) Run(ctx context.Context) error {
 		close(schedDone)
 	}()
 
+	a.rejoinHostNetworks()
+
 	if a.sshProxy != nil {
 		go func() {
 			if err := a.sshProxy.ListenAndServe(ctx); err != nil {
@@ -288,5 +292,43 @@ func (a *App) Run(ctx context.Context) error {
 		schedCancel()
 		<-schedDone
 		return err
+	}
+}
+
+func (a *App) rejoinHostNetworks() {
+	cpID, _ := os.Hostname()
+	if cpID == "" {
+		a.logger.Warn("rejoin-networks: cannot determine hostname, skipping")
+		return
+	}
+
+	cmd := exec.CommandContext(context.Background(), "docker", "network", "ls",
+		"--filter", "name=cloudproxy-net-", "--format", "{{.Name}}")
+	out, err := cmd.Output()
+	if err != nil {
+		a.logger.Warn("rejoin-networks: list networks failed", "error", err)
+		return
+	}
+
+	networks := strings.Fields(strings.TrimSpace(string(out)))
+	if len(networks) == 0 {
+		return
+	}
+
+	joined := 0
+	for _, net := range networks {
+		connectCmd := exec.CommandContext(context.Background(), "docker", "network", "connect", net, cpID)
+		if connectOut, err := connectCmd.CombinedOutput(); err != nil {
+			msg := strings.TrimSpace(string(connectOut))
+			if !strings.Contains(msg, "already exists") {
+				a.logger.Warn("rejoin-networks: connect failed", "network", net, "error", msg)
+			}
+		} else {
+			joined++
+		}
+	}
+
+	if joined > 0 {
+		a.logger.Info("rejoin-networks: connected to host networks", "count", joined, "total", len(networks))
 	}
 }
