@@ -80,7 +80,7 @@ function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-muted/40 px-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-xl">Cloud CLI Proxy</CardTitle>
@@ -178,6 +178,17 @@ function LoginPage() {
           )}
         </CardContent>
       </Card>
+      <p className="mt-6 text-xs text-muted-foreground">
+        Powered by{" "}
+        <a
+          href="https://github.com/zanel1u/cloud-cli-proxy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-primary hover:underline"
+        >
+          cloud-cli-proxy
+        </a>
+      </p>
     </div>
   );
 }

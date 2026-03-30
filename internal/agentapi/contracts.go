@@ -27,6 +27,8 @@ type HostActionRequest struct {
 	CPULimit      float64           `json:"cpu_limit,omitempty"`
 	Username      string            `json:"username,omitempty"`
 	EntryPassword string            `json:"entry_password,omitempty"`
+	SSHPublicKey  string            `json:"ssh_public_key,omitempty"`
+	SSHPrivateKey string            `json:"ssh_private_key,omitempty"`
 }
 
 type TaskStatusUpdate struct {

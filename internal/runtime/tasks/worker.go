@@ -365,6 +365,7 @@ func (w *Worker) waitForSSH(ctx context.Context, request agentapi.HostActionRequ
 	}
 
 	w.syncContainerCredentials(ctx, request, containerName)
+	w.injectSSHKeys(ctx, request, containerName)
 
 	w.repo.RecordEvent(ctx, repository.RecordEventParams{
 		TaskID:   &request.TaskID,
@@ -403,6 +404,59 @@ func (w *Worker) syncContainerCredentials(ctx context.Context, request agentapi.
 			Type:    "runtime.password_sync_failed",
 			Message: fmt.Sprintf("docker exec chpasswd failed: %s", strings.TrimSpace(string(out))),
 		})
+	}
+}
+
+func (w *Worker) injectSSHKeys(ctx context.Context, request agentapi.HostActionRequest, containerName string) {
+	if request.SSHPublicKey == "" && request.SSHPrivateKey == "" {
+		return
+	}
+
+	user := firstNonEmpty(request.Username, "workspace")
+	sshDir := "/workspace/.ssh"
+
+	if request.SSHPrivateKey != "" {
+		keyFile := sshDir + "/id_ed25519"
+		if strings.Contains(request.SSHPublicKey, "ssh-rsa") {
+			keyFile = sshDir + "/id_rsa"
+		}
+
+		script := fmt.Sprintf(
+			"mkdir -p %s && cat > %s && chmod 600 %s && chown %s:%s %s",
+			sshDir, keyFile, keyFile, user, user, keyFile,
+		)
+		cmd := exec.CommandContext(ctx, "docker", "exec", "-i", containerName, "bash", "-c", script)
+		cmd.Stdin = strings.NewReader(request.SSHPrivateKey)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			w.repo.RecordEvent(ctx, repository.RecordEventParams{
+				HostID:  &request.HostID,
+				Level:   "warn",
+				Type:    "runtime.ssh_key_inject_failed",
+				Message: fmt.Sprintf("inject private key failed: %s", strings.TrimSpace(string(out))),
+			})
+		}
+	}
+
+	if request.SSHPublicKey != "" {
+		pubKeyFile := sshDir + "/id_ed25519.pub"
+		if strings.Contains(request.SSHPublicKey, "ssh-rsa") {
+			pubKeyFile = sshDir + "/id_rsa.pub"
+		}
+
+		script := fmt.Sprintf(
+			"mkdir -p %s && cat > %s && chmod 644 %s && chown %s:%s %s",
+			sshDir, pubKeyFile, pubKeyFile, user, user, pubKeyFile,
+		)
+		cmd := exec.CommandContext(ctx, "docker", "exec", "-i", containerName, "bash", "-c", script)
+		cmd.Stdin = strings.NewReader(request.SSHPublicKey)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			w.repo.RecordEvent(ctx, repository.RecordEventParams{
+				HostID:  &request.HostID,
+				Level:   "warn",
+				Type:    "runtime.ssh_key_inject_failed",
+				Message: fmt.Sprintf("inject public key failed: %s", strings.TrimSpace(string(out))),
+			})
+		}
 	}
 }
 

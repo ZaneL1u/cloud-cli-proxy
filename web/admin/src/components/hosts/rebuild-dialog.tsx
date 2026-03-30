@@ -83,9 +83,25 @@ export function RebuildDialog({
               </div>
             </label>
 
+            <div className="rounded-md border bg-muted/50 p-3 text-xs text-muted-foreground space-y-1.5">
+              <p className="font-medium text-foreground text-sm">重建影响说明</p>
+              <p><strong>保留（不受影响）：</strong></p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li>home 目录（/workspace）下的所有文件{mode === "factory" ? "（工厂重置会清除）" : ""}</li>
+                <li>SSH 密钥（由平台管理，重建后自动重新注入）</li>
+                <li>SSH / 登录密码（平台侧存储）</li>
+              </ul>
+              <p><strong>会被清除：</strong></p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li>容器系统层（通过 apt 安装的额外软件包）</li>
+                <li>系统级配置修改（/etc/ 下的变更）</li>
+                <li>/tmp、/var 等非持久目录</li>
+              </ul>
+            </div>
+
             {mode === "factory" && (
               <div className="rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
-                此操作将清除用户主目录中的所有数据，不可恢复。
+                工厂重置将清除 /workspace 目录中的所有数据（包括 .ssh 密钥、浏览器缓存、Claude 登录态等），不可恢复。SSH 密钥会从平台重新注入。
               </div>
             )}
           </div>

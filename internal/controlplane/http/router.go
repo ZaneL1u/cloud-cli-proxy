@@ -50,6 +50,7 @@ type Dependencies struct {
 	EntryStore      EntryStore
 	EntryBaseURL    string
 	UserHosts       UserHostStore
+	SSHKeys         SSHKeyStore
 }
 
 type HealthChecker interface {
@@ -250,6 +251,14 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			mux.Handle("GET /v1/admin/events", adminGuard(eventsHandler.List()))
 		}
 
+		if deps.SSHKeys != nil {
+			sshKeyHandler := NewSSHKeyHandler(deps.Logger, deps.SSHKeys)
+			mux.Handle("GET /v1/admin/users/{userID}/ssh-keys", adminGuard(sshKeyHandler.Get()))
+			mux.Handle("POST /v1/admin/users/{userID}/ssh-keys/generate", adminGuard(sshKeyHandler.Generate()))
+			mux.Handle("PUT /v1/admin/users/{userID}/ssh-keys", adminGuard(sshKeyHandler.Set()))
+			mux.Handle("DELETE /v1/admin/users/{userID}/ssh-keys", adminGuard(sshKeyHandler.Delete()))
+		}
+
 		mux.Handle("GET /v1/admin/tasks", adminGuard(tasksHandler))
 
 		// User self-service endpoints (D-01: /v1/user/ prefix, D-02: user+admin roles)
@@ -270,6 +279,14 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 
 			userVNCProxy := NewUserVNCProxyHandler(deps.Logger, deps.UserHosts)
 			mux.Handle("/v1/user/hosts/{hostID}/vnc/{path...}", userGuard(userVNCProxy))
+		}
+
+		if deps.SSHKeys != nil {
+			userSSHKeyHandler := NewSSHKeyHandler(deps.Logger, deps.SSHKeys)
+			mux.Handle("GET /v1/user/ssh-keys", userGuard(userSSHKeyHandler.Get()))
+			mux.Handle("POST /v1/user/ssh-keys/generate", userGuard(userSSHKeyHandler.Generate()))
+			mux.Handle("PUT /v1/user/ssh-keys", userGuard(userSSHKeyHandler.Set()))
+			mux.Handle("DELETE /v1/user/ssh-keys", userGuard(userSSHKeyHandler.Delete()))
 		}
 	}
 

@@ -24,7 +24,7 @@ func (r *Repository) Health(ctx context.Context) error {
 
 func (r *Repository) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), expires_at, created_at, updated_at
+		SELECT id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), COALESCE(ssh_public_key, ''), COALESCE(ssh_private_key, ''), COALESCE(ssh_key_type, ''), expires_at, created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC
 	`)
@@ -36,7 +36,7 @@ func (r *Repository) ListUsers(ctx context.Context) ([]User, error) {
 	users := make([]User, 0)
 	for rows.Next() {
 		var item User
-		if err := rows.Scan(&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.SSHPublicKey, &item.SSHPrivateKey, &item.SSHKeyType, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan user: %w", err)
 		}
 		users = append(users, item)
@@ -52,9 +52,9 @@ func (r *Repository) ListUsers(ctx context.Context) ([]User, error) {
 func (r *Repository) GetUser(ctx context.Context, userID string) (User, error) {
 	var item User
 	if err := r.db.QueryRow(ctx, `
-		SELECT id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), expires_at, created_at, updated_at
+		SELECT id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), COALESCE(ssh_public_key, ''), COALESCE(ssh_private_key, ''), COALESCE(ssh_key_type, ''), expires_at, created_at, updated_at
 		FROM users WHERE id = $1
-	`, userID).Scan(&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt); err != nil {
+	`, userID).Scan(&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.SSHPublicKey, &item.SSHPrivateKey, &item.SSHKeyType, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt); err != nil {
 		return User{}, fmt.Errorf("get user: %w", err)
 	}
 	return item, nil
@@ -65,9 +65,9 @@ func (r *Repository) CreateUser(ctx context.Context, params CreateUserParams) (U
 	if err := r.db.QueryRow(ctx, `
 		INSERT INTO users (username, password_hash, status, short_id, entry_password)
 		VALUES ($1, $2, 'active', $3, $4)
-		RETURNING id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), expires_at, created_at, updated_at
+		RETURNING id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), COALESCE(ssh_public_key, ''), COALESCE(ssh_private_key, ''), COALESCE(ssh_key_type, ''), expires_at, created_at, updated_at
 	`, params.Username, params.PasswordHash, nullIfEmpty(params.ShortID), params.EntryPassword).Scan(
-		&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt,
+		&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.SSHPublicKey, &item.SSHPrivateKey, &item.SSHKeyType, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt,
 	); err != nil {
 		return User{}, fmt.Errorf("create user: %w", err)
 	}
@@ -78,9 +78,9 @@ func (r *Repository) UpdateUserStatus(ctx context.Context, userID string, status
 	var item User
 	if err := r.db.QueryRow(ctx, `
 		UPDATE users SET status = $2, updated_at = NOW() WHERE id = $1
-		RETURNING id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), expires_at, created_at, updated_at
+		RETURNING id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), COALESCE(ssh_public_key, ''), COALESCE(ssh_private_key, ''), COALESCE(ssh_key_type, ''), expires_at, created_at, updated_at
 	`, userID, status).Scan(
-		&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt,
+		&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.SSHPublicKey, &item.SSHPrivateKey, &item.SSHKeyType, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt,
 	); err != nil {
 		return User{}, fmt.Errorf("update user status: %w", err)
 	}
@@ -931,7 +931,7 @@ func (r *Repository) ListEventsByTaskID(ctx context.Context, taskID string, limi
 
 func (r *Repository) ListExpiredActiveUsers(ctx context.Context) ([]User, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), expires_at, created_at, updated_at
+		SELECT id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), COALESCE(ssh_public_key, ''), COALESCE(ssh_private_key, ''), COALESCE(ssh_key_type, ''), expires_at, created_at, updated_at
 		FROM users
 		WHERE expires_at <= NOW() AND status = 'active'
 		ORDER BY expires_at ASC
@@ -944,7 +944,7 @@ func (r *Repository) ListExpiredActiveUsers(ctx context.Context) ([]User, error)
 	users := make([]User, 0)
 	for rows.Next() {
 		var item User
-		if err := rows.Scan(&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.SSHPublicKey, &item.SSHPrivateKey, &item.SSHKeyType, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan expired user: %w", err)
 		}
 		users = append(users, item)
@@ -959,9 +959,9 @@ func (r *Repository) UpdateUserExpiry(ctx context.Context, userID string, expire
 	var item User
 	if err := r.db.QueryRow(ctx, `
 		UPDATE users SET expires_at = $2, updated_at = NOW() WHERE id = $1
-		RETURNING id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), expires_at, created_at, updated_at
+		RETURNING id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), COALESCE(ssh_public_key, ''), COALESCE(ssh_private_key, ''), COALESCE(ssh_key_type, ''), expires_at, created_at, updated_at
 	`, userID, expiresAt).Scan(
-		&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt,
+		&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.SSHPublicKey, &item.SSHPrivateKey, &item.SSHKeyType, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt,
 	); err != nil {
 		return User{}, fmt.Errorf("update user expiry: %w", err)
 	}
@@ -1124,9 +1124,9 @@ func (r *Repository) ListEvents(ctx context.Context, params ListEventsParams) (L
 func (r *Repository) GetUserByShortID(ctx context.Context, shortID string) (User, error) {
 	var item User
 	if err := r.db.QueryRow(ctx, `
-		SELECT id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), expires_at, created_at, updated_at
+		SELECT id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), COALESCE(ssh_public_key, ''), COALESCE(ssh_private_key, ''), COALESCE(ssh_key_type, ''), expires_at, created_at, updated_at
 		FROM users WHERE short_id = $1
-	`, shortID).Scan(&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt); err != nil {
+	`, shortID).Scan(&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.SSHPublicKey, &item.SSHPrivateKey, &item.SSHKeyType, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt); err != nil {
 		return User{}, fmt.Errorf("get user by short_id: %w", err)
 	}
 	return item, nil
@@ -1231,6 +1231,30 @@ func (r *Repository) UpdateHostEntryPassword(ctx context.Context, hostID, passwo
 		return pgx.ErrNoRows
 	}
 	return nil
+}
+
+func (r *Repository) UpdateUserSSHKeys(ctx context.Context, userID, publicKey, privateKey, keyType string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE users SET ssh_public_key = $2, ssh_private_key = $3, ssh_key_type = $4, updated_at = NOW()
+		WHERE id = $1
+	`, userID, publicKey, privateKey, keyType)
+	if err != nil {
+		return fmt.Errorf("update user ssh keys: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+func (r *Repository) GetUserSSHKeys(ctx context.Context, userID string) (publicKey, privateKey, keyType string, err error) {
+	if err = r.db.QueryRow(ctx, `
+		SELECT COALESCE(ssh_public_key, ''), COALESCE(ssh_private_key, ''), COALESCE(ssh_key_type, '')
+		FROM users WHERE id = $1
+	`, userID).Scan(&publicKey, &privateKey, &keyType); err != nil {
+		err = fmt.Errorf("get user ssh keys: %w", err)
+	}
+	return
 }
 
 func scanTasks(rows pgx.Rows) ([]Task, error) {

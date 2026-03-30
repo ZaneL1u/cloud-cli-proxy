@@ -122,6 +122,8 @@ func (s *Service) QueueHostAction(ctx context.Context, hostID string, action age
 		CPULimit:      defaultFloatIfZero(host.CPULimit, 2.0),
 		Username:      owner.Username,
 		EntryPassword: host.EntryPassword,
+		SSHPublicKey:  owner.SSHPublicKey,
+		SSHPrivateKey: owner.SSHPrivateKey,
 	}
 
 	if request.EntryPassword == "" {

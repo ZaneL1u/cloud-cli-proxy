@@ -23,6 +23,9 @@ type User struct {
 	ShortID       string     `json:"short_id"`
 	PasswordHash  string     `json:"password_hash,omitempty"`
 	EntryPassword string     `json:"entry_password,omitempty"`
+	SSHPublicKey  string     `json:"ssh_public_key,omitempty"`
+	SSHPrivateKey string     `json:"ssh_private_key,omitempty"`
+	SSHKeyType    string     `json:"ssh_key_type,omitempty"`
 	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	nethttp "net/http"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -48,20 +49,29 @@ func (h *EntryHandler) Script() nethttp.Handler {
 
 		script := fmt.Sprintf(`#!/bin/bash
 set -e
-read -sp "Password: " PASS; echo
+read -sp "Password: " PASS < /dev/tty; echo
 RESP=$(curl -sf -X POST "%s/v1/entry/%s/auth" \
-  -H "Content-Type: application/json" -d "{\"password\":\"$PASS\"}" 2>&1)
+  -H "Content-Type: application/json" -d "{\"password\":\"$PASS\"}")
 if [ $? -ne 0 ]; then echo "Authentication failed"; exit 1; fi
 SSH_USER=$(echo "$RESP" | grep -o '"ssh_user":"[^"]*"' | cut -d'"' -f4)
+SSH_PASS=$(echo "$RESP" | grep -o '"ssh_pass":"[^"]*"' | cut -d'"' -f4)
 SSH_PORT=$(echo "$RESP" | grep -o '"ssh_port":[0-9]*' | cut -d: -f2)
 SSH_HOST=$(echo "$RESP" | grep -o '"ssh_host":"[^"]*"' | cut -d'"' -f4)
 STATUS=$(echo "$RESP" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
 if [ "$STATUS" != "ready" ]; then
-  echo "Your machine is not ready yet. Please try again later."
+  MSG=$(echo "$RESP" | grep -o '"message":"[^"]*"' | cut -d'"' -f4)
+  echo "${MSG:-Your machine is not ready yet. Please try again later.}"
   exit 1
 fi
 echo "Connecting to your cloud machine..."
-exec ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p "$SSH_PORT" "$SSH_USER@$SSH_HOST"
+if command -v sshpass >/dev/null 2>&1; then
+  exec sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p "$SSH_PORT" "$SSH_USER@$SSH_HOST"
+else
+  ASKPASS=$(mktemp); trap "rm -f $ASKPASS" EXIT
+  printf '#!/bin/sh\necho "%%s"\n' "$SSH_PASS" > "$ASKPASS"; chmod +x "$ASKPASS"
+  export SSH_ASKPASS="$ASKPASS" SSH_ASKPASS_REQUIRE=force
+  exec ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" < /dev/tty
+fi
 `, base, shortID)
 
 		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
@@ -129,9 +139,15 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 			return
 		}
 
+		sshHost := r.Host
+		if idx := strings.Index(sshHost, ":"); idx != -1 {
+			sshHost = sshHost[:idx]
+		}
+
 		writeJSON(w, nethttp.StatusOK, map[string]any{
-			"ssh_user": "workspace",
-			"ssh_host": r.Host,
+			"ssh_user": host.ShortID,
+			"ssh_pass": host.EntryPassword,
+			"ssh_host": sshHost,
 			"ssh_port": 2222,
 			"status":   "ready",
 		})

@@ -7,6 +7,12 @@ import {
   useMyHostDetail,
   useRebuildHost,
 } from "@/hooks/use-portal-hosts";
+import {
+  useMySSHKeys,
+  useMyGenerateSSHKey,
+  useMySetSSHKey,
+} from "@/hooks/use-ssh-keys";
+import { SSHKeyManager } from "@/components/ssh-keys/ssh-key-manager";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +66,9 @@ const tunnelTypeLabels: Record<string, string> = {
 function PortalHostDetail() {
   const { hostId } = Route.useParams();
   const rebuildMutation = useRebuildHost();
+  const sshKeysQuery = useMySSHKeys();
+  const generateSSHKey = useMyGenerateSSHKey();
+  const setSSHKey = useMySetSSHKey();
 
   const isRebuilding = (status: string) =>
     status === "rebuilding" || status === "pending";
@@ -236,6 +245,29 @@ function PortalHostDetail() {
         </Card>
       )}
 
+      {/* SSH Keys */}
+      <SSHKeyManager
+        data={sshKeysQuery.data}
+        isLoading={sshKeysQuery.isLoading}
+        onGenerate={(keyType) =>
+          generateSSHKey.mutate(keyType, {
+            onSuccess: () => toast.success("SSH 密钥已生成"),
+            onError: () => toast.error("生成失败"),
+          })
+        }
+        onSet={(publicKey, privateKey) =>
+          setSSHKey.mutate(
+            { publicKey, privateKey },
+            {
+              onSuccess: () => toast.success("SSH 密钥已保存"),
+              onError: () => toast.error("保存失败"),
+            },
+          )
+        }
+        isGenerating={generateSSHKey.isPending}
+        isSetting={setSSHKey.isPending}
+      />
+
       {/* Actions */}
       <Card>
         <CardHeader>
@@ -254,8 +286,14 @@ function PortalHostDetail() {
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>确认重建主机？</AlertDialogTitle>
-                <AlertDialogDescription>
-                  重建将重置容器环境，home 目录数据保留。重建过程中主机将暂时不可访问。
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>重建将重置容器系统环境，重建过程中主机将暂时不可访问。</p>
+                    <div className="rounded-md border bg-muted/50 p-2.5 text-xs space-y-1">
+                      <p><strong className="text-foreground">保留：</strong>home 目录（/workspace）下所有文件、SSH 密钥（自动重新注入）、SSH 密码</p>
+                      <p><strong className="text-foreground">清除：</strong>通过 apt 安装的额外软件包、系统级配置修改、/tmp 等临时目录</p>
+                    </div>
+                  </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

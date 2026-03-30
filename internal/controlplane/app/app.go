@@ -151,6 +151,7 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		EventRecorder:  repo,
 		EntryStore:     repo,
 		UserHosts:      repo,
+		SSHKeys:        repo,
 	})
 
 	var sshProxySrv *sshproxy.Server
