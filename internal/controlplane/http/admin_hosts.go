@@ -362,6 +362,17 @@ func (h *AdminHostsHandler) RotateSSHPassword() nethttp.Handler {
 		hostID := r.PathValue("hostID")
 		newPassword := generateEntryPassword()
 
+		host, err := h.store.GetHost(r.Context(), hostID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
+				return
+			}
+			h.logger.Error("get host for password rotation failed", "host_id", hostID, "error", err)
+			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "get host failed"})
+			return
+		}
+
 		if err := h.store.UpdateHostEntryPassword(r.Context(), hostID, newPassword); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
@@ -370,6 +381,19 @@ func (h *AdminHostsHandler) RotateSSHPassword() nethttp.Handler {
 			h.logger.Error("rotate host ssh password failed", "host_id", hostID, "error", err)
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "rotate ssh password failed"})
 			return
+		}
+
+		if host.Status == "running" {
+			containerName := "cloudproxy-" + hostID
+			owner, userErr := h.store.GetUser(r.Context(), host.UserID)
+			containerUser := "workspace"
+			if userErr == nil && owner.Username != "" {
+				containerUser = owner.Username
+			}
+			if syncErr := syncContainerPassword(containerName, containerUser, newPassword); syncErr != nil {
+				h.logger.Warn("sync password to running container failed (will take effect on next rebuild)",
+					"host_id", hostID, "container", containerName, "error", syncErr)
+			}
 		}
 
 		if h.events != nil {
@@ -386,6 +410,18 @@ func (h *AdminHostsHandler) RotateSSHPassword() nethttp.Handler {
 
 		writeJSON(w, nethttp.StatusOK, map[string]any{"new_password": newPassword})
 	})
+}
+
+// syncContainerPassword updates the Linux user password inside a running container via docker exec.
+func syncContainerPassword(containerName, user, password string) error {
+	cmd := exec.CommandContext(context.Background(), "docker", "exec", containerName,
+		"chpasswd")
+	cmd.Stdin = strings.NewReader(fmt.Sprintf("%s:%s\n", user, password))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker exec chpasswd: %w (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 func generateHostname() string {
