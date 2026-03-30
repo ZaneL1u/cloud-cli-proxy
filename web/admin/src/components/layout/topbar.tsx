@@ -1,5 +1,5 @@
 import { useRouterState } from "@tanstack/react-router";
-import { ChevronDown, LogOut, Users } from "lucide-react";
+import { ChevronDown, CircleHelp, LogOut, Users } from "lucide-react";
 import {
   clearAllSessions,
   logout,
@@ -25,7 +25,11 @@ const pageTitles: Record<string, string> = {
   "/portal": "我的面板",
 };
 
-export function Topbar() {
+interface TopbarProps {
+  onHelpClick?: () => void;
+}
+
+export function Topbar({ onHelpClick }: TopbarProps = {}) {
   const routerState = useRouterState();
   const pathname = routerState.location.pathname;
   const title =
@@ -39,6 +43,17 @@ export function Topbar() {
     <header className="flex h-16 items-center justify-between border-b bg-background px-6">
       <h2 className="text-lg font-semibold">{title}</h2>
       <div className="flex items-center gap-3">
+        {onHelpClick && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onHelpClick}
+            title="使用引导"
+          >
+            <CircleHelp className="h-5 w-5 text-muted-foreground" />
+          </Button>
+        )}
         <span className="text-sm text-muted-foreground">{roleLabel}</span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -2,6 +2,10 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { isAuthenticated } from "@/lib/auth";
 import { Topbar } from "@/components/layout/topbar";
 import { SecurityDisclaimer } from "@/components/security-disclaimer";
+import {
+  OnboardingGuide,
+  useOnboardingGuide,
+} from "@/components/onboarding-guide";
 
 export const Route = createFileRoute("/_portal")({
   beforeLoad: () => {
@@ -13,10 +17,17 @@ export const Route = createFileRoute("/_portal")({
 });
 
 function PortalLayout() {
+  const guide = useOnboardingGuide();
+
   return (
     <div className="flex h-screen flex-col">
       <SecurityDisclaimer />
-      <Topbar />
+      <OnboardingGuide
+        role="user"
+        forceOpen={guide.forceOpen}
+        onClose={guide.onClose}
+      />
+      <Topbar onHelpClick={guide.openGuide} />
       <main className="flex-1 overflow-y-auto bg-muted/40 p-6">
         <div className="min-h-[calc(100%-3rem)]">
           <Outlet />

@@ -3,6 +3,10 @@ import { isAuthenticated, getRole } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { SecurityDisclaimer } from "@/components/security-disclaimer";
+import {
+  OnboardingGuide,
+  useOnboardingGuide,
+} from "@/components/onboarding-guide";
 
 export const Route = createFileRoute("/_dashboard")({
   beforeLoad: () => {
@@ -18,12 +22,19 @@ export const Route = createFileRoute("/_dashboard")({
 });
 
 function DashboardLayout() {
+  const guide = useOnboardingGuide();
+
   return (
     <div className="flex h-screen">
       <SecurityDisclaimer />
+      <OnboardingGuide
+        role="admin"
+        forceOpen={guide.forceOpen}
+        onClose={guide.onClose}
+      />
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar />
+        <Topbar onHelpClick={guide.openGuide} />
         <main className="flex-1 overflow-y-auto bg-muted/40 p-6">
           <div className="min-h-[calc(100%-3rem)]">
             <Outlet />
