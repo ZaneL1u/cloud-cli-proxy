@@ -1,41 +1,70 @@
 .VPHero .image-container {
   position: relative;
+  isolation: isolate;
 }
 
 .VPHero .image-src {
   position: relative;
-  z-index: 1;
+  z-index: 3;
   width: clamp(160px, 24vw, 280px);
   height: auto;
-  filter: drop-shadow(0 10px 30px rgba(14, 116, 255, 0.32));
+  filter:
+    drop-shadow(0 16px 40px rgba(20, 104, 255, 0.38))
+    drop-shadow(0 0 36px rgba(34, 211, 238, 0.22));
+}
+
+.VPHero .image-container::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: clamp(460px, 62vw, 920px);
+  height: clamp(360px, 46vw, 760px);
+  border-radius: 999px;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 52% 48%,
+    rgba(56, 189, 248, 0.34) 0%,
+    rgba(37, 99, 235, 0.26) 24%,
+    rgba(30, 64, 175, 0.16) 44%,
+    rgba(15, 23, 42, 0) 70%
+  );
+  filter: blur(12px);
 }
 
 .VPHero .image-container::after {
   content: "";
   position: absolute;
   left: 50%;
-  bottom: -72px;
-  transform: translateX(-50%);
-  width: clamp(260px, 40vw, 460px);
-  height: clamp(120px, 16vw, 220px);
+  top: 50%;
+  transform: translate(-50%, -46%);
+  width: clamp(620px, 84vw, 1200px);
+  height: clamp(520px, 64vw, 980px);
   border-radius: 999px;
   z-index: 0;
   pointer-events: none;
   background: radial-gradient(
-    ellipse at center,
-    rgba(34, 211, 238, 0.56) 0%,
-    rgba(37, 99, 235, 0.38) 35%,
-    rgba(37, 99, 235, 0.08) 60%,
-    rgba(37, 99, 235, 0) 78%
+    circle at 50% 50%,
+    rgba(34, 211, 238, 0.2) 0%,
+    rgba(37, 99, 235, 0.14) 30%,
+    rgba(37, 99, 235, 0.08) 45%,
+    rgba(15, 23, 42, 0) 72%
   );
-  filter: blur(26px);
+  filter: blur(38px);
 }
 
 @media (max-width: 960px) {
+  .VPHero .image-container::before {
+    width: clamp(360px, 92vw, 620px);
+    height: clamp(290px, 76vw, 520px);
+    filter: blur(10px);
+  }
+
   .VPHero .image-container::after {
-    bottom: -56px;
-    width: clamp(220px, 70vw, 360px);
-    height: clamp(96px, 28vw, 180px);
-    filter: blur(20px);
+    width: clamp(460px, 118vw, 820px);
+    height: clamp(390px, 98vw, 700px);
+    filter: blur(30px);
   }
 }
