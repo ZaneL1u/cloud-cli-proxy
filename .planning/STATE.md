@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: 用户自助面板与 Bootstrap 重设计
+milestone: v1.3
+milestone_name: 管理后台凭据与 SSH 密钥增强
 status: planning
-stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-03-29T07:17:47.370Z"
-last_activity: 2026-03-29
+stopped_at: Milestone initialized
+last_updated: "2026-04-03T09:30:00.000Z"
+last_activity: 2026-04-03
 progress:
-  total_phases: 6
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
   percent: 0
 ---
 
@@ -18,17 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-28)
+See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** 给每个用户提供一台开箱即用的 SSH 云主机，并且严格保证其所有出网流量都走受控的指定出口 IP，同时保持"一条命令启动"的体验足够顺滑。
-**Current focus:** Phase 11 — 认证基础设施与数据迁移
+**Current focus:** Phase: Not started (defining requirements)
 
 ## Current Position
 
-Phase: 13 of 15 (claude 账号管理)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-29
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-03 — Milestone v1.3 started
 
 Progress: [░░░░░░░░░░] 0%
 
