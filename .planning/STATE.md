@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: 管理后台凭据与 SSH 密钥增强
 status: planning
-stopped_at: Milestone initialized
-last_updated: "2026-04-03T09:30:00.000Z"
+stopped_at: Roadmap created for v1.3
+last_updated: "2026-04-03T10:10:00.000Z"
 last_activity: 2026-04-03
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** 给每个用户提供一台开箱即用的 SSH 云主机，并且严格保证其所有出网流量都走受控的指定出口 IP，同时保持"一条命令启动"的体验足够顺滑。
-**Current focus:** Phase: Not started (defining requirements)
+**Current focus:** Phase 17 — 时区与出口 IP 交互重构
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 17 of 20 (时区与出口 IP 交互重构)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-03 — Milestone v1.3 started
+Status: Ready to discuss
+Last activity: 2026-04-03 — Roadmap for v1.3 created
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -46,8 +46,8 @@ Progress: [░░░░░░░░░░] 0%
 |-----------|--------|-------|-------|----------|
 | v1.0 MVP | 6 | 19 | 42 | 3 days |
 | v1.1 支持代理协议出网 | 4 | 11 | 21 | 3 days |
-| Phase 12-api P01 | 4min | 2 tasks | 6 files |
-| Phase 12-api P02 | 5min | 3 tasks | 6 files |
+| v1.2 用户自助面板与 Bootstrap 重设计 | 6 | 3 | — | paused |
+| v1.3 管理后台凭据与 SSH 密钥增强 | 4 | 0 | — | planning |
 
 ## Accumulated Context
 
@@ -66,8 +66,7 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 15: macOS 默认 bash 3.x 对 SSE 消费的兼容性需实测
-- Phase 14: Nginx WebSocket 升级头配置和超时设置需实测验证
+- None.
 
 ### Quick Tasks Completed
 
@@ -78,6 +77,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-29T07:14:22.235Z
-Stopped at: Completed 12-02-PLAN.md
+Last session: 2026-04-03T10:10:00.000Z
+Stopped at: Roadmap created for milestone v1.3
 Resume file: None
