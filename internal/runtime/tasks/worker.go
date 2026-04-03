@@ -295,7 +295,7 @@ func (w *Worker) rebuildHost(ctx context.Context, request agentapi.HostActionReq
 
 	if request.RebuildMode == "wipe-/workspace" {
 		if err := os.RemoveAll(firstNonEmpty(request.HomeDir, hostHomeDir(request.HostID))); err != nil {
-			return fmt.Errorf("factory reset host home: %w", err)
+			return fmt.Errorf("clear all data and rebuild host home: %w", err)
 		}
 	}
 

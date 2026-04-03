@@ -167,6 +167,37 @@ function PortalHostList() {
         description="欢迎回来。在此查看云主机状态、出口 IP，并管理登录密码与连接说明。"
       />
 
+      <Card className="rounded-xl border-amber-200/80 bg-amber-50/40 shadow-sm">
+        <CardHeader className="border-b border-amber-200/60 bg-amber-100/40">
+          <CardTitle className="text-base">重建数据保留规则（请务必阅读）</CardTitle>
+          <CardDescription>
+            重建主机前，请先确认你的数据是否存放在正确目录。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>
+            只有 <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">/workspace</code> 是重建保留区。
+          </p>
+          <p>
+            以下数据默认会保留：
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 font-mono text-xs">/workspace/.claude</code>
+            （Claude 登录与配置）、
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 font-mono text-xs">/workspace/.chrome-data</code>
+            （浏览器会话与 Cookie）。
+          </p>
+          <p>
+            非 <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">/workspace</code> 路径（如
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 font-mono text-xs">/etc</code>、
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 font-mono text-xs">/usr</code>、
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 font-mono text-xs">/var</code>、
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 font-mono text-xs">/tmp</code>）会被重置。
+          </p>
+          <p className="text-amber-800">
+            若管理员执行“清空所有数据并重建”，<code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">/workspace</code> 也会被清空。
+          </p>
+        </CardContent>
+      </Card>
+
       {hosts.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 p-2">
           <EmptyState

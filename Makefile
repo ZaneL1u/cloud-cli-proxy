@@ -3,7 +3,7 @@ export
 
 DEV_COMPOSE := docker compose -f deploy/compose/control-plane.dev.yml
 
-.PHONY: dev dev-api dev-web db test test-go test-smoke build clean gateway-image up up-build down logs release
+.PHONY: dev dev-api dev-web db test test-go test-smoke build clean gateway-image up up-build rebuild-runners rebuild-runners-running rebuild-runners-non-running down logs release
 
 # ── Development ──────────────────────────────────────────────
 
@@ -84,6 +84,24 @@ up: ## Start production stack (prefer prebuilt latest images)
 up-build: ## Start production stack from local source build
 	docker compose -f docker-compose.yml -f docker-compose.build.yaml --profile build-only build --no-cache
 	docker compose -f docker-compose.yml -f docker-compose.build.yaml up -d --force-recreate
+
+rebuild-runners: ## Queue rebuild for all managed hosts (running + non-running)
+	@ADMIN_USERNAME="$${ADMIN_USERNAME:-admin}" \
+	ADMIN_PASSWORD="$${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env or env}" \
+	bash deploy/scripts/rebuild-host-runners.sh \
+		--scope all
+
+rebuild-runners-running: ## Queue rebuild for hosts whose Docker status is running
+	@ADMIN_USERNAME="$${ADMIN_USERNAME:-admin}" \
+	ADMIN_PASSWORD="$${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env or env}" \
+	bash deploy/scripts/rebuild-host-runners.sh \
+		--scope running
+
+rebuild-runners-non-running: ## Queue rebuild for hosts whose Docker status is non-running
+	@ADMIN_USERNAME="$${ADMIN_USERNAME:-admin}" \
+	ADMIN_PASSWORD="$${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env or env}" \
+	bash deploy/scripts/rebuild-host-runners.sh \
+		--scope non-running
 
 down: ## Stop production stack
 	docker compose down

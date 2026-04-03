@@ -146,6 +146,20 @@ else
   err "host-agent 未正常启动，请检查: journalctl -u cloud-cli-proxy-host-agent --no-pager -n 30"
 fi
 
+AUTO_REBUILD_ALL_HOSTS="${REBUILD_ALL_HOSTS_AFTER_DEPLOY:-0}"
+if [[ "$AUTO_REBUILD_ALL_HOSTS" == "1" || "$AUTO_REBUILD_ALL_HOSTS" == "true" || "$AUTO_REBUILD_ALL_HOSTS" == "yes" ]]; then
+  if ! command -v jq >/dev/null 2>&1; then
+    die "REBUILD_ALL_HOSTS_AFTER_DEPLOY 已开启，但缺少 jq，请先安装 jq"
+  fi
+
+  log "REBUILD_ALL_HOSTS_AFTER_DEPLOY 已开启，开始批量重建所有主机 runner..."
+  ADMIN_USERNAME="${ADMIN_USERNAME:-admin}" \
+  ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
+  bash deploy/scripts/rebuild-host-runners.sh \
+    --scope all
+  log "所有主机重建任务已入队"
+fi
+
 # ── 完成 ─────────────────────────────────────────────────────
 log "========================================"
 log "部署完成！"

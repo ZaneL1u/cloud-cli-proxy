@@ -242,4 +242,26 @@ A: Yes. When using `make dev`, host-agent runs in `embedded` mode. For proxy mod
 
 ### Q: How do I update the user container image?
 
-A: Rebuild the managed image (`make user-image`), then rebuild the hosts that need updating. Rebuilding preserves home directory data.
+A: Update control-plane/backend and managed image first, then trigger host rebuild in batch. Rebuild keeps home directory data.
+
+```bash
+# 1) Update control-plane and admin services
+docker compose pull --policy always
+docker compose up -d
+
+# 2) (Optional) rebuild managed image from local source
+make user-image
+
+# 3) Refresh all host runners (running + non-running)
+make rebuild-runners
+```
+
+For partial rollout:
+
+```bash
+# Running hosts only
+make rebuild-runners-running
+
+# Non-running hosts only
+make rebuild-runners-non-running
+```

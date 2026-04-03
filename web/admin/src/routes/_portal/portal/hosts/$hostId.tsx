@@ -304,6 +304,22 @@ function PortalHostDetail() {
           <CardTitle className="text-base">操作</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 rounded-md border border-amber-200/80 bg-amber-50/40 p-3 text-xs leading-relaxed text-muted-foreground">
+            <p>
+              <strong className="text-foreground">数据保留规则：</strong>只有
+              <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/workspace</code>
+              是重建保留区。
+            </p>
+            <p className="mt-1">
+              默认保留
+              <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/workspace/.claude</code>
+              （Claude 登录与配置）和
+              <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/workspace/.chrome-data</code>
+              （浏览器会话与 Cookie）。非
+              <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/workspace</code>
+              路径会被重置。
+            </p>
+          </div>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button
@@ -320,8 +336,30 @@ function PortalHostDetail() {
                   <div className="space-y-2 text-sm text-muted-foreground">
                     <p>重建将重置容器系统环境，重建过程中主机将暂时不可访问。</p>
                     <div className="rounded-md border bg-muted/50 p-2.5 text-xs space-y-1">
-                      <p><strong className="text-foreground">保留：</strong>home 目录（/workspace）下所有文件、SSH 密钥（自动重新注入）、SSH 密码</p>
-                      <p><strong className="text-foreground">清除：</strong>通过 apt 安装的额外软件包、系统级配置修改、/tmp 等临时目录</p>
+                      <p>
+                        <strong className="text-foreground">保留：</strong>
+                        <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/workspace</code>
+                        下的数据（含
+                        <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/workspace/.claude</code>
+                        与
+                        <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/workspace/.chrome-data</code>
+                        ）、SSH 密钥（自动重新注入）、SSH 密码
+                      </p>
+                      <p>
+                        <strong className="text-foreground">清除：</strong>
+                        非
+                        <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/workspace</code>
+                        的系统层数据（如
+                        <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/etc</code>、
+                        <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/usr</code>、
+                        <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/var</code>、
+                        <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/tmp</code>）
+                      </p>
+                      <p>
+                        <strong className="text-foreground">注意：</strong>若管理员执行“清空所有数据并重建”，
+                        <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/workspace</code>
+                        也会被清空。
+                      </p>
                     </div>
                   </div>
                 </AlertDialogDescription>

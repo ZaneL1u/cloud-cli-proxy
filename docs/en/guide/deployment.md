@@ -130,6 +130,40 @@ curl -s http://127.0.0.1:8080/healthz
 # {"status":"ok"}
 ```
 
+## 7. Batch Refresh Worker Runners After Upgrade
+
+Upgrading control-plane does not automatically rebuild user host containers. After upgrade, run a batch rebuild so both running and non-running hosts move to the latest runner image:
+
+```bash
+source /etc/cloud-cli-proxy/env
+ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+bash deploy/scripts/rebuild-host-runners.sh \
+  --base-url "http://127.0.0.1:8080" \
+  --scope all
+```
+
+You can roll out by scope:
+
+```bash
+# Running containers only
+bash deploy/scripts/rebuild-host-runners.sh --scope running
+
+# Non-running containers only (including exited / not found)
+bash deploy/scripts/rebuild-host-runners.sh --scope non-running
+```
+
+To make `deploy.sh` do this automatically, add:
+
+```bash
+REBUILD_ALL_HOSTS_AFTER_DEPLOY=1
+```
+
+Then run:
+
+```bash
+sudo bash deploy/scripts/deploy.sh
+```
+
 ## Post-deploy Layout
 
 ```

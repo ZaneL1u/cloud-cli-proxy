@@ -160,6 +160,40 @@ curl -s http://127.0.0.1:8080/healthz
 # {"status":"ok"}
 ```
 
+## 7. 升级后批量刷新 Worker Runner
+
+控制面升级不会自动重建用户主机容器。升级后建议执行一次批量重建，让所有主机（含运行中与未运行）切到最新 runner 镜像：
+
+```bash
+source /etc/cloud-cli-proxy/env
+ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+bash deploy/scripts/rebuild-host-runners.sh \
+  --base-url "http://127.0.0.1:8080" \
+  --scope all
+```
+
+也可按范围灰度：
+
+```bash
+# 仅运行中容器
+bash deploy/scripts/rebuild-host-runners.sh --scope running
+
+# 仅未运行容器（包含 exited / not found）
+bash deploy/scripts/rebuild-host-runners.sh --scope non-running
+```
+
+如需在 `deploy.sh` 中自动执行，给环境文件增加：
+
+```bash
+REBUILD_ALL_HOSTS_AFTER_DEPLOY=1
+```
+
+然后再次执行：
+
+```bash
+sudo bash deploy/scripts/deploy.sh
+```
+
 ## 部署后的文件布局
 
 ```

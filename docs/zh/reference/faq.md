@@ -244,4 +244,26 @@ A: 可以。使用 `make dev` 启动开发环境时，host-agent 以 `embedded` 
 
 ### Q: 如何更新用户容器镜像？
 
-A: 重新构建受管镜像（`make user-image`），然后对需要更新的主机执行重建操作。重建不影响 home 目录数据。
+A: 先更新控制面/后端与受管镜像，再批量触发主机重建。重建不影响 home 目录数据。
+
+```bash
+# 1) 更新控制面与后台服务
+docker compose pull --policy always
+docker compose up -d
+
+# 2) （可选）本地源码构建受管镜像
+make user-image
+
+# 3) 批量刷新 runner（包含运行中和未运行主机）
+make rebuild-runners
+```
+
+如果只想更新一部分主机：
+
+```bash
+# 仅运行中主机
+make rebuild-runners-running
+
+# 仅未运行主机
+make rebuild-runners-non-running
+```
