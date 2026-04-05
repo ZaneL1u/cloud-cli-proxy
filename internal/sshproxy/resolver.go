@@ -7,23 +7,22 @@ import (
 	"os/exec"
 	"strings"
 
+	gossh "golang.org/x/crypto/ssh"
+
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
 
 type resolverRepo interface {
 	GetHostByShortID(ctx context.Context, shortID string) (repository.HostSSHAuth, error)
+	ListSSHKeysByUserAndPurpose(ctx context.Context, userID, purpose string) ([]repository.SSHKey, error)
 }
 
-// ContainerTarget is the SSH endpoint and credentials for dialing the user container.
 type ContainerTarget struct {
 	Addr     string
 	User     string
 	Password string
 }
 
-// RepoResolver implements ContainerResolver using the database repository.
-// It validates the host's entry_password, checks that the owning user is
-// active and the host is running, then resolves the container's SSH address.
 type RepoResolver struct {
 	repo resolverRepo
 }
@@ -42,10 +41,43 @@ func (r *RepoResolver) ResolveContainer(ctx context.Context, hostShortID, passwo
 		return ContainerTarget{}, fmt.Errorf("invalid credentials")
 	}
 
+	return r.resolveTarget(ctx, auth)
+}
+
+func (r *RepoResolver) ResolveContainerByPublicKey(ctx context.Context, hostShortID string, clientKey gossh.PublicKey) (ContainerTarget, error) {
+	auth, err := r.repo.GetHostByShortID(ctx, hostShortID)
+	if err != nil {
+		return ContainerTarget{}, fmt.Errorf("host not found")
+	}
+
+	inboundKeys, err := r.repo.ListSSHKeysByUserAndPurpose(ctx, auth.UserID, "inbound")
+	if err != nil || len(inboundKeys) == 0 {
+		return ContainerTarget{}, fmt.Errorf("no inbound keys configured")
+	}
+
+	clientKeyData := clientKey.Marshal()
+	matched := false
+	for _, k := range inboundKeys {
+		parsed, _, _, _, err := gossh.ParseAuthorizedKey([]byte(k.PublicKey))
+		if err != nil {
+			continue
+		}
+		if clientKey.Type() == parsed.Type() && subtle.ConstantTimeCompare(clientKeyData, parsed.Marshal()) == 1 {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return ContainerTarget{}, fmt.Errorf("public key not authorized")
+	}
+
+	return r.resolveTarget(ctx, auth)
+}
+
+func (r *RepoResolver) resolveTarget(ctx context.Context, auth repository.HostSSHAuth) (ContainerTarget, error) {
 	if auth.UserStatus != "active" {
 		return ContainerTarget{}, fmt.Errorf("user suspended")
 	}
-
 	if auth.HostStatus != "running" {
 		return ContainerTarget{}, fmt.Errorf("host not running (status: %s)", auth.HostStatus)
 	}

@@ -18,10 +18,9 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// ContainerResolver maps an SSH login (host_short_id + entry_password)
-// to the target container's SSH address and credentials.
 type ContainerResolver interface {
 	ResolveContainer(ctx context.Context, hostShortID, password string) (ContainerTarget, error)
+	ResolveContainerByPublicKey(ctx context.Context, hostShortID string, clientKey ssh.PublicKey) (ContainerTarget, error)
 }
 
 type Server struct {
@@ -114,7 +113,24 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 			target, err := s.resolver.ResolveContainer(authCtx, conn.User(), string(password))
 			if err != nil {
-				s.logger.Debug("SSH auth failed", "user", conn.User(), "remote", conn.RemoteAddr(), "reason", err)
+				s.logger.Debug("SSH password auth failed", "user", conn.User(), "remote", conn.RemoteAddr(), "reason", err)
+				return nil, fmt.Errorf("auth failed")
+			}
+			return &ssh.Permissions{
+				Extensions: map[string]string{
+					"target_addr":     target.Addr,
+					"target_user":     target.User,
+					"target_password": target.Password,
+				},
+			}, nil
+		},
+		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			authCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+
+			target, err := s.resolver.ResolveContainerByPublicKey(authCtx, conn.User(), key)
+			if err != nil {
+				s.logger.Debug("SSH pubkey auth failed", "user", conn.User(), "remote", conn.RemoteAddr(), "reason", err)
 				return nil, fmt.Errorf("auth failed")
 			}
 			return &ssh.Permissions{
