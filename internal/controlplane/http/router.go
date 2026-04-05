@@ -239,6 +239,11 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			mux.Handle("POST /v1/admin/hosts/{hostID}/rebuild", adminGuard(hostsHandler.Rebuild()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/vnc/restart", adminGuard(hostsHandler.RestartVNC()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/rotate-ssh-password", adminGuard(hostsHandler.RotateSSHPassword()))
+			mux.Handle("POST /v1/admin/hosts/{hostID}/change-root-password", adminGuard(hostsHandler.ChangeRootPassword()))
+			mux.Handle("GET /v1/admin/hosts/{hostID}/claude/settings", adminGuard(hostsHandler.GetClaudeSettings()))
+			mux.Handle("PUT /v1/admin/hosts/{hostID}/claude/settings", adminGuard(hostsHandler.UpdateClaudeSettings()))
+			mux.Handle("GET /v1/admin/hosts/{hostID}/claude/status", adminGuard(hostsHandler.GetClaudeStatus()))
+			mux.Handle("POST /v1/admin/hosts/{hostID}/claude/update", adminGuard(hostsHandler.UpdateClaude()))
 			mux.Handle("DELETE /v1/admin/hosts/{hostID}", adminGuard(hostsHandler.Delete()))
 
 			vncProxy := NewAdminVNCProxyHandler(deps.Logger, deps.AdminHosts)

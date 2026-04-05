@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -10,7 +11,9 @@ import (
 	"math/big"
 	nethttp "net/http"
 	"os/exec"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -451,6 +454,263 @@ func (h *AdminHostsHandler) RestartVNC() nethttp.Handler {
 		}
 
 		writeJSON(w, nethttp.StatusOK, map[string]any{"status": "restarted"})
+	})
+}
+
+func (h *AdminHostsHandler) ChangeRootPassword() nethttp.Handler {
+	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		hostID := r.PathValue("hostID")
+
+		var body struct {
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Password == "" {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "password is required"})
+			return
+		}
+
+		host, err := h.store.GetHost(r.Context(), hostID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
+				return
+			}
+			h.logger.Error("get host for root password change failed", "host_id", hostID, "error", err)
+			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "get host failed"})
+			return
+		}
+		if host.Status != "running" {
+			writeJSON(w, nethttp.StatusConflict, map[string]string{"error": "host is not running"})
+			return
+		}
+
+		containerName := "cloudproxy-" + hostID
+		if err := syncContainerPassword(containerName, "root", body.Password); err != nil {
+			h.logger.Error("change root password failed", "host_id", hostID, "error", err)
+			writeJSON(w, nethttp.StatusBadGateway, map[string]string{"error": "change root password failed"})
+			return
+		}
+
+		if h.events != nil {
+			if _, err := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
+				HostID:   &hostID,
+				Level:    "info",
+				Type:     "admin.host.root_password_changed",
+				Message:  "管理员修改容器 root 密码",
+				Metadata: map[string]any{"operator": "admin"},
+			}); err != nil {
+				h.logger.Error("record event failed", "type", "admin.host.root_password_changed", "error", err)
+			}
+		}
+
+		writeJSON(w, nethttp.StatusOK, map[string]string{"status": "ok"})
+	})
+}
+
+func (h *AdminHostsHandler) GetClaudeSettings() nethttp.Handler {
+	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		hostID := r.PathValue("hostID")
+
+		host, err := h.store.GetHost(r.Context(), hostID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
+				return
+			}
+			h.logger.Error("get host for claude settings failed", "host_id", hostID, "error", err)
+			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "get host failed"})
+			return
+		}
+		if host.Status != "running" {
+			writeJSON(w, nethttp.StatusConflict, map[string]string{"error": "host is not running"})
+			return
+		}
+
+		containerName := "cloudproxy-" + hostID
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, "docker", "exec", "-i", containerName,
+			"cat", "/workspace/.claude/settings.json")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			writeJSON(w, nethttp.StatusOK, map[string]any{"settings": map[string]any{}})
+			return
+		}
+
+		var settings json.RawMessage
+		if err := json.Unmarshal(bytes.TrimSpace(output), &settings); err != nil {
+			writeJSON(w, nethttp.StatusOK, map[string]any{"settings": map[string]any{}})
+			return
+		}
+
+		writeJSON(w, nethttp.StatusOK, map[string]any{"settings": settings})
+	})
+}
+
+func (h *AdminHostsHandler) UpdateClaudeSettings() nethttp.Handler {
+	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		hostID := r.PathValue("hostID")
+
+		var body struct {
+			Settings json.RawMessage `json:"settings"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Settings) == 0 {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "settings is required"})
+			return
+		}
+
+		host, err := h.store.GetHost(r.Context(), hostID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
+				return
+			}
+			h.logger.Error("get host for claude settings update failed", "host_id", hostID, "error", err)
+			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "get host failed"})
+			return
+		}
+		if host.Status != "running" {
+			writeJSON(w, nethttp.StatusConflict, map[string]string{"error": "host is not running"})
+			return
+		}
+
+		containerName := "cloudproxy-" + hostID
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		mkdirCmd := exec.CommandContext(ctx, "docker", "exec", "-i", containerName,
+			"mkdir", "-p", "/workspace/.claude")
+		if out, err := mkdirCmd.CombinedOutput(); err != nil {
+			h.logger.Error("mkdir .claude failed", "host_id", hostID, "error", err, "output", string(out))
+			writeJSON(w, nethttp.StatusBadGateway, map[string]string{"error": "prepare directory failed"})
+			return
+		}
+
+		prettySettings, _ := json.MarshalIndent(json.RawMessage(body.Settings), "", "  ")
+		teeCmd := exec.CommandContext(ctx, "docker", "exec", "-i", containerName,
+			"tee", "/workspace/.claude/settings.json")
+		teeCmd.Stdin = bytes.NewReader(prettySettings)
+		if out, err := teeCmd.CombinedOutput(); err != nil {
+			h.logger.Error("write claude settings failed", "host_id", hostID, "error", err, "output", string(out))
+			writeJSON(w, nethttp.StatusBadGateway, map[string]string{"error": "write settings failed"})
+			return
+		}
+
+		if h.events != nil {
+			if _, err := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
+				HostID:   &hostID,
+				Level:    "info",
+				Type:     "admin.host.claude_settings_updated",
+				Message:  "管理员更新容器 Claude 配置",
+				Metadata: map[string]any{"operator": "admin"},
+			}); err != nil {
+				h.logger.Error("record event failed", "type", "admin.host.claude_settings_updated", "error", err)
+			}
+		}
+
+		writeJSON(w, nethttp.StatusOK, map[string]string{"status": "ok"})
+	})
+}
+
+func (h *AdminHostsHandler) GetClaudeStatus() nethttp.Handler {
+	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		hostID := r.PathValue("hostID")
+
+		host, err := h.store.GetHost(r.Context(), hostID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
+				return
+			}
+			h.logger.Error("get host for claude status failed", "host_id", hostID, "error", err)
+			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "get host failed"})
+			return
+		}
+		if host.Status != "running" {
+			writeJSON(w, nethttp.StatusConflict, map[string]string{"error": "host is not running"})
+			return
+		}
+
+		containerName := "cloudproxy-" + hostID
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		countCmd := exec.CommandContext(ctx, "docker", "exec", "-i", containerName,
+			"bash", "-c", "pgrep -c -f claude-real 2>/dev/null || echo 0")
+		countOut, _ := countCmd.CombinedOutput()
+		instances, _ := strconv.Atoi(strings.TrimSpace(string(countOut)))
+
+		versionCmd := exec.CommandContext(ctx, "docker", "exec", "-i", containerName,
+			"bash", "-c", "claude-real --version 2>/dev/null || echo unknown")
+		versionOut, _ := versionCmd.CombinedOutput()
+		version := strings.TrimSpace(string(versionOut))
+		if version == "" {
+			version = "unknown"
+		}
+
+		writeJSON(w, nethttp.StatusOK, map[string]any{
+			"running_instances": instances,
+			"version":           version,
+		})
+	})
+}
+
+func (h *AdminHostsHandler) UpdateClaude() nethttp.Handler {
+	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		hostID := r.PathValue("hostID")
+
+		host, err := h.store.GetHost(r.Context(), hostID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
+				return
+			}
+			h.logger.Error("get host for claude update failed", "host_id", hostID, "error", err)
+			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "get host failed"})
+			return
+		}
+		if host.Status != "running" {
+			writeJSON(w, nethttp.StatusConflict, map[string]string{"error": "host is not running"})
+			return
+		}
+
+		containerName := "cloudproxy-" + hostID
+		ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+		defer cancel()
+
+		updateScript := `npm install -g @anthropic-ai/claude-code@latest 2>&1 && ` +
+			`CLAUDE_NEW=$(npm root -g)/@anthropic-ai/claude-code/cli.js && ` +
+			`if [ -f "$CLAUDE_NEW" ]; then cp "$CLAUDE_NEW" /usr/local/bin/claude-real && chmod +x /usr/local/bin/claude-real; fi`
+		cmd := exec.CommandContext(ctx, "docker", "exec", "-i", containerName, "bash", "-c", updateScript)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			h.logger.Error("update claude failed", "host_id", hostID, "error", err, "output", string(output))
+			writeJSON(w, nethttp.StatusBadGateway, map[string]string{"error": "update claude failed: " + strings.TrimSpace(string(output))})
+			return
+		}
+
+		versionCmd := exec.CommandContext(ctx, "docker", "exec", "-i", containerName,
+			"bash", "-c", "claude-real --version 2>/dev/null || echo unknown")
+		versionOut, _ := versionCmd.CombinedOutput()
+		version := strings.TrimSpace(string(versionOut))
+		if version == "" {
+			version = "unknown"
+		}
+
+		if h.events != nil {
+			if _, err := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
+				HostID:   &hostID,
+				Level:    "info",
+				Type:     "admin.host.claude_updated",
+				Message:  "管理员更新容器 Claude Code",
+				Metadata: map[string]any{"operator": "admin", "version": version},
+			}); err != nil {
+				h.logger.Error("record event failed", "type", "admin.host.claude_updated", "error", err)
+			}
+		}
+
+		writeJSON(w, nethttp.StatusOK, map[string]any{"status": "ok", "version": version})
 	})
 }
 
