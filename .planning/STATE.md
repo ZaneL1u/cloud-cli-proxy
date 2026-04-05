@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: 用户自助面板与 Bootstrap 重设计
 status: planning
-stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-03-29T07:17:47.370Z"
+stopped_at: Completed 260405-h13 quick task
+last_updated: "2026-04-05T04:23:13.097Z"
 last_activity: 2026-03-29
 progress:
   total_phases: 6
@@ -75,9 +75,10 @@ None.
 |---|-------------|------|--------|-----------|
 | 260328-trs | 为用户容器添加资源限制功能（内存、CPU、磁盘） | 2026-03-29 | e55a4e4 | [260328-trs-cpu](./quick/260328-trs-cpu/) |
 | 260328-u4q | 重写README并创建VitePress中英文文档站部署到GitHub Pages | 2026-03-29 | d23e1b2 | [260328-u4q-readme-vitepress-github-pages](./quick/260328-u4q-readme-vitepress-github-pages/) |
+| 260405-h13 | 容器管理 API (root 密码/Claude settings/状态/更新) + 前端集成 | 2026-04-05 | 6affd42 | [260405-h13-root-claude-settings-claude-claude-code](./quick/260405-h13-root-claude-settings-claude-claude-code/) |
 
 ## Session Continuity
 
-Last session: 2026-03-29T07:14:22.235Z
-Stopped at: Completed 12-02-PLAN.md
+Last session: 2026-04-05T04:23:13.092Z
+Stopped at: Completed 260405-h13 quick task
 Resume file: None
