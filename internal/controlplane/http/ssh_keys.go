@@ -53,22 +53,16 @@ func (h *SSHKeyHandler) List() nethttp.Handler {
 			return
 		}
 
-		inbound := make([]repository.SSHKey, 0)
-		outbound := make([]repository.SSHKey, 0)
+		sanitized := make([]repository.SSHKey, 0, len(keys))
 		for _, k := range keys {
-			switch k.Purpose {
-			case "inbound":
-				inbound = append(inbound, k)
-			case "outbound":
-				sanitized := k
-				sanitized.PrivateKey = ""
-				outbound = append(outbound, sanitized)
+			if k.Purpose == "outbound" {
+				k.PrivateKey = ""
 			}
+			sanitized = append(sanitized, k)
 		}
 
 		writeJSON(w, nethttp.StatusOK, map[string]any{
-			"inbound":  inbound,
-			"outbound": outbound,
+			"keys": sanitized,
 		})
 	})
 }
@@ -140,20 +134,14 @@ func (h *SSHKeyHandler) Create() nethttp.Handler {
 			return
 		}
 
-		resp := map[string]any{
-			"id":          key.ID,
-			"purpose":     key.Purpose,
-			"label":       key.Label,
-			"public_key":  key.PublicKey,
-			"key_type":    key.KeyType,
-			"fingerprint": key.Fingerprint,
-			"created_at":  key.CreatedAt,
-		}
-		if req.Purpose == "outbound" && key.PrivateKey != "" {
-			resp["private_key"] = key.PrivateKey
+		respKey := key
+		if req.Purpose == "inbound" {
+			respKey.PrivateKey = ""
 		}
 
-		writeJSON(w, nethttp.StatusCreated, resp)
+		writeJSON(w, nethttp.StatusCreated, map[string]any{
+			"key": respKey,
+		})
 	})
 }
 
