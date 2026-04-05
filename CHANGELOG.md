@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v1.6.2 - 2026-04-05
+## What's Changed
+
+### Backend (Go / API)
+- fix: SSH密钥API响应格式与前端对齐 (195aefe)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v1.6.1...v1.6.2
+
+
 ## v1.6.1 - 2026-04-05
 ## What's Changed
 
