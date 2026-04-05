@@ -79,9 +79,10 @@ None.
 | 260405-hai | 增强 Claude 状态 API：返回每个进程的 PID、工作目录和运行时间 | 2026-04-05 | 2ae9592 | [260405-hai-claude-api-pid](./quick/260405-hai-claude-api-pid/) |
 | 260405-hio | Claude Code 深度配置集成：结构化settings编辑面板+系统指纹查看 | 2026-04-05 | bea7886 | [260405-hio-claude-code-settings](./quick/260405-hio-claude-code-settings/) |
 | 260405-jji | 镜像版本管理：自动拉取最新镜像+版本展示+一键升级 | 2026-04-05 | 6aad37a | [260405-jji-image-version-mgmt](./quick/260405-jji-image-version-mgmt/) |
+| 260405-qk2 | SSH密钥体系改造：入站免密登录+出站外部鉴权+多密钥管理 | 2026-04-05 | d297fbb | [260405-qk2-ssh](./quick/260405-qk2-ssh/) |
 
 ## Session Continuity
 
-Last session: 2026-04-05T06:10:00.000Z
-Stopped at: Completed 260405-jji quick task
+Last session: 2026-04-05T11:15:00.000Z
+Stopped at: Completed 260405-qk2 SSH 密钥体系改造
 Resume file: None
