@@ -20,7 +20,6 @@ type EntryStore interface {
 	GetPrimaryHostByUserID(context.Context, string) (repository.Host, error)
 	GetHostByShortID(context.Context, string) (repository.HostSSHAuth, error)
 	GetUser(context.Context, string) (repository.User, error)
-	GetHost(context.Context, string) (repository.Host, error)
 }
 
 type EntryHandler struct {
@@ -100,10 +99,12 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 		}
 
 		var user repository.User
-		var host repository.Host
+		var hostShortID, hostEntryPassword, hostStatus string
 
 		hostAuth, hostErr := h.store.GetHostByShortID(r.Context(), shortID)
 		if hostErr == nil {
+			h.logger.Info("entry auth: resolved by host short_id",
+				"short_id", shortID, "host_id", hostAuth.HostID, "host_status", hostAuth.HostStatus)
 			u, err := h.store.GetUser(r.Context(), hostAuth.UserID)
 			if err != nil {
 				h.logger.Error("entry auth: lookup host owner failed", "host_id", hostAuth.HostID, "error", err)
@@ -111,13 +112,9 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 				return
 			}
 			user = u
-			fullHost, err := h.store.GetHost(r.Context(), hostAuth.HostID)
-			if err != nil {
-				h.logger.Error("entry auth: lookup host failed", "host_id", hostAuth.HostID, "error", err)
-				writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "internal error"})
-				return
-			}
-			host = fullHost
+			hostShortID = hostAuth.HostShortID
+			hostEntryPassword = hostAuth.EntryPassword
+			hostStatus = hostAuth.HostStatus
 		} else {
 			u, err := h.store.GetUserByShortID(r.Context(), shortID)
 			if err != nil {
@@ -130,7 +127,7 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 				return
 			}
 			user = u
-			h, err := h.store.GetPrimaryHostByUserID(r.Context(), user.ID)
+			primaryHost, err := h.store.GetPrimaryHostByUserID(r.Context(), user.ID)
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					writeJSON(w, nethttp.StatusNotFound, map[string]string{
@@ -139,10 +136,15 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 					})
 					return
 				}
+				h.logger.Error("entry auth: lookup primary host failed", "user_id", user.ID, "error", err)
 				writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "internal error"})
 				return
 			}
-			host = h
+			h.logger.Info("entry auth: resolved by user short_id (fallback to primary host)",
+				"short_id", shortID, "host_id", primaryHost.ID, "host_status", primaryHost.Status)
+			hostShortID = primaryHost.ShortID
+			hostEntryPassword = primaryHost.EntryPassword
+			hostStatus = primaryHost.Status
 		}
 
 		if user.Status != "active" {
@@ -155,7 +157,8 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 			return
 		}
 
-		if host.Status != "running" {
+		if hostStatus != "running" {
+			h.logger.Warn("entry auth: host not running", "short_id", shortID, "host_status", hostStatus)
 			writeJSON(w, nethttp.StatusOK, map[string]any{
 				"status":  "not_ready",
 				"message": "Your machine is not running. Please contact admin.",
@@ -169,8 +172,8 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 		}
 
 		writeJSON(w, nethttp.StatusOK, map[string]any{
-			"ssh_user": host.ShortID,
-			"ssh_pass": host.EntryPassword,
+			"ssh_user": hostShortID,
+			"ssh_pass": hostEntryPassword,
 			"ssh_host": sshHost,
 			"ssh_port": 2222,
 			"status":   "ready",

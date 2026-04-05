@@ -245,10 +245,25 @@ function HostDetailPage() {
                 label="一键连接（curl 入口）"
                 command={data.connection_info.curl_command}
               />
-              <ConnectionBlock
-                label="SSH 直连（需要这台主机的 SSH 密码）"
-                command={data.connection_info.ssh_command}
-              />
+              <div className="p-6 space-y-3">
+                <ConnectionBlock
+                  label="SSH 直连（配置入站密钥后可免密登录）"
+                  command={data.connection_info.ssh_command}
+                  inline
+                />
+                <Button
+                  type="button"
+                  variant="default"
+                  className="h-10 gap-2"
+                  onClick={() => {
+                    navigator.clipboard.writeText(data.connection_info!.ssh_command);
+                    toast.success("SSH 命令已复制，请在终端中粘贴执行");
+                  }}
+                >
+                  <Terminal className="h-4 w-4" />
+                  复制 SSH 命令
+                </Button>
+              </div>
               {data.connection_info.vnc_url && (
                 <div className="space-y-4 p-6">
                   <ConnectionBlock
