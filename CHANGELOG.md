@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v1.6.6 - 2026-04-05
+## What's Changed
+
+### Backend (Go / API)
+- fix: curl 入口改用主机 short_id 替代用户 short_id (82a9ef6)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v1.6.5...v1.6.6
+
+
 ## v1.6.5 - 2026-04-05
 ## What's Changed
 
