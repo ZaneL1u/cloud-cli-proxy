@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v1.6.4 - 2026-04-05
+## What's Changed
+
+### Backend (Go / API)
+- feat: SSH代理支持公钥认证（入站密钥免密登录） (4169f85)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v1.6.3...v1.6.4
+
+
 ## v1.6.3 - 2026-04-05
 ## What's Changed
 
