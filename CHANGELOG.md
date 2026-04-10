@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v1.6.10 - 2026-04-10
+## What's Changed
+
+### Backend (Go / API)
+- fix(ssh): generate valid outbound keys (0daecbd)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v1.6.9...v1.6.10
+
+
 ## v1.6.9 - 2026-04-08
 ## What's Changed
 
