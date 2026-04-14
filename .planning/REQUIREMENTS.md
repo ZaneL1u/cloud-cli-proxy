@@ -61,27 +61,27 @@ Deferred to future release. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLI-01 | TBD | Pending |
-| CLI-02 | TBD | Pending |
-| CLI-03 | TBD | Pending |
-| CLI-04 | TBD | Pending |
-| CLI-05 | TBD | Pending |
-| TTY-01 | TBD | Pending |
-| TTY-02 | TBD | Pending |
-| TTY-03 | TBD | Pending |
-| MAP-01 | TBD | Pending |
-| MAP-02 | TBD | Pending |
-| MAP-03 | TBD | Pending |
-| SRV-01 | TBD | Pending |
-| SRV-02 | TBD | Pending |
-| SRV-03 | TBD | Pending |
-| SRV-04 | TBD | Pending |
+| SRV-01 | Phase 24 | Pending |
+| SRV-02 | Phase 24 | Pending |
+| SRV-03 | Phase 24 | Pending |
+| CLI-01 | Phase 25 | Pending |
+| CLI-02 | Phase 25 | Pending |
+| CLI-04 | Phase 25 | Pending |
+| CLI-05 | Phase 25 | Pending |
+| CLI-03 | Phase 26 | Pending |
+| TTY-01 | Phase 26 | Pending |
+| TTY-02 | Phase 26 | Pending |
+| TTY-03 | Phase 26 | Pending |
+| MAP-01 | Phase 27 | Pending |
+| MAP-02 | Phase 27 | Pending |
+| MAP-03 | Phase 27 | Pending |
+| SRV-04 | Phase 28 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-14*
-*Last updated: 2026-04-14 after initial definition*
+*Last updated: 2026-04-15 after roadmap creation*

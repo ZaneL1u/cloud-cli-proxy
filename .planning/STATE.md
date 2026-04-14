@@ -5,29 +5,29 @@
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** 给每个用户提供一台开箱即用的 SSH 云主机，并且严格保证其所有出网流量都走受控的指定出口 IP
-**Current focus:** v2.0 cloud-claude 透明远程 CLI — 定义需求中
+**Current focus:** Phase 24 — 受管镜像 FUSE 硬化与容器参数
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-04-14 — Milestone v2.0 started
+Phase: 24 (1 of 5 in v2.0)
+Plan: 0 of 0 in current phase
+Status: Ready to plan
+Last activity: 2026-04-15 — v2.0 roadmap created
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [░░░░░░░░░░] 0% (v2.0)
 
 ## Performance Metrics
 
 **Velocity:**
 - Total plans completed: 0 (v2.0)
-- Average duration: —
-- Total execution time: 0 hours
+- Average duration: -
+- Total execution time: -
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| — | — | — | — |
+| - | - | - | - |
 
 *Updated after each plan completion*
 
@@ -38,10 +38,8 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v2.0 design]: 客户端为独立 Go 二进制 cloud-claude，与 cloud-cli-proxy 服务端零依赖
-- [v2.0 design]: 目录映射首选 sshfs -o slave over SSH 多路复用，备选 Mutagen
-- [v2.0 design]: 用户配置存储在 ~/.cloud-claude/config.yaml
-- [v2.0 design]: SSH Proxy 已支持多 session channel + exec 转发，零改造可用
+- [v2.0 roadmap]: 目录映射主路径为 sshfs slave + SFTP，Mutagen 作为 v2.x 备选
+- [v2.0 roadmap]: SSH Proxy 保持零改造，cloud-claude 通过现有多 session channel 连接
 
 ### Pending Todos
 
@@ -49,12 +47,11 @@ None yet.
 
 ### Blockers/Concerns
 
-- sshfs -o slave 方案需在真实 SSH Proxy 上端到端验证
-- 容器 FUSE 设备权限对 AppArmor/SELinux 环境的兼容性待测
-- 目录映射在高延迟网络下的 I/O 性能需评估
+- FUSE + AppArmor/seccomp 兼容性需在目标 Linux 宿主上验证（Phase 28 专项）
+- golang.org/x/crypto 全仓版本统一需在 Phase 25 开发前完成
 
 ## Session Continuity
 
-Last session: 2026-04-14
-Stopped at: Milestone v2.0 initialized, defining requirements
-Resume file: —
+Last session: 2026-04-15
+Stopped at: v2.0 roadmap created, ready to plan Phase 24
+Resume file: None

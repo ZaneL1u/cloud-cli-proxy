@@ -4,8 +4,9 @@
 
 - ✅ **v1.0 MVP** — Phases 1-6 (shipped 2026-03-28) — [Archive](milestones/v1.0-ROADMAP.md)
 - ✅ **v1.1 支持代理协议出网** — Phases 7-10 (shipped 2026-03-28) — [Archive](milestones/v1.1-ROADMAP.md)
-- 🚧 **v1.2 用户自助面板与 Bootstrap 重设计** — Phases 11-16 (partially shipped, remaining deferred)
-- 🚧 **v1.3 claude-shell 本地透明代理** — Phases 17-23 (in progress)
+- ⏸️ **v1.2 用户自助面板与 Bootstrap 重设计** — Phases 11-16 (partially shipped, remaining deferred)
+- ⏸️ **v1.3 claude-shell 本地透明代理** — Phases 17-23 (paused)
+- 🚧 **v2.0 cloud-claude 透明远程 CLI** — Phases 24-28 (in progress)
 
 ## Phases
 
@@ -42,7 +43,7 @@
 - [ ] **Phase 15: Bootstrap 重设计** — 短 URL 入口与实时状态推送
 - [ ] **Phase 16: 级联禁用与到期治理** — 用户/账号/主机到期联动与自动关机
 
-## Phase Details
+## Phase Details — v1.2 (Deferred)
 
 ### Phase 11: 认证基础设施与数据迁移
 **Goal**: 用户可以使用自己的凭证登录系统，系统能区分管理员和普通用户角色，Claude 账号数据模型就绪
@@ -122,9 +123,8 @@ Plans:
   7. 所有级联操作都记录在事件日志中，包含操作原因（用户禁用、到期等）
 **Plans**: TBD
 
-### 🚧 v1.3 claude-shell 本地透明代理
-
-**Milestone Goal:** 交付单一 Go 二进制 `claude` 命令，透明启动 Docker 容器运行 Claude Code，容器内全流量走代理出口，设备指纹完全伪装，用户和 Claude Code 均无感知。
+<details>
+<summary>⏸️ v1.3 claude-shell 本地透明代理 (Phases 17-23) — PAUSED</summary>
 
 - [ ] **Phase 17: 镜像与 Entrypoint 基线** — 容器镜像和启动编排就绪，Claude Code 通过官方安装脚本运行
 - [ ] **Phase 18: 网络隔离与分流** — sing-box tun + nftables 全流量代理，公网走出口，私网回连宿主机
@@ -134,92 +134,77 @@ Plans:
 - [ ] **Phase 22: 验证与自检** — verify 子命令一键检测出口 IP、DNS、指纹和容器标记
 - [ ] **Phase 23: 混淆构建与交付** — garble 混淆产出可直接替换的单一二进制
 
-## Phase Details — v1.3
+</details>
 
-### Phase 17: 镜像与 Entrypoint 基线
-**Goal**: 容器镜像和 entrypoint 就绪，Claude Code 通过官方安装脚本正确安装并启动
-**Depends on**: Nothing (v1.3 首个阶段，与 v1.2 无代码依赖)
-**Requirements**: INFRA-01, INFRA-02, INFRA-03
-**Success Criteria** (what must be TRUE):
-  1. docker build 产出可用镜像，镜像包含 sing-box 二进制和基础开发工具
-  2. Claude Code 通过官方 curl 安装脚本（Bun standalone）安装，容器内 `claude` 命令可执行
-  3. entrypoint 按"网络配置 → 指纹伪造 → 反检测 → Claude Code"顺序编排，各步骤失败时输出明确错误
-  4. DISABLE_AUTOUPDATER=1 生效，Claude Code 不会在运行时触发自动更新
-**Plans**: 1 plan
-Plans:
-- [ ] 17-01-PLAN.md — claude-shell Dockerfile + entrypoint 编排脚本
+### 🚧 v2.0 cloud-claude 透明远程 CLI
 
-### Phase 18: 网络隔离与分流
-**Goal**: 容器内所有出站流量强制走代理出口，DNS 不泄漏，本地流量正确回连宿主机
-**Depends on**: Phase 17
-**Requirements**: NET-01, NET-02, NET-03, NET-04, NET-05
+**Milestone Goal:** 交付一个可替代原生 `claude` 命令的 Go 二进制文件 `cloud-claude`，用户 `alias claude=cloud-claude` 后输入 `claude` 的体验与本地完全一致——实际运行在远端配好代理出口的 Docker 容器里，本地目录通过 sshfs slave 实时映射到容器内。
+
+- [ ] **Phase 24: 受管镜像 FUSE 硬化与容器参数** — 镜像预装 sshfs/fuse3，Worker 附加 FUSE 设备权限，SSH Proxy 零改造验证
+- [ ] **Phase 25: cloud-claude CLI 骨架与连接** — Go 二进制 cloud-claude 的配置、认证和远端容器连接闭环
+- [ ] **Phase 26: 参数透传与终端体验** — claude 参数原样透传，TTY/信号/退出码与本地一致
+- [ ] **Phase 27: 双 session 目录映射** — sshfs slave + SFTP 实现当前目录到容器 /workspace 的实时双向映射
+- [ ] **Phase 28: 生产环境 FUSE 兼容性验证** — 在目标 Linux 环境验证 FUSE + AppArmor/seccomp 完整兼容性
+
+## Phase Details — v2.0
+
+### Phase 24: 受管镜像 FUSE 硬化与容器参数
+**Goal**: 容器侧 FUSE/sshfs 前置条件和运行参数就绪，SSH Proxy 零改造验证通过
+**Depends on**: Nothing (v2.0 首个阶段，基于 v1.1 受管镜像)
+**Requirements**: SRV-01, SRV-02, SRV-03
 **Success Criteria** (what must be TRUE):
-  1. sing-box tun 接管容器内所有出站流量，外网请求走配置的代理出口 IP
-  2. nftables 默认拒绝策略生效，绕过 tun 的直连外网请求被丢弃
-  3. 外网域名的 DNS 查询通过代理通道解析，不通过宿主机或容器默认 DNS 泄漏
-  4. 本地地址（127.0.0.1、10.0.0.0/8、172.16.0.0/12、192.168.0.0/16）可通过 host-gateway 回连宿主机
-  5. 支持 SOCKS5、HTTP、VMess、Shadowsocks、Trojan 五种代理协议出站
+  1. 受管镜像 docker build 产出的镜像包含 sshfs 和 fuse3，/etc/fuse.conf 中 user_allow_other 已启用
+  2. Worker 创建容器时附加 --device /dev/fuse 和 --cap-add SYS_ADMIN，容器内非 root 用户可成功执行 sshfs 挂载
+  3. SSH Proxy 现有多 session channel 和 exec 转发能力无需代码改动即可支持 cloud-claude 的连接模式
 **Plans**: TBD
 
-### Phase 19: CLI 骨架与 Docker 编排
-**Goal**: 用户可以在终端执行 `claude` 命令，由 Go 二进制完成配置加载、Docker 检测和容器启动的基础闭环
-**Depends on**: Phase 18
-**Requirements**: CLI-01, CLI-03, CLI-05, CLI-06, BUILD-02
+### Phase 25: cloud-claude CLI 骨架与连接
+**Goal**: 用户可以运行 cloud-claude 命令完成配置、认证和远端容器连接
+**Depends on**: Phase 24
+**Requirements**: CLI-01, CLI-02, CLI-04, CLI-05
 **Success Criteria** (what must be TRUE):
-  1. `claude` 命令无子命令时透传所有参数给容器内 Claude Code，基本输入输出可用
-  2. `claude init` 在 ~/.claude-shell/ 生成包含代理、指纹、网络选项的 config.yaml 配置模板
-  3. Docker 不可用时给出明确中文错误提示；镜像不存在时自动拉取并显示进度
-  4. claude-shell/ 子目录拥有独立 go.mod，与 cloud-cli-proxy 主项目零依赖
+  1. 用户运行 `cloud-claude`（无参数）后，CLI 自动连接网关、认证、等待容器就绪，并进入远端 Claude Code 会话
+  2. 用户运行 `cloud-claude init` 后，网关地址和凭证持久化到 `~/.cloud-claude/config.yaml`，后续运行自动读取
+  3. 网关不可达、认证失败、容器未就绪时，CLI 输出清晰的中文错误提示并返回合适的退出码
+  4. 用户可以在 config.yaml 中配置自有网关地址，CLI 连接到该地址而非默认地址
 **Plans**: TBD
 
-### Phase 20: TTY 透传与交互体验
-**Goal**: 容器内 Claude Code 的终端交互与直接运行原生 `claude` 无差异——尺寸、信号、退出码完全透传
-**Depends on**: Phase 19
-**Requirements**: CLI-02
+### Phase 26: 参数透传与终端体验
+**Goal**: cloud-claude 的参数透传和终端交互与本地 claude 完全一致
+**Depends on**: Phase 25
+**Requirements**: CLI-03, TTY-01, TTY-02, TTY-03
 **Success Criteria** (what must be TRUE):
-  1. docker run 以交互模式启动，bind mount 当前目录到 /workspace 作为工作目录
-  2. 终端窗口 resize 时 SIGWINCH 正确传递到容器内进程，Claude Code 界面跟随调整
-  3. Ctrl+C / Ctrl+\ 等信号正确转发到容器，容器退出码透传给宿主机 CLI 进程
-  4. 容器退出时自动清理（--rm），不留孤儿容器或残留网络资源
+  1. 用户传入的所有 claude 参数（如 `-p "prompt"`, `--model`, `--allowedTools` 等）原样传递到容器内 Claude Code，行为与本地一致
+  2. 终端窗口 resize 时 SIGWINCH 正确传递到容器内 Claude Code 进程，界面跟随调整
+  3. Ctrl+C / Ctrl+\ 等信号正确转发到容器内进程，Claude Code 正常响应中断
+  4. 容器内 Claude Code 退出码透传给本地 cloud-claude 进程，脚本可基于退出码判断结果
 **Plans**: TBD
 
-### Phase 21: 指纹伪造与反检测
-**Goal**: 容器的设备指纹完全伪装，常规容器检测手段无法识别出 Docker 环境
-**Depends on**: Phase 20
-**Requirements**: SPOOF-01, SPOOF-02, SPOOF-03, SPOOF-04
+### Phase 27: 双 session 目录映射
+**Goal**: 用户当前目录通过 sshfs slave 实时映射到容器 /workspace，双向读写可靠
+**Depends on**: Phase 26, Phase 24
+**Requirements**: MAP-01, MAP-02, MAP-03
 **Success Criteria** (what must be TRUE):
-  1. /etc/machine-id 包含基于配置派生的稳定伪造值，重启容器后保持一致
-  2. 容器 hostname 通过 Docker --hostname 设为配置的伪造主机名
-  3. 容器内 cat /proc/cpuinfo 和 cat /proc/meminfo 显示伪造的硬件信息（通过 docker run -v 注入）
-  4. /.dockerenv 文件不存在、/proc/1/cgroup 无 docker 关键字、container 环境变量已清除
+  1. 用户运行 cloud-claude 时，CLI 自动在第二个 SSH session 上通过 sshfs slave 将当前目录映射到容器 /workspace
+  2. 本地文件修改在容器内即时可见，容器内文件修改在本地即时可见（双向实时读写）
+  3. Claude Code 以 /workspace 为工作目录运行，可正常读写项目文件
+  4. 会话正常或异常退出时，容器内 sshfs 挂载点和相关资源自动清理
 **Plans**: TBD
 
-### Phase 22: 验证与自检
-**Goal**: 用户可以一键验证容器环境的网络出口、DNS 路径、设备指纹和容器标记是否符合预期
-**Depends on**: Phase 21
-**Requirements**: CLI-04
+### Phase 28: 生产环境 FUSE 兼容性验证
+**Goal**: 在 Linux 生产环境验证 FUSE + 安全模块兼容性，确保全栈端到端可用
+**Depends on**: Phase 27
+**Requirements**: SRV-04
 **Success Criteria** (what must be TRUE):
-  1. `claude verify` 在容器内运行检测脚本，输出出口 IP 是否匹配配置的代理出口
-  2. verify 检测 DNS 查询是否走代理通道，报告是否存在泄漏
-  3. verify 检测 machine-id、hostname、/proc/* 文件是否为伪造值
-  4. verify 检测容器标记（/.dockerenv、cgroup、环境变量）是否已清除
-  5. 所有检测项以清晰的 ✓/✗ 状态逐项输出，便于排查
-**Plans**: TBD
-
-### Phase 23: 混淆构建与交付
-**Goal**: 交付经 garble 混淆的单一 Go 二进制，可直接放入 PATH 替代原生 `claude` 命令
-**Depends on**: Phase 22
-**Requirements**: BUILD-01
-**Success Criteria** (what must be TRUE):
-  1. garble build 成功产出单一可执行二进制文件，体积合理
-  2. 混淆后二进制的所有功能（启动、init、verify）与未混淆版本行为一致
-  3. 二进制可直接放入 PATH 替代原生 claude 命令使用，用户无感知差异
+  1. 在目标 Linux 宿主机（含 AppArmor 或 seccomp）上，容器内 sshfs 挂载成功且读写正常
+  2. FUSE 挂载与 sing-box tun / nftables 默认拒绝策略共存，映射通道不被防火墙阻断
+  3. 完整流程（cloud-claude → SSH Proxy → 目录映射 → Claude Code 运行）在生产环境端到端通过
 **Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 17 → 18 → 19 → 20 → 21 → 22 → 23
+Phases execute in numeric order: 24 → 25 → 26 → 27 → 28
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -235,17 +220,22 @@ Phases execute in numeric order: 17 → 18 → 19 → 20 → 21 → 22 → 23
 | 10. 技术债务清理 | v1.1 | 2/2 | Complete | 2026-03-28 |
 | 11. 认证基础设施与数据迁移 | v1.2 | 1/3 | Complete | 2026-03-29 |
 | 12. 用户自助 API 与前端路由 | v1.2 | 2/2 | Complete | 2026-03-29 |
-| 13. 账号管理与用户资源视图 | v1.2 | 0/0 | Not started | - |
-| 14. KasmVNC 用户面 | v1.2 | 0/0 | Not started | - |
-| 15. Bootstrap 重设计 | v1.2 | 0/0 | Not started | - |
-| 16. 级联禁用与到期治理 | v1.2 | 0/0 | Not started | - |
-| 17. 镜像与 Entrypoint 基线 | v1.3 | 0/0 | Not started | - |
-| 18. 网络隔离与分流 | v1.3 | 0/0 | Not started | - |
-| 19. CLI 骨架与 Docker 编排 | v1.3 | 0/0 | Not started | - |
-| 20. TTY 透传与交互体验 | v1.3 | 0/0 | Not started | - |
-| 21. 指纹伪造与反检测 | v1.3 | 0/0 | Not started | - |
-| 22. 验证与自检 | v1.3 | 0/0 | Not started | - |
-| 23. 混淆构建与交付 | v1.3 | 0/0 | Not started | - |
+| 13. 账号管理与用户资源视图 | v1.2 | 0/0 | Deferred | - |
+| 14. KasmVNC 用户面 | v1.2 | 0/0 | Deferred | - |
+| 15. Bootstrap 重设计 | v1.2 | 0/0 | Deferred | - |
+| 16. 级联禁用与到期治理 | v1.2 | 0/0 | Deferred | - |
+| 17. 镜像与 Entrypoint 基线 | v1.3 | 0/0 | Paused | - |
+| 18. 网络隔离与分流 | v1.3 | 0/0 | Paused | - |
+| 19. CLI 骨架与 Docker 编排 | v1.3 | 0/0 | Paused | - |
+| 20. TTY 透传与交互体验 | v1.3 | 0/0 | Paused | - |
+| 21. 指纹伪造与反检测 | v1.3 | 0/0 | Paused | - |
+| 22. 验证与自检 | v1.3 | 0/0 | Paused | - |
+| 23. 混淆构建与交付 | v1.3 | 0/0 | Paused | - |
+| 24. 受管镜像 FUSE 硬化与容器参数 | v2.0 | 0/0 | Not started | - |
+| 25. cloud-claude CLI 骨架与连接 | v2.0 | 0/0 | Not started | - |
+| 26. 参数透传与终端体验 | v2.0 | 0/0 | Not started | - |
+| 27. 双 session 目录映射 | v2.0 | 0/0 | Not started | - |
+| 28. 生产环境 FUSE 兼容性验证 | v2.0 | 0/0 | Not started | - |
 
 ---
-*Last updated: 2026-04-09 — v1.3 roadmap created*
+*Last updated: 2026-04-15 — v2.0 roadmap created*
