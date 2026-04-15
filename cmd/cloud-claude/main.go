@@ -155,7 +155,13 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	fmt.Println("\r正在进入 Claude Code 会话...")
+	fmt.Println("\r正在映射工作目录并进入 Claude Code 会话...")
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "错误: 无法获取当前工作目录: "+err.Error())
+		os.Exit(exitInternalError)
+	}
 
 	sshCfg := cloudclaude.SSHConfig{
 		Host:     authResp.SSHHost,
@@ -164,7 +170,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		Password: authResp.SSHPass,
 	}
 
-	exitCode, err := cloudclaude.ConnectAndRunClaude(sshCfg, args)
+	exitCode, err := cloudclaude.ConnectAndRunClaude(sshCfg, args, cwd)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "错误: "+err.Error())
 		os.Exit(exitInternalError)
