@@ -108,7 +108,7 @@
 
 - [x] **Phase 24: 受管镜像 FUSE 硬化与容器参数** — 镜像预装 sshfs/fuse3，Worker 附加 FUSE 设备权限，SSH Proxy 零改造验证 (completed 2026-04-14)
 - [x] **Phase 25: cloud-claude CLI 骨架与连接** — Go 二进制 cloud-claude 的配置、认证和远端容器连接闭环（1 plan） (completed 2026-04-15)
-- [ ] **Phase 26: 参数透传与终端体验** — claude 参数原样透传，TTY/信号/退出码与本地一致
+- [x] **Phase 26: 参数透传与终端体验** — claude 参数原样透传，TTY/信号/退出码与本地一致 (completed 2026-04-15)
 - [ ] **Phase 27: 双 session 目录映射** — sshfs slave + SFTP 实现当前目录到容器 /workspace 的实时双向映射
 - [ ] **Phase 28: 生产环境 FUSE 兼容性验证** — 在目标 Linux 环境验证 FUSE + AppArmor/seccomp 完整兼容性
 
@@ -148,7 +148,7 @@ Plans:
   4. 容器内 Claude Code 退出码透传给本地 cloud-claude 进程，脚本可基于退出码判断结果
 **Plans**: 1 plan
 Plans:
-- [ ] 26-01-PLAN.md — 参数透传、安全命令构建、非 TTY 分支与退出码修复
+- [x] 26-01-PLAN.md — 参数透传、安全命令构建、非 TTY 分支与退出码修复
 
 ### Phase 27: 双 session 目录映射
 **Goal**: 用户当前目录通过 sshfs slave 实时映射到容器 /workspace，双向读写可靠
@@ -180,7 +180,7 @@ Phases execute in numeric order: 24 → 25 → 26 → 27 → 28
 |-------|----------------|--------|-----------|
 | 24. 受管镜像 FUSE 硬化与容器参数 | 1/1 | Complete    | 2026-04-14 |
 | 25. cloud-claude CLI 骨架与连接 | 1/1 | Complete    | 2026-04-15 |
-| 26. 参数透传与终端体验 | 0/0 | Not started | - |
+| 26. 参数透传与终端体验 | 1/1 | Complete   | 2026-04-15 |
 | 27. 双 session 目录映射 | 0/0 | Not started | - |
 | 28. 生产环境 FUSE 兼容性验证 | 0/0 | Not started | - |
 

@@ -11,15 +11,15 @@ Requirements for cloud-claude 透明远程 CLI 里程碑。Each maps to roadmap 
 
 - [x] **CLI-01**: 用户可以运行 `cloud-claude`（无参数）透明启动远端容器并进入 Claude Code 交互会话
 - [x] **CLI-02**: 用户可以运行 `cloud-claude init` 配置网关地址和凭证，持久化到 `~/.cloud-claude/config.yaml`
-- [ ] **CLI-03**: 用户传入的所有 claude 参数原样透传到容器内 Claude Code
+- [x] **CLI-03**: 用户传入的所有 claude 参数原样透传到容器内 Claude Code
 - [x] **CLI-04**: 网关不可达、认证失败、容器未就绪等场景给出清晰的中文错误提示
 - [x] **CLI-05**: 用户可以配置自有网关地址，支持私有部署场景
 
 ### 终端体验
 
-- [ ] **TTY-01**: 终端窗口 resize 时 SIGWINCH 正确传递到容器内进程
-- [ ] **TTY-02**: Ctrl+C / Ctrl+\ 等信号正确转发到容器
-- [ ] **TTY-03**: 容器退出码透传给本地 CLI 进程
+- [x] **TTY-01**: 终端窗口 resize 时 SIGWINCH 正确传递到容器内进程
+- [x] **TTY-02**: Ctrl+C / Ctrl+\ 等信号正确转发到容器
+- [x] **TTY-03**: 容器退出码透传给本地 CLI 进程
 
 ### 目录映射
 
@@ -68,10 +68,10 @@ Deferred to future release. Tracked but not in current roadmap.
 | CLI-02 | Phase 25 | Complete |
 | CLI-04 | Phase 25 | Complete |
 | CLI-05 | Phase 25 | Complete |
-| CLI-03 | Phase 26 | Pending |
-| TTY-01 | Phase 26 | Pending |
-| TTY-02 | Phase 26 | Pending |
-| TTY-03 | Phase 26 | Pending |
+| CLI-03 | Phase 26 | Complete |
+| TTY-01 | Phase 26 | Complete |
+| TTY-02 | Phase 26 | Complete |
+| TTY-03 | Phase 26 | Complete |
 | MAP-01 | Phase 27 | Pending |
 | MAP-02 | Phase 27 | Pending |
 | MAP-03 | Phase 27 | Pending |
