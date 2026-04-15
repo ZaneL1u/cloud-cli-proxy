@@ -85,22 +85,32 @@ func (c *EntryClient) Authenticate(ctx context.Context, shortID, password string
 		return nil, fmt.Errorf("读取认证响应失败: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusUnauthorized {
+	switch resp.StatusCode {
+	case http.StatusOK:
+		// continue
+	case http.StatusBadRequest:
+		return nil, fmt.Errorf("认证失败：请求参数无效")
+	case http.StatusUnauthorized:
 		return nil, fmt.Errorf("认证失败：用户名或密码错误")
-	}
-	if resp.StatusCode == http.StatusForbidden {
+	case http.StatusForbidden:
 		return nil, fmt.Errorf("账号未激活，请联系管理员")
-	}
-	if resp.StatusCode == http.StatusNotFound {
+	case http.StatusNotFound:
 		return nil, fmt.Errorf("未找到对应主机，请联系管理员")
-	}
-	if resp.StatusCode != http.StatusOK {
+	case http.StatusInternalServerError:
+		return nil, fmt.Errorf("服务器内部错误，请稍后重试")
+	default:
 		return nil, fmt.Errorf("认证请求异常（HTTP %d）", resp.StatusCode)
 	}
 
 	var authResp AuthResponse
 	if err := json.Unmarshal(respBody, &authResp); err != nil {
 		return nil, fmt.Errorf("解析认证响应失败: %w", err)
+	}
+
+	if authResp.Status == "ready" {
+		if authResp.SSHHost == "" || authResp.SSHPort == 0 || authResp.SSHUser == "" {
+			return nil, fmt.Errorf("服务器返回的 SSH 连接参数不完整")
+		}
 	}
 
 	return &authResp, nil
