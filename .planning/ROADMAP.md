@@ -177,7 +177,7 @@ Phases execute in numeric order: 24 → 25 → 26 → 27 → 28
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 24. 受管镜像 FUSE 硬化与容器参数 | 1/1 | Complete    | 2026-04-14 |
-| 25. cloud-claude CLI 骨架与连接 | 1/1 | Complete   | 2026-04-15 |
+| 25. cloud-claude CLI 骨架与连接 | 1/1 | Complete    | 2026-04-15 |
 | 26. 参数透传与终端体验 | 0/0 | Not started | - |
 | 27. 双 session 目录映射 | 0/0 | Not started | - |
 | 28. 生产环境 FUSE 兼容性验证 | 0/0 | Not started | - |
