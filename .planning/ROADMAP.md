@@ -172,7 +172,10 @@ Plans:
   1. 在目标 Linux 宿主机（含 AppArmor 或 seccomp）上，容器内 sshfs 挂载成功且读写正常
   2. FUSE 挂载与 sing-box tun / nftables 默认拒绝策略共存，映射通道不被防火墙阻断
   3. 完整流程（cloud-claude → SSH Proxy → 目录映射 → Claude Code 运行）在生产环境端到端通过
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 28-01-PLAN.md — AppArmor 修复与 FUSE 兼容性验证脚本
+- [ ] 28-02-PLAN.md — 宿主机前置检查与部署文档更新
 
 ## Progress
 
@@ -185,7 +188,7 @@ Phases execute in numeric order: 24 → 25 → 26 → 27 → 28
 | 25. cloud-claude CLI 骨架与连接 | 1/1 | Complete    | 2026-04-15 |
 | 26. 参数透传与终端体验 | 1/1 | Complete    | 2026-04-15 |
 | 27. 双 session 目录映射 | 2/2 | Complete    | 2026-04-15 |
-| 28. 生产环境 FUSE 兼容性验证 | 0/0 | Not started | - |
+| 28. 生产环境 FUSE 兼容性验证 | 0/2 | Planned | - |
 
 ---
 *Last updated: 2026-04-15 — v1.2 deferred, v2.0 active*
