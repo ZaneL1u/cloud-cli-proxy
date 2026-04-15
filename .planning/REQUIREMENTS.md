@@ -32,7 +32,7 @@ Requirements for cloud-claude 透明远程 CLI 里程碑。Each maps to roadmap 
 - [x] **SRV-01**: 容器镜像预装 sshfs + fuse3 并配置 user_allow_other
 - [x] **SRV-02**: 容器创建时附加 `--device /dev/fuse` + `--cap-add SYS_ADMIN`
 - [x] **SRV-03**: SSH Proxy 保持零改造，利用现有多 session channel + exec 转发能力
-- [ ] **SRV-04**: 在 Linux 生产环境验证 FUSE + AppArmor/seccomp 兼容性
+- [x] **SRV-04**: 在 Linux 生产环境验证 FUSE + AppArmor/seccomp 兼容性
 
 ## v2.x Requirements
 
@@ -75,7 +75,7 @@ Deferred to future release. Tracked but not in current roadmap.
 | MAP-01 | Phase 27 | Complete |
 | MAP-02 | Phase 27 | Complete |
 | MAP-03 | Phase 27 | Complete |
-| SRV-04 | Phase 28 | Pending |
+| SRV-04 | Phase 28 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 15 total

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: cloud-claude 透明远程 CLI
 status: executing
-stopped_at: Phase 28 context gathered
-last_updated: "2026-04-15T06:35:51.464Z"
-last_activity: 2026-04-15 -- Phase 28 planning complete
+stopped_at: Completed 28-01-PLAN.md
+last_updated: "2026-04-15T06:40:10.263Z"
+last_activity: 2026-04-15
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 7
-  completed_plans: 5
-  percent: 71
+  completed_plans: 6
+  percent: 86
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-15)
 
 **Core value:** 给每个用户提供一台开箱即用的 SSH 云主机，并且严格保证其所有出网流量都走受控的指定出口 IP
-**Current focus:** Phase 27 — 双 session 目录映射
+**Current focus:** Phase 28 — 生产环境 FUSE 兼容性验证
 
 ## Current Position
 
-Phase: 28
-Plan: Not started
+Phase: 28 (生产环境 FUSE 兼容性验证) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-04-15 -- Phase 28 planning complete
+Last activity: 2026-04-15
 
 Progress: [██████████████████░░] 88% (v2.0)
 
@@ -54,6 +54,7 @@ Progress: [██████████████████░░] 88% (v2
 | Phase 26 P01 | 2min | 2 tasks | 4 files |
 | Phase 27 P01 | 2min | 2 tasks | 4 files |
 | Phase 27 P02 | 2min | 2 tasks | 2 files |
+| Phase 28 P01 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,7 @@ Recent decisions affecting current work:
 - [Phase 27]: waitForMount 使用可注入 check 函数，与 ssh_ready.go 的轮询结构一致
 - [Phase 27]: 远程命令使用 cd /workspace && claude 前缀，硬编码路径不含用户输入
 - [Phase 27]: sshConnect 和 runClaude 为 unexported 函数，仅 ConnectAndRunClaude 对外暴露
+- [Phase 28]: 选择 apparmor=unconfined 而非自定义 AppArmor profile（运维复杂度 vs 安全边界已由 nftables+namespace 覆盖）
 
 ### Pending Todos
 
@@ -87,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-15T06:14:46.455Z
-Stopped at: Phase 28 context gathered
-Resume file: .planning/phases/28-fuse/28-CONTEXT.md
+Last session: 2026-04-15T06:40:10.260Z
+Stopped at: Completed 28-01-PLAN.md
+Resume file: None
