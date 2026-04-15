@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: cloud-claude 透明远程 CLI
-status: verifying
-stopped_at: Completed 25-01-PLAN.md
-last_updated: "2026-04-15T04:19:20.298Z"
-last_activity: 2026-04-15
+status: planning
+stopped_at: Phase 26 context gathered
+last_updated: "2026-04-15T04:23:18.646Z"
+last_activity: 2026-04-15 -- Phase 25 complete, transitioning to Phase 26
 progress:
   total_phases: 5
   completed_phases: 2
@@ -77,6 +77,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-15T04:20:00.000Z
-Stopped at: Phase 25 complete, ready to discuss Phase 26
-Resume file: None
+Last session: 2026-04-15T04:23:18.637Z
+Stopped at: Phase 26 context gathered
+Resume file: .planning/phases/26-arg-passthrough-tty/26-CONTEXT.md
