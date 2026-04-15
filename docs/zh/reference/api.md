@@ -171,27 +171,7 @@ curl -s -X POST http://YOUR_HOST:8080/v1/user/ssh-keys/generate \
 
 ## 出口 IP 管理
 
-### 创建出口 IP（WireGuard 类型）
-
-```bash
-curl -s -X POST http://YOUR_HOST:8080/v1/admin/egress-ips \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "label": "hk-wg-01",
-    "ip_address": "203.0.113.10",
-    "tunnel_type": "wireguard",
-    "provider": "manual",
-    "wg_endpoint": "vpn-provider.example.com:51820",
-    "wg_public_key": "peer公钥Base64",
-    "wg_preshared_key": "预共享密钥Base64",
-    "wg_allowed_ips": "0.0.0.0/0",
-    "wg_dns_server": "1.1.1.1",
-    "wg_peer_address": "10.0.0.2/32"
-  }'
-```
-
-### 创建出口 IP（Proxy 类型）
+### 创建出口 IP
 
 `proxy_config` 字段遵循 [sing-box outbound](https://sing-box.sagernet.org/configuration/outbound/) 格式。
 
@@ -308,7 +288,7 @@ curl -s http://YOUR_HOST:8080/v1/admin/egress-ips/{ipID} \
 curl -s -X PUT http://YOUR_HOST:8080/v1/admin/egress-ips/{ipID} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"wg_endpoint": "新端点:51820", "wg_public_key": "新公钥"}'
+  -d '{"label": "jp-ss-01-updated", "proxy_config": {"type": "shadowsocks", "server": "198.51.100.5", "server_port": 8388, "method": "aes-256-gcm", "password": "new-password"}}'
 ```
 
 ### 删除出口 IP
@@ -592,9 +572,3 @@ echo "0 2 * * * root /opt/cloud-cli-proxy/deploy/scripts/backup.sh" > /etc/cron.
 3. 重启控制面：`systemctl restart cloud-cli-proxy-control-plane`
 
 轮换后所有已颁发的 JWT Token 立即失效。
-
-### WireGuard 密钥轮换
-
-1. 从出口 IP 提供商获取新密钥对
-2. 通过 Admin API 更新出口 IP 的 WireGuard 配置
-3. 重启使用该出口 IP 的主机以加载新配置

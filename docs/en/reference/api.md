@@ -171,27 +171,7 @@ curl -s -X POST http://YOUR_HOST:8080/v1/user/ssh-keys/generate \
 
 ## Egress IP Management
 
-### Create Egress IP (WireGuard)
-
-```bash
-curl -s -X POST http://YOUR_HOST:8080/v1/admin/egress-ips \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "label": "hk-wg-01",
-    "ip_address": "203.0.113.10",
-    "tunnel_type": "wireguard",
-    "provider": "manual",
-    "wg_endpoint": "vpn-provider.example.com:51820",
-    "wg_public_key": "PeerPublicKeyBase64",
-    "wg_preshared_key": "PresharedKeyBase64",
-    "wg_allowed_ips": "0.0.0.0/0",
-    "wg_dns_server": "1.1.1.1",
-    "wg_peer_address": "10.0.0.2/32"
-  }'
-```
-
-### Create Egress IP (Proxy)
+### Create Egress IP
 
 `proxy_config` follows [sing-box outbound](https://sing-box.sagernet.org/configuration/outbound/) format.
 
@@ -308,7 +288,7 @@ curl -s http://YOUR_HOST:8080/v1/admin/egress-ips/{ipID} \
 curl -s -X PUT http://YOUR_HOST:8080/v1/admin/egress-ips/{ipID} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"wg_endpoint": "new-endpoint:51820", "wg_public_key": "NewKey"}'
+  -d '{"label": "jp-ss-01-updated", "proxy_config": {"type": "shadowsocks", "server": "198.51.100.5", "server_port": 8388, "method": "aes-256-gcm", "password": "new-password"}}'
 ```
 
 ### Delete Egress IP
@@ -585,8 +565,3 @@ BACKUP_DIR=/data/backups RETENTION_DAYS=30 bash deploy/scripts/backup.sh
 3. Restart: `systemctl restart cloud-cli-proxy-control-plane`
 
 All issued JWT tokens are immediately invalidated after rotation.
-
-**WireGuard keys:**
-1. Get new keys from provider
-2. Update via Admin API
-3. Restart affected hosts to load new config

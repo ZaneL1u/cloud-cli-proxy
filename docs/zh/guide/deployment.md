@@ -7,7 +7,7 @@
 - Ubuntu 22.04+ / Debian 12+（或等效 systemd-based Linux 发行版）
 - Root 或 sudo 权限
 - 公网 IP（用于 bootstrap 入口和用户 SSH 接入）
-- 至少一个出口 IP 的 WireGuard peer 配置（从 VPN 提供商获取）
+- 至少一个出口 IP 的代理配置
 
 ## 1. 环境准备
 
@@ -24,7 +24,6 @@ sudo bash deploy/scripts/host-preflight.sh
 | 依赖 | 最低版本 | 用途 |
 |------|----------|------|
 | Docker Engine | 28.x+ | 容器运行时 |
-| WireGuard | 内核模块 | 全隧道出网 |
 | FUSE | 内核模块 | 容器内 sshfs 目录映射 |
 | nftables (`nft`) | -- | 容器防火墙规则 |
 | `nsenter` | -- | 容器网络命名空间校验 |
@@ -42,13 +41,6 @@ sudo bash deploy/scripts/host-preflight.sh
 ```bash
 curl -fsSL https://get.docker.com | sh
 systemctl enable --now docker
-```
-
-**WireGuard：**
-
-```bash
-apt-get update && apt-get install -y wireguard-tools
-modprobe wireguard
 ```
 
 **nftables / nsenter / curl：**

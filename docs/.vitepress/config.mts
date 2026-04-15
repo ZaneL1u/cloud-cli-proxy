@@ -7,7 +7,7 @@ export default defineConfig({
   base: '/cloud-cli-proxy/',
 
   head: [
-    ['meta', { name: 'keywords', content: 'cloud cli proxy, ssh, docker, wireguard, sing-box, claude code, egress ip, proxy, containerized' }],
+    ['meta', { name: 'keywords', content: 'cloud cli proxy, ssh, docker, sing-box, claude code, egress ip, proxy, containerized' }],
     ['link', { rel: 'icon', href: '/cloud-cli-proxy/logo.svg', type: 'image/svg+xml' }],
   ],
 

@@ -4,7 +4,7 @@
 
 Cloud CLI Proxy 是一个面向单宿主机的容器化 SSH 云主机平台，既供自己使用，也面向出海团队和开发团队销售。用户从一个很短的 `curl` 入口开始，在终端里输入用户名和密码，等待专属 Docker "云主机"启动完成后，直接进入该容器内的 SSH 会话。
 
-平台包含一个管理后台，用于管理用户、容器生命周期、出口 IP 分配和到期时间。每个容器都预装 `claude code`，并且所有网络流量都必须通过指定出口 IP 的全局隧道路由发送（支持 WireGuard 和 sing-box tun 两种模式），不能出现 DNS、WebRTC 或其他类型的直接泄漏。
+平台包含一个管理后台，用于管理用户、容器生命周期、出口 IP 分配和到期时间。每个容器都预装 `claude code`，并且所有网络流量都必须通过指定出口 IP 的全局隧道路由发送（通过 sing-box tun 全隧道模式），不能出现 DNS、WebRTC 或其他类型的直接泄漏。
 
 ## Core Value
 
@@ -20,11 +20,11 @@ v2.0 交付了 `cloud-claude` Go 二进制文件，用户 `alias claude=cloud-cl
 
 **Latest shipped:** v2.0 cloud-claude 透明远程 CLI (2026-04-15)
 **Codebase:** ~28,877 LOC (15,490 Go + 11,976 TypeScript + 1,411 Shell)
-**Tech stack:** Go 1.26.1 + PostgreSQL + Docker + WireGuard + sing-box + React 19 + Vite + cobra + sshfs/SFTP
+**Tech stack:** Go 1.26.1 + PostgreSQL + Docker + sing-box + React 19 + Vite + cobra + sshfs/SFTP
 
 v1.0 MVP + v1.1 代理协议出网 已交付，涵盖：
 - 单宿主机控制面 + Unix socket host-agent + 受管用户镜像
-- WireGuard + sing-box 双通道全隧道出网 + nftables 默认拒绝 + 三重网络校验
+- sing-box tun 全隧道出网 + nftables 默认拒绝 + 三重网络校验
 - `curl → 认证 → 启动提示 → SSH` 一条命令接入流
 - JWT 管理后台 (React SPA) + 用户/出口 IP/绑定/主机生命周期 CRUD
 - 5 种代理协议（SOCKS5/vmess/shadowsocks/trojan/HTTP）+ 一键测试
@@ -50,10 +50,10 @@ v2.0 已交付，新增：
 - ✓ 凭证错误、账号过期、未绑定出口 IP 或启动失败时返回清晰的终端错误提示 — v1.0
 - ✓ 管理员操作和启动结果被记录为运维事件，并可在事件日志页面查看 — v1.0
 - ✓ 已过期用户无法开启新会话，运行中主机按策略停止 — v1.0
-- ✓ 出口 IP 类型化，支持 wireguard 和 proxy 两种隧道类型 — v1.1
+- ✓ 出口 IP 类型化，支持代理隧道 — v1.1
 - ✓ SingBoxProvider tun 模式全流量代理实现 — v1.1
 - ✓ 受管镜像预装 sing-box 二进制 — v1.1
-- ✓ Provider 工厂按 tunnel_type 自动选择 WireGuard 或 sing-box — v1.1
+- ✓ Provider 统一使用 sing-box 处理全隧道出网 — v1.1
 - ✓ 前端出口 IP 表单按隧道类型动态切换字段 — v1.1
 - ✓ 后台一键代理测试 API 及前端展示 — v1.1
 - ✓ Go 单一二进制 cloud-claude，用户可 alias claude=cloud-claude 透明替代原生 claude 命令 — v2.0
@@ -105,7 +105,7 @@ v2.0 已交付，新增：
 - 两条产品路径已形成：Web SSH 接入（curl 入口）和本地 CLI 透明替代（cloud-claude）。
 - 容器虽然基于 Docker，但对用户来说应当像一台"可管理、可复用、可回收"的云主机。
 - `claude code` 已在镜像中预装，用户可通过 SSH 或 cloud-claude 直接使用。
-- 网络模型已实现双通道：WireGuard 命名空间注入 + sing-box tun 模式，均配合 nftables 默认拒绝 + 三重校验门禁。
+- 网络模型已实现 sing-box tun 全隧道模式，配合 nftables 默认拒绝 + 三重校验门禁。
 - 出口 IP 支持 5 种代理协议（SOCKS5/vmess/shadowsocks/trojan/HTTP），管理后台提供一键测试。
 - cloud-claude 通过 sshfs slave 实现本地目录实时双向映射，体验与本地 claude 一致。
 - 产品优先级是优雅、好用、运维清晰，而不是功能数量最多。
@@ -128,16 +128,15 @@ v2.0 已交付，新增：
 | v1 只提供 SSH 访问方式 | 最符合目标体验，减少远程接入面复杂度 | ✓ Good — bootstrap 脚本 + exec ssh 体验顺畅 |
 | 使用短 `curl` 入口完成认证和启动 | 低摩擦、易传播，符合产品定位 | ✓ Good — 7 个错误码 + 中文提示完整 |
 | 在镜像中预装 `claude code` | 用户进入环境后立即可用 | ✓ Good — image.lock 模板已实现 |
-| 强制要求出口 IP 绑定和全隧道路由 | 出口可控不是附加功能，而是产品承诺核心 | ✓ Good — WireGuard + sing-box 双通道 + nftables + 三重校验 |
+| 强制要求出口 IP 绑定和全隧道路由 | 出口可控不是附加功能，而是产品承诺核心 | ✓ Good — sing-box tun 全隧道 + nftables + 三重校验 |
 | 延后计费和多节点调度 | 保持 MVP 聚焦在主机交付和网络正确性 | ✓ Good — v1.0 + v1.1 按时交付 |
 | 控制面通过 Unix socket 驱动 host-agent | 避免在 HTTP 层直接持有 Docker/网络特权 | ✓ Good — 清晰的特权边界 |
 | 容器使用 --network=none 创建 | 彻底隔离 Docker 默认网络，防止旁路 | ✓ Good — 无绕过可能 |
-| WireGuard birthplace-namespace 模式 | 密钥不经过宿主机网络栈 | ✓ Good — 安全性更强 |
+| 容器网络命名空间隔离 | 隧道配置不经过宿主机网络栈 | ✓ Good — 安全性更强 |
 | bcrypt 密码 + JWT 管理后台 | 标准安全实践，简单可靠 | ✓ Good — 测试覆盖完整 |
-| 新增 sing-box tun 模式与 WireGuard 并行 | 支持更多代理协议，扩展出口 IP 灵活性 | ✓ Good — 5 种协议支持，WireGuard 路径不受影响 |
+| sing-box tun 全隧道模式 | 支持多种代理协议，扩展出口 IP 灵活性 | ✓ Good — 6 种协议支持 |
 | 代理配置以 sing-box outbound JSON 存储 | 灵活且面向未来，不为每种协议建列 | ✓ Good — JSONB 列 + 白名单校验 |
-| RoutingProvider 工厂按 tunnel_type 委托 | 单一 Provider 接口，内部按类型路由 | ✓ Good — 扩展新隧道类型只需新增 case |
-| proxy 模式独立防火墙函数 | 不修改现有 WireGuard 路径 | ✓ Good — 两条路径完全解耦 |
+| RoutingProvider 统一委托给 SingBoxProvider | 单一 Provider 接口 | ✓ Good — 简洁可维护 |
 | 宿主机 masquerade 用 iptables 而非 nftables | 避免与 Docker Engine iptables 规则冲突 | ✓ Good — 幂等且安全 |
 | SYS_ADMIN + /dev/fuse 统一附加，不做条件区分 | FUSE mount 需要 SYS_ADMIN，统一避免条件分支 | ✓ Good — 简化运维 |
 | Entry API 为 cloud-claude 唯一认证契约 | 复用控制面现有实现，不新增专用 API | ✓ Good — 零服务端改造 |

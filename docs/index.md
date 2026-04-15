@@ -25,10 +25,10 @@ features:
     details: 每个容器预装 Claude Code，进入即可使用 AI 编程，所有 API 请求自动走指定出口
   - icon: 🔒
     title: 全流量强制出口
-    details: WireGuard + Linux netns / sing-box tun 双通道，nftables 默认拒绝，杜绝 DNS / WebRTC 泄漏
+    details: sing-box tun + Linux netns 全隧道，nftables 默认拒绝，杜绝 DNS / WebRTC 泄漏
   - icon: 🌐
     title: 多协议代理支持
-    details: 出口 IP 支持 WireGuard 和 5 种代理协议 — SOCKS5、VMess、Shadowsocks、Trojan、HTTP
+    details: 出口 IP 支持 6 种代理协议 — SOCKS5、VMess、VLESS、Shadowsocks、Trojan、HTTP
   - icon: 🖥️
     title: 远程桌面
     details: 容器内置 KasmVNC + Chromium，可通过管理后台或用户面板直接访问浏览器桌面环境

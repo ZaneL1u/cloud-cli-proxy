@@ -21,7 +21,7 @@ bash deploy/scripts/setup-env.sh
 | `ADMIN_JWT_SECRET` | Yes | — | JWT signing key (32+ chars), disables admin API if unset |
 | `HOST_AGENT_MODE` | No | `socket` | Host-agent mode. `socket` = connect to standalone process via Unix socket, `embedded` = run inside control plane process |
 | `HOST_AGENT_SOCKET` | No | `/run/cloud-cli-proxy/host-agent.sock` | Host-agent Unix socket path (socket mode only) |
-| `DATA_DIR` | No | `/var/lib/cloud-cli-proxy` | Data directory for WireGuard keys and runtime files |
+| `DATA_DIR` | No | `/var/lib/cloud-cli-proxy` | Data directory for runtime files |
 | `SSH_PROXY_ADDR` | No | `:2222` | SSH proxy listen address |
 | `LOG_FORMAT` | No | `json` | Log format, `json` or `text` |
 | `LOG_LEVEL` | No | `info` | Log level: `debug` / `info` / `warn` / `error` |
@@ -47,21 +47,6 @@ bash deploy/scripts/setup-env.sh
 |----------|---------|-------------|
 | `SSH_PROXY_PORT` | `2222` | Host SSH proxy port |
 | `ADMIN_PORT` | `3000` | Host admin dashboard port |
-
-## WireGuard Configuration
-
-Each WireGuard-type egress IP corresponds to a WireGuard peer. Provide these parameters when creating via Admin API or dashboard:
-
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `wg_endpoint` | Yes | WireGuard peer endpoint (e.g., `1.2.3.4:51820`) |
-| `wg_public_key` | Yes | Peer public key (Base64) |
-| `wg_peer_address` | Yes | Local assigned address (CIDR, e.g., `10.0.0.2/32`) |
-| `wg_allowed_ips` | No | Allowed IP range, defaults to `0.0.0.0/0` (full tunnel) |
-| `wg_preshared_key` | No | Pre-shared key (Base64) |
-| `wg_dns_server` | No | DNS server address (e.g., `1.1.1.1`) |
-
-WireGuard interfaces are configured by host-agent into the container's network namespace using the birthplace-namespace pattern, ensuring keys never traverse the host network stack.
 
 ## Proxy Protocol Configuration
 
@@ -137,10 +122,7 @@ Supported methods: `aes-128-gcm`, `aes-256-gcm`, `chacha20-ietf-poly1305`, etc.
 
 ### Admin Dashboard Configuration
 
-The egress IP form dynamically switches fields based on the selected tunnel type:
-
-- **WireGuard**: Shows WireGuard configuration fields
-- **Proxy**: Shows protocol selector with corresponding fields, plus a JSON editor mode
+The egress IP form provides a protocol selector with corresponding fields, plus a JSON editor mode.
 
 ## Firewall Rules
 
@@ -148,7 +130,6 @@ The egress IP form dynamically switches fields based on the selected tunnel type
 
 Host-agent uses nftables to set default-deny policy for each container namespace:
 
-- **WireGuard mode**: Only allows traffic through the WireGuard tunnel
 - **Proxy mode**: Only allows connections to the proxy server
 
 Rules are managed automatically by host-agent.

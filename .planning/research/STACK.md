@@ -118,7 +118,7 @@ go get github.com/coder/websocket@v1.8.14
 | 领域 | 说明 |
 |------|------|
 | 控制面 HTTP API、PostgreSQL、JWT 管理后台 | v1.x 已具备；客户端只消费已有能力或通过 SSH。 |
-| Docker / WireGuard / sing-box / nftables | 宿主机网络栈不变；客户端不直接操控。 |
+| Docker / sing-box / nftables | 宿主机网络栈不变；客户端不直接操控。 |
 | React / Vite | 本里程碑无新前端需求。 |
 | 新 SSH 服务端协议 | 继续 `golang.org/x/crypto/ssh` + 现有 `sshproxy` 模型。 |
 

@@ -7,7 +7,7 @@
 - Ubuntu 22.04+ / Debian 12+ (or equivalent systemd-based Linux)
 - Root or sudo access
 - Public IP (for bootstrap endpoint and user SSH access)
-- At least one WireGuard peer config for an exit IP (from VPN provider)
+- At least one proxy config for an exit IP
 
 ## 1. Environment Setup
 
@@ -20,7 +20,6 @@ sudo bash deploy/scripts/host-preflight.sh
 | Dependency | Min Version | Purpose |
 |-----------|-------------|---------|
 | Docker Engine | 28.x+ | Container runtime |
-| WireGuard | kernel module | Full-tunnel egress |
 | FUSE | kernel module | Container sshfs directory mapping |
 | nftables (`nft`) | -- | Container firewall rules |
 | `nsenter` | -- | Network namespace verification |
@@ -38,13 +37,6 @@ sudo bash deploy/scripts/host-preflight.sh
 ```bash
 curl -fsSL https://get.docker.com | sh
 systemctl enable --now docker
-```
-
-**WireGuard:**
-
-```bash
-apt-get update && apt-get install -y wireguard-tools
-modprobe wireguard
 ```
 
 **FUSE kernel module:**

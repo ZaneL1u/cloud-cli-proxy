@@ -52,23 +52,6 @@
 - Image missing → `bash deploy/docker/managed-user/build-managed-image.sh`
 - Disk full → `docker system prune`
 
-### WireGuard Network Verification Failure
-
-**Symptoms:** Egress IP mismatch or traffic leaks.
-
-**Check:**
-
-1. Egress IP binding status
-2. WireGuard interface: `wg show`
-3. nftables rules: `nft list ruleset`
-4. Manual verify from namespace: `nsenter --net=/var/run/netns/cloudproxy-{hostID} curl -s https://api.ipify.org`
-5. DNS resolution: `nsenter --net=/var/run/netns/cloudproxy-{hostID} nslookup example.com`
-
-**Fix:**
-- IP not bound → Create binding via Admin API
-- Tunnel down → Check VPN endpoint reachability, rebuild host if needed
-- Firewall rules broken → Restart host-agent
-
 ### sing-box Proxy Tunnel Failure
 
 **Symptoms:** Hosts using proxy-type egress IPs can't access the internet or exit IP doesn't match.
@@ -132,9 +115,8 @@ sudo -u postgres psql -c "SHOW max_connections"
 1. View logs: `journalctl -u cloud-cli-proxy-host-agent --no-pager -n 50`
 2. Run preflight: `sudo bash deploy/scripts/host-preflight.sh`
 3. Check Docker: `docker info`
-4. Check WireGuard kernel module: `lsmod | grep wireguard`
-5. Check sing-box binary (needed for proxy mode): `which sing-box`
-6. Check socket directory: `ls -la /run/cloud-cli-proxy/`
+4. Check sing-box binary: `which sing-box`
+5. Check socket directory: `ls -la /run/cloud-cli-proxy/`
 
 ### SSH Proxy Connection Failure
 
@@ -226,11 +208,7 @@ docker compose logs -f admin
 
 ### Q: What proxy protocols are supported?
 
-A: Five protocols: SOCKS5, VMess, Shadowsocks, Trojan, and HTTP Proxy. Configuration follows the sing-box outbound format.
-
-### Q: What's the difference between WireGuard and Proxy mode?
-
-A: WireGuard uses kernel-level full-tunnel with better performance. Proxy mode uses sing-box tun in userspace, supporting more protocols with slight overhead. Both achieve full-traffic egress enforcement with zero leaks.
+A: Six protocols: SOCKS5, VMess, VLESS, Shadowsocks, Trojan, and HTTP Proxy. Configuration follows the sing-box outbound format.
 
 ### Q: Will user container data be lost?
 
@@ -238,7 +216,7 @@ A: Rebuilding a host preserves the home directory. Deleting a host destroys all 
 
 ### Q: Can I develop on macOS / Windows?
 
-A: Yes. When using `make dev`, host-agent runs in `embedded` mode. For proxy mode egress, build the sing-box gateway sidecar first: `make gateway-image`.
+A: Yes. When using `make dev`, host-agent runs in `embedded` mode. Build the sing-box gateway sidecar first: `make gateway-image`.
 
 ### Q: How do I update the user container image?
 

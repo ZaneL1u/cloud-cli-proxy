@@ -25,10 +25,10 @@ features:
     details: Pre-installed in every container. Start AI-assisted coding immediately with all API requests auto-routed through exit IP
   - icon: 🔒
     title: Full-tunnel Egress
-    details: WireGuard + Linux netns / sing-box tun dual-channel with nftables default-deny. No DNS or WebRTC leaks
+    details: sing-box tun + Linux netns full-tunnel with nftables default-deny. No DNS or WebRTC leaks
   - icon: 🌐
     title: Multi-protocol Proxy
-    details: Egress IPs support WireGuard and 5 proxy protocols — SOCKS5, VMess, Shadowsocks, Trojan, HTTP
+    details: Egress IPs support 6 proxy protocols — SOCKS5, VMess, VLESS, Shadowsocks, Trojan, HTTP
   - icon: 🖥️
     title: Remote Desktop
     details: Built-in KasmVNC + Chromium browser desktop, accessible via admin or user panel

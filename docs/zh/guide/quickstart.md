@@ -6,7 +6,7 @@
 
 - Linux 宿主机（Ubuntu 22.04+ / Debian 12+）
 - Docker Engine 28+，Docker Compose v2
-- 至少一个出口 IP（WireGuard 配置或代理服务器）
+- 至少一个出口 IP（代理服务器）
 
 ### 界面预览
 
@@ -107,29 +107,9 @@ TOKEN=$(curl -s -X POST http://YOUR_HOST:8080/v1/auth/login \
 
 ### 2. 添加出口 IP
 
-支持两种隧道类型：
+出口 IP 使用 sing-box tun 全隧道，`tunnel_type` 为 `proxy`，在 `proxy_config` 中配置上游代理（sing-box outbound）。
 
-**WireGuard 类型（全隧道 VPN）：**
-
-```bash
-curl -s -X POST http://YOUR_HOST:8080/v1/admin/egress-ips \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "label": "hk-wg-01",
-    "ip_address": "203.0.113.10",
-    "tunnel_type": "wireguard",
-    "provider": "manual",
-    "wg_endpoint": "vpn-provider.example.com:51820",
-    "wg_public_key": "对端公钥Base64",
-    "wg_allowed_ips": "0.0.0.0/0",
-    "wg_peer_address": "10.0.0.2/32"
-  }'
-```
-
-**Proxy 类型（代理协议）：**
-
-支持 5 种协议 — SOCKS5、VMess、Shadowsocks、Trojan、HTTP。
+支持 6 种协议 — SOCKS5、VMess、VLESS、Shadowsocks、Trojan、HTTP。
 
 ```bash
 # Shadowsocks 示例
@@ -241,12 +221,8 @@ curl -sSf http://YOUR_HOST:8080/v1/bootstrap/script | bash
 
 **安装：**
 
-从 [Releases](https://github.com/ZaneL1u/cloud-cli-proxy/releases) 下载对应平台的二进制文件，或从源码构建：
-
 ```bash
-go build -o cloud-claude ./cmd/cloud-claude
-# 将 cloud-claude 移到 PATH 中的某个目录
-sudo mv cloud-claude /usr/local/bin/
+curl -fsSL https://raw.githubusercontent.com/ZaneL1u/cloud-cli-proxy/main/scripts/install.sh | bash
 ```
 
 **首次配置：**

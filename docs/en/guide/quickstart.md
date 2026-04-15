@@ -6,7 +6,7 @@
 
 - Linux host (Ubuntu 22.04+ / Debian 12+)
 - Docker Engine 28+, Docker Compose v2
-- At least one egress IP (WireGuard config or proxy server)
+- At least one egress IP (proxy server)
 
 ### UI Preview
 
@@ -107,29 +107,9 @@ TOKEN=$(curl -s -X POST http://YOUR_HOST:8080/v1/auth/login \
 
 ### 2. Add Egress IP
 
-Two tunnel types are supported:
+Egress IPs use sing-box tun full-tunnel with `tunnel_type` set to `proxy`; configure the upstream in `proxy_config` (sing-box outbound).
 
-**WireGuard type (full-tunnel VPN):**
-
-```bash
-curl -s -X POST http://YOUR_HOST:8080/v1/admin/egress-ips \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "label": "hk-wg-01",
-    "ip_address": "203.0.113.10",
-    "tunnel_type": "wireguard",
-    "provider": "manual",
-    "wg_endpoint": "vpn-provider.example.com:51820",
-    "wg_public_key": "PeerPublicKeyBase64",
-    "wg_allowed_ips": "0.0.0.0/0",
-    "wg_peer_address": "10.0.0.2/32"
-  }'
-```
-
-**Proxy type (proxy protocols):**
-
-Supports 5 protocols — SOCKS5, VMess, Shadowsocks, Trojan, HTTP.
+Supports 6 protocols — SOCKS5, VMess, VLESS, Shadowsocks, Trojan, HTTP.
 
 ```bash
 # Shadowsocks example
@@ -241,11 +221,8 @@ Install `cloud-claude` locally to transparently use Claude Code on your remote c
 
 **Install:**
 
-Download from [Releases](https://github.com/ZaneL1u/cloud-cli-proxy/releases), or build from source:
-
 ```bash
-go build -o cloud-claude ./cmd/cloud-claude
-sudo mv cloud-claude /usr/local/bin/
+curl -fsSL https://raw.githubusercontent.com/ZaneL1u/cloud-cli-proxy/main/scripts/install.sh | bash
 ```
 
 **First-time setup:**

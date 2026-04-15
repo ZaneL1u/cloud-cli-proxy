@@ -182,7 +182,7 @@ TCP 连接 gateway:SSH_PROXY_PORT，SSH 握手
 | **RepoResolver** | Proxy → Postgres | `GetHostByShortID`、主机 `running`、容器 IP |
 | **容器 OpenSSH** | Proxy → 容器 | 多 session、exec、PTY |
 | **镜像** | Worker 已 create | `fuse` + sshfs、Claude Code 在 PATH |
-| **出站网络** | 容器内 | 现有 sing-box / WireGuard Provider，与 v1.1 一致 |
+| **出站网络** | 容器内 | 现有 sing-box Provider，与 v1.1 一致 |
 
 ### Internal Boundaries
 
