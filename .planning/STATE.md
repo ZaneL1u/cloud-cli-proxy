@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: cloud-claude 透明远程 CLI
-status: executing
-stopped_at: Completed 27-01-PLAN.md
-last_updated: "2026-04-15T05:47:46.190Z"
+status: verifying
+stopped_at: Completed 27-02-PLAN.md
+last_updated: "2026-04-15T05:51:52.776Z"
 last_activity: 2026-04-15
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-15)
 
 Phase: 27 (双 session 目录映射) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-15
 
 Progress: [██████████████████░░] 88% (v2.0)
@@ -52,6 +52,7 @@ Progress: [██████████████████░░] 88% (v2
 | Phase 25 P01 | 5min | 3 tasks | 6 files |
 | Phase 26 P01 | 2min | 2 tasks | 4 files |
 | Phase 27 P01 | 2min | 2 tasks | 4 files |
+| Phase 27 P02 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 26]: shellescape.QuoteCommand 构建安全远程命令行，退出码返回值上浮修复 HI-01
 - [Phase 27]: channelRWC Reader=StdoutPipe / WriteCloser=StdinPipe，反接会导致协议死锁
 - [Phase 27]: waitForMount 使用可注入 check 函数，与 ssh_ready.go 的轮询结构一致
+- [Phase 27]: 远程命令使用 cd /workspace && claude 前缀，硬编码路径不含用户输入
+- [Phase 27]: sshConnect 和 runClaude 为 unexported 函数，仅 ConnectAndRunClaude 对外暴露
 
 ### Pending Todos
 
@@ -83,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-15T05:47:46.187Z
-Stopped at: Completed 27-01-PLAN.md
+Last session: 2026-04-15T05:51:52.772Z
+Stopped at: Completed 27-02-PLAN.md
 Resume file: None
