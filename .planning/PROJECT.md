@@ -70,7 +70,7 @@ v1.1 已交付，新增：
 - [ ] 执行时自动获取当前目录，连接远端服务器，将当前目录实时映射到容器 /workspace
 - [ ] 在容器内启动 Claude Code，所有参数原样透传
 - [ ] TTY/信号/窗口大小/退出码完全透传，用户体验与本地 claude 无差异
-- [ ] 目录映射方案（sshfs slave / Mutagen / 其他）实时双向同步
+- [x] 目录映射方案（sshfs slave / Mutagen / 其他）实时双向同步 — Phase 27 (2026-04-15, pending human verification)
 - [x] 容器镜像预装 sshfs + FUSE，创建时带 --device /dev/fuse 权限 — Phase 24 (2026-04-15)
 - [ ] 支持私有部署：用户可配置自有网关地址
 
@@ -164,4 +164,4 @@ v1.1 已交付，新增：
 4. 用当前产品状态更新"背景"
 
 ---
-*最后更新：2026-04-15，Phase 25 完成——cloud-claude CLI 骨架与连接（配置、认证、SSH+PTY 进入远端 claude）*
+*最后更新：2026-04-15，Phase 27 完成——双 session 目录映射（sshfs slave + SFTP 实时双向映射到容器 /workspace）*
