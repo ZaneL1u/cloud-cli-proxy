@@ -25,6 +25,7 @@ sudo bash deploy/scripts/host-preflight.sh
 |------|----------|------|
 | Docker Engine | 28.x+ | 容器运行时 |
 | WireGuard | 内核模块 | 全隧道出网 |
+| FUSE | 内核模块 | 容器内 sshfs 目录映射 |
 | nftables (`nft`) | -- | 容器防火墙规则 |
 | `nsenter` | -- | 容器网络命名空间校验 |
 | `curl` | -- | 出口 IP 校验和健康检查 |
@@ -56,6 +57,15 @@ modprobe wireguard
 apt-get install -y nftables util-linux curl
 ```
 
+**FUSE 内核模块：**
+
+```bash
+modprobe fuse
+echo fuse >> /etc/modules-load.d/fuse.conf
+```
+
+> 验证：`ls -la /dev/fuse` 应输出 `crw-rw-rw-` 权限的字符设备。
+
 **Go 1.26：**
 
 ```bash
@@ -71,6 +81,27 @@ source /etc/profile.d/go.sh
 apt-get install -y postgresql-18
 systemctl enable --now postgresql
 ```
+
+### 1.3 FUSE 与 AppArmor 兼容性
+
+容器内的 sshfs 目录映射依赖 FUSE 文件系统。Docker 的默认 AppArmor profile（`docker-default`）包含 `deny mount` 规则，会阻断容器内的 FUSE 挂载操作。系统已在容器创建时自动添加 `--security-opt apparmor=unconfined` 解除此限制。
+
+**已知限制：**
+
+| 宿主机 OS | 影响 | 处理方式 |
+|-----------|------|----------|
+| Ubuntu 24.04 LTS | 默认 AppArmor 阻断 FUSE mount | 系统自动处理（apparmor=unconfined） |
+| Ubuntu 25.04+ | 额外的 fusermount3 AppArmor profile 可能阻断 | 如遇问题，执行 `aa-disable /usr/bin/fusermount3` |
+| Debian 12+ | 默认无 AppArmor | 通常无需额外配置 |
+| 无 AppArmor 的发行版 | 无影响 | 无需额外配置 |
+
+**验证 FUSE 兼容性：**
+
+```bash
+sudo bash scripts/verify-fuse-compat.sh
+```
+
+该脚本会自动检测宿主机安全模块状态、测试容器内 FUSE 挂载、验证与网络策略的共存性。
 
 ## 2. PostgreSQL 配置
 

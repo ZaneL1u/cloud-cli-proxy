@@ -21,6 +21,7 @@ sudo bash deploy/scripts/host-preflight.sh
 |-----------|-------------|---------|
 | Docker Engine | 28.x+ | Container runtime |
 | WireGuard | kernel module | Full-tunnel egress |
+| FUSE | kernel module | Container sshfs directory mapping |
 | nftables (`nft`) | -- | Container firewall rules |
 | `nsenter` | -- | Network namespace verification |
 | `curl` | -- | Egress IP verification and health checks |
@@ -46,6 +47,15 @@ apt-get update && apt-get install -y wireguard-tools
 modprobe wireguard
 ```
 
+**FUSE kernel module:**
+
+```bash
+modprobe fuse
+echo fuse >> /etc/modules-load.d/fuse.conf
+```
+
+> Verify: `ls -la /dev/fuse` should show a character device with `crw-rw-rw-` permissions.
+
 **Go 1.26:**
 
 ```bash
@@ -53,6 +63,25 @@ wget https://go.dev/dl/go1.26.1.linux-amd64.tar.gz
 rm -rf /usr/local/go && tar -C /usr/local -xzf go1.26.1.linux-amd64.tar.gz
 echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile.d/go.sh
 source /etc/profile.d/go.sh
+```
+
+### 1.3 FUSE and AppArmor Compatibility
+
+Container-based sshfs directory mapping requires FUSE. Docker's default AppArmor profile (`docker-default`) includes a `deny mount` rule that blocks FUSE mount operations inside containers. The system automatically adds `--security-opt apparmor=unconfined` when creating containers.
+
+**Known limitations:**
+
+| Host OS | Impact | Handling |
+|---------|--------|----------|
+| Ubuntu 24.04 LTS | Default AppArmor blocks FUSE mount | Handled automatically (apparmor=unconfined) |
+| Ubuntu 25.04+ | Additional fusermount3 AppArmor profile may block | Run `aa-disable /usr/bin/fusermount3` if needed |
+| Debian 12+ | No AppArmor by default | No extra configuration needed |
+| Distros without AppArmor | No impact | No extra configuration needed |
+
+**Verify FUSE compatibility:**
+
+```bash
+sudo bash scripts/verify-fuse-compat.sh
 ```
 
 ## 2. PostgreSQL Configuration
