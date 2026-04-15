@@ -255,17 +255,13 @@ _ = session.WindowChange(h, w) // h rows, w columns per doc
 
 **若上表需在执行前归零：** 在计划阶段对 A2 写探测用例；对 A1 在镜像中确认 `/bin/sh`/`bash` 与 `QuoteCommand` 输出。
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`DisableFlagParsing` 时 `cloud-claude -- -p` 的 `args` 精确形态？**
-   - What we know：D-03 要求剥离前导 `--`。  
-   - What's unclear：cobra/pflag 是否保留单独的 `"--"` token。  
-   - Recommendation：在 Wave 0 增加单元测试对 `rootCmd.SetArgs` 探测，再写剥离逻辑。
+   - **RESOLVED：** 在根命令启用 `DisableFlagParsing: true` 且 `Args: cobra.ArbitraryArgs` 时，cobra 不向 pflag 解析「看起来像 flag 的 token」，剩余 token 作为 `RunE(cmd, args []string)` 的 `args` 传入。用户输入形如 `cloud-claude -- -p foo` 时，`"--"` 通常作为 **`args` 的第一个元素** 出现；与 D-03 一致，在 `runRoot` 开头若 `len(args)>0 && args[0]=="--"` 则执行 `args = args[1:]`，仅剥离**前导**分隔用 `--`。最终行为以 `rootCmd.SetArgs` + 执行的单元/集成测试锁定（见 26-01-PLAN Task 2），避免依赖口述猜测。
 
 2. **远端 `exec` 是否经 login shell 解释命令串？**
-   - What we know：OpenSSH `ForceCommand` 与用户 shell 会改变行为；当前为默认 `session.Start` 字符串。  
-   - What's unclear：镜像 sshd 是否对 command 强制 `/bin/sh -c`。  
-   - Recommendation：在规划任务中加「与 Phase 24/25 镜像一致」的集成验证一条。
+   - **RESOLVED：** `golang.org/x/crypto/ssh` 的 `Session.Start(cmd string)` 将 `cmd` 交给远端 sshd/用户默认 shell 解释（与 OpenSSH 客户端「远程命令」语义一致）；本仓库 Phase 25 起已用单条命令字符串启动远端进程，Phase 26 改为 `shellescape.QuoteCommand` 后的整段 POSIX shell 安全字符串，仍落在同一路径。镜像侧若配置 `ForceCommand`、非 POSIX shell 等会改变语义——与 Phase 24/25 已选镜像/网关约定一致时，以**现有联调/集成验证**为准；本阶段不新增 sshd 侧改动。若未来发现与 `QuoteCommand` 不兼容的 shell，再评估显式 `exec` 或固定解释器（超出本 Phase 交付物时记入后续阶段）。
 
 ## Environment Availability
 
