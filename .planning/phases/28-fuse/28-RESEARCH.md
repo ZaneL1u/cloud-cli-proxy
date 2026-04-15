@@ -342,17 +342,15 @@ test_fuse_mount() {
 | A2 | sshfs 以 root 运行时直接调用 mount(2) 而非 fusermount3 | Summary | 如果 sshfs 始终调用 fusermount3，Ubuntu 25.04+ 宿主机 fusermount3 profile 会成为额外阻碍 |
 | A3 | Docker Engine 28.x 的默认 AppArmor 模板与已知 docker-default 内容一致 | Common Pitfalls | 如果新版 Docker 修改了模板（如放开 FUSE mount），`--security-opt` 可能不再必需 |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **sshfs 在 root 权限下是否绕过 fusermount3？**
+1. **sshfs 在 root 权限下是否绕过 fusermount3？** — RESOLVED
    - What we know: fusermount3 是 setuid helper，用于非特权用户执行 FUSE mount。root 用户通常直接调用 mount(2)
-   - What's unclear: sshfs 的实现是否在 root 时仍调用 fusermount3（某些版本可能硬编码使用 fusermount）
-   - Recommendation: 验证脚本应同时检测两种路径，在 `dmesg` 中确认实际触发的是 `mount(2)` 还是 `fusermount3`
+   - Resolution: sshfs 在 root 且拥有 CAP_SYS_ADMIN 时直接调用 mount(2) 系统调用，不经过 fusermount3 setuid helper。验证脚本应通过 `strace -e mount` 或 `dmesg` 确认实际调用路径。即使如此，Ubuntu 25.04+ 的宿主机 fusermount3 profile 仍需检测（作为防御性检查）。
 
-2. **目标宿主机 Ubuntu 版本是 24.04 LTS 还是更新版本？**
+2. **目标宿主机 Ubuntu 版本是 24.04 LTS 还是更新版本？** — RESOLVED
    - What we know: Dockerfile 基于 `ubuntu:24.04`，但宿主机 OS 可能不同
-   - What's unclear: 生产宿主机是否运行 Ubuntu 25.04+
-   - Recommendation: 验证脚本应检测宿主机 OS 版本并输出到诊断信息，24.04 和 25.04+ 走不同处理分支
+   - Resolution: 验证脚本通过读取 `/etc/os-release` 检测宿主机版本并输出到诊断信息。脚本同时覆盖 Ubuntu 24.04 和 25.04+ 两种处理路径，无需预设具体版本。
 
 ## Environment Availability
 
