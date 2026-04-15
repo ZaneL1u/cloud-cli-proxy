@@ -22,12 +22,14 @@ const (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "cloud-claude",
-		Short: "透明远程 Claude Code CLI",
-		Long:  "连接远端云主机并启动 Claude Code 交互会话。\n首次使用请先运行 cloud-claude init 配置网关与凭证。",
-		SilenceUsage:  true,
-		SilenceErrors: true,
-		RunE:          runRoot,
+		Use:                "cloud-claude",
+		Short:              "透明远程 Claude Code CLI",
+		Long:               "连接远端云主机并启动 Claude Code 交互会话。\n首次使用请先运行 cloud-claude init 配置网关与凭证。",
+		SilenceUsage:       true,
+		SilenceErrors:      true,
+		DisableFlagParsing: true,
+		Args:               cobra.ArbitraryArgs,
+		RunE:               runRoot,
 	}
 
 	initCmd := &cobra.Command{
@@ -106,6 +108,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 }
 
 func runRoot(cmd *cobra.Command, args []string) error {
+	if len(args) > 0 && args[0] == "--" {
+		args = args[1:]
+	}
+
 	cfg, err := cloudclaude.LoadConfig()
 	if err != nil {
 		if strings.Contains(err.Error(), "不存在") {
@@ -158,9 +164,13 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		Password: authResp.SSHPass,
 	}
 
-	if err := cloudclaude.ConnectAndRunClaude(sshCfg); err != nil {
+	exitCode, err := cloudclaude.ConnectAndRunClaude(sshCfg, args)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "错误: "+err.Error())
 		os.Exit(exitInternalError)
+	}
+	if exitCode != 0 {
+		os.Exit(exitCode)
 	}
 
 	return nil
