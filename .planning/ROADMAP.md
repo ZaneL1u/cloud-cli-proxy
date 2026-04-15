@@ -159,7 +159,10 @@ Plans:
   2. 本地文件修改在容器内即时可见，容器内文件修改在本地即时可见（双向实时读写）
   3. Claude Code 以 /workspace 为工作目录运行，可正常读写项目文件
   4. 会话正常或异常退出时，容器内 sshfs 挂载点和相关资源自动清理
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 27-01-PLAN.md — 目录映射基础设施（mount.go + pkg/sftp + waitForMount 测试）
+- [ ] 27-02-PLAN.md — SSH 三阶段重构与主流程接入（ssh.go 拆分 + main.go CWD 传递）
 
 ### Phase 28: 生产环境 FUSE 兼容性验证
 **Goal**: 在 Linux 生产环境验证 FUSE + 安全模块兼容性，确保全栈端到端可用
