@@ -110,7 +110,7 @@
 - [x] **Phase 25: cloud-claude CLI 骨架与连接** — Go 二进制 cloud-claude 的配置、认证和远端容器连接闭环（1 plan） (completed 2026-04-15)
 - [x] **Phase 26: 参数透传与终端体验** — claude 参数原样透传，TTY/信号/退出码与本地一致 (completed 2026-04-15)
 - [x] **Phase 27: 双 session 目录映射** — sshfs slave + SFTP 实现当前目录到容器 /workspace 的实时双向映射 (completed 2026-04-15)
-- [ ] **Phase 28: 生产环境 FUSE 兼容性验证** — 在目标 Linux 环境验证 FUSE + AppArmor/seccomp 完整兼容性
+- [x] **Phase 28: 生产环境 FUSE 兼容性验证** — 在目标 Linux 环境验证 FUSE + AppArmor/seccomp 完整兼容性 (completed 2026-04-15)
 
 ### Phase 24: 受管镜像 FUSE 硬化与容器参数
 **Goal**: 容器侧 FUSE/sshfs 前置条件和运行参数就绪，SSH Proxy 零改造验证通过
@@ -175,7 +175,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 28-01-PLAN.md — AppArmor 修复与 FUSE 兼容性验证脚本
-- [ ] 28-02-PLAN.md — 宿主机前置检查与部署文档更新
+- [x] 28-02-PLAN.md — 宿主机前置检查与部署文档更新
 
 ## Progress
 
@@ -188,7 +188,7 @@ Phases execute in numeric order: 24 → 25 → 26 → 27 → 28
 | 25. cloud-claude CLI 骨架与连接 | 1/1 | Complete    | 2026-04-15 |
 | 26. 参数透传与终端体验 | 1/1 | Complete    | 2026-04-15 |
 | 27. 双 session 目录映射 | 2/2 | Complete    | 2026-04-15 |
-| 28. 生产环境 FUSE 兼容性验证 | 1/2 | In Progress|  |
+| 28. 生产环境 FUSE 兼容性验证 | 2/2 | Complete   | 2026-04-15 |
 
 ---
 *Last updated: 2026-04-15 — v1.2 deferred, v2.0 active*
