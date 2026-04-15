@@ -157,6 +157,7 @@ func (w *Worker) createHost(ctx context.Context, request agentapi.HostActionRequ
 		"--cap-add", "NET_ADMIN",
 		"--cap-add", "SYS_ADMIN",
 		"--device", "/dev/fuse",
+		"--security-opt", "apparmor=unconfined",
 		"--label", "cloud-cli-proxy.managed=true",
 		"--label", fmt.Sprintf("cloud-cli-proxy.host_id=%s", request.HostID),
 		"--hostname", hostname,
