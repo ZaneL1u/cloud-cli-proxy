@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: cloud-claude 透明远程 CLI
 status: executing
-stopped_at: Phase 27 context gathered
-last_updated: "2026-04-15T05:43:02.874Z"
-last_activity: 2026-04-15 -- Phase 27 planning complete
+stopped_at: Completed 27-01-PLAN.md
+last_updated: "2026-04-15T05:47:46.190Z"
+last_activity: 2026-04-15
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 5
-  completed_plans: 3
-  percent: 60
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-15)
 
 **Core value:** 给每个用户提供一台开箱即用的 SSH 云主机，并且严格保证其所有出网流量都走受控的指定出口 IP
-**Current focus:** Phase 26 — arg-passthrough-tty
+**Current focus:** Phase 27 — 双 session 目录映射
 
 ## Current Position
 
-Phase: 27
-Plan: Not started
+Phase: 27 (双 session 目录映射) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-04-15 -- Phase 27 planning complete
+Last activity: 2026-04-15
 
 Progress: [██████████████████░░] 88% (v2.0)
 
@@ -51,6 +51,7 @@ Progress: [██████████████████░░] 88% (v2
 | Phase 24-fuse P01 | 1min | 3 tasks | 3 files |
 | Phase 25 P01 | 5min | 3 tasks | 6 files |
 | Phase 26 P01 | 2min | 2 tasks | 4 files |
+| Phase 27 P01 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,8 @@ Recent decisions affecting current work:
 - [Phase 25]: SSH HostKeyCallback 使用 InsecureIgnoreHostKey（与 Entry 脚本一致）
 - [Phase 25]: 轮询间隔 3s / 总超时 120s 作为默认值，远程命令 claude
 - [Phase 26]: shellescape.QuoteCommand 构建安全远程命令行，退出码返回值上浮修复 HI-01
+- [Phase 27]: channelRWC Reader=StdoutPipe / WriteCloser=StdinPipe，反接会导致协议死锁
+- [Phase 27]: waitForMount 使用可注入 check 函数，与 ssh_ready.go 的轮询结构一致
 
 ### Pending Todos
 
@@ -80,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-15T05:20:31.091Z
-Stopped at: Phase 27 context gathered
-Resume file: .planning/phases/27-session/27-CONTEXT.md
+Last session: 2026-04-15T05:47:46.187Z
+Stopped at: Completed 27-01-PLAN.md
+Resume file: None
