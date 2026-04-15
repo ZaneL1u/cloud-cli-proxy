@@ -27,6 +27,20 @@ if ! modprobe -n wireguard 2>/dev/null; then
   fi
 fi
 
+# Phase 28: FUSE kernel module must be loadable (required for sshfs directory mapping)
+if ! modprobe fuse 2>/dev/null; then
+  if [ ! -c /dev/fuse ]; then
+    echo "missing fuse kernel module (required for sshfs directory mapping)" >&2
+    echo "try: modprobe fuse" >&2
+    exit 1
+  fi
+fi
+
+if [ ! -c /dev/fuse ]; then
+  echo "missing /dev/fuse device (required for container FUSE mount)" >&2
+  exit 1
+fi
+
 # Phase 2: nsenter required for container namespace verification
 require_cmd nsenter
 
