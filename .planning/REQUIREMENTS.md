@@ -23,9 +23,9 @@ Requirements for cloud-claude 透明远程 CLI 里程碑。Each maps to roadmap 
 
 ### 目录映射
 
-- [ ] **MAP-01**: 用户当前目录自动映射到容器 /workspace，通过 sshfs slave 实现
-- [ ] **MAP-02**: 映射为双向实时读写，本地改动容器内即时可见，反之亦然
-- [ ] **MAP-03**: 会话结束时自动清理容器内挂载点和相关资源
+- [x] **MAP-01**: 用户当前目录自动映射到容器 /workspace，通过 sshfs slave 实现
+- [x] **MAP-02**: 映射为双向实时读写，本地改动容器内即时可见，反之亦然
+- [x] **MAP-03**: 会话结束时自动清理容器内挂载点和相关资源
 
 ### 服务端支撑
 
@@ -72,9 +72,9 @@ Deferred to future release. Tracked but not in current roadmap.
 | TTY-01 | Phase 26 | Complete |
 | TTY-02 | Phase 26 | Complete |
 | TTY-03 | Phase 26 | Complete |
-| MAP-01 | Phase 27 | Pending |
-| MAP-02 | Phase 27 | Pending |
-| MAP-03 | Phase 27 | Pending |
+| MAP-01 | Phase 27 | Complete |
+| MAP-02 | Phase 27 | Complete |
+| MAP-03 | Phase 27 | Complete |
 | SRV-04 | Phase 28 | Pending |
 
 **Coverage:**

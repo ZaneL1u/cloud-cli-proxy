@@ -161,7 +161,7 @@ Plans:
   4. 会话正常或异常退出时，容器内 sshfs 挂载点和相关资源自动清理
 **Plans**: 2 plans
 Plans:
-- [ ] 27-01-PLAN.md — 目录映射基础设施（mount.go + pkg/sftp + waitForMount 测试）
+- [x] 27-01-PLAN.md — 目录映射基础设施（mount.go + pkg/sftp + waitForMount 测试）
 - [ ] 27-02-PLAN.md — SSH 三阶段重构与主流程接入（ssh.go 拆分 + main.go CWD 传递）
 
 ### Phase 28: 生产环境 FUSE 兼容性验证
@@ -184,7 +184,7 @@ Phases execute in numeric order: 24 → 25 → 26 → 27 → 28
 | 24. 受管镜像 FUSE 硬化与容器参数 | 1/1 | Complete    | 2026-04-14 |
 | 25. cloud-claude CLI 骨架与连接 | 1/1 | Complete    | 2026-04-15 |
 | 26. 参数透传与终端体验 | 1/1 | Complete    | 2026-04-15 |
-| 27. 双 session 目录映射 | 0/0 | Not started | - |
+| 27. 双 session 目录映射 | 1/2 | In Progress|  |
 | 28. 生产环境 FUSE 兼容性验证 | 0/0 | Not started | - |
 
 ---
