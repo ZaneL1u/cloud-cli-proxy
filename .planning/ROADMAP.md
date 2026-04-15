@@ -146,7 +146,9 @@ Plans:
   2. 终端窗口 resize 时 SIGWINCH 正确传递到容器内 Claude Code 进程，界面跟随调整
   3. Ctrl+C / Ctrl+\ 等信号正确转发到容器内进程，Claude Code 正常响应中断
   4. 容器内 Claude Code 退出码透传给本地 cloud-claude 进程，脚本可基于退出码判断结果
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 26-01-PLAN.md — 参数透传、安全命令构建、非 TTY 分支与退出码修复
 
 ### Phase 27: 双 session 目录映射
 **Goal**: 用户当前目录通过 sshfs slave 实时映射到容器 /workspace，双向读写可靠
