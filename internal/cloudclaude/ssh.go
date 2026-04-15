@@ -21,10 +21,26 @@ type SSHConfig struct {
 	Password string
 }
 
-// ConnectAndRunClaude 建立 SSH 连接并在远端执行 claude 命令。
-// claudeArgs 会经 shellescape 转义后拼接到远程命令行。
-// 返回远端进程退出码；调用方负责 os.Exit。
-func ConnectAndRunClaude(cfg SSHConfig, claudeArgs []string) (int, error) {
+// ConnectAndRunClaude 建立 SSH 连接，挂载本地目录到容器 /workspace，
+// 然后在远端以 /workspace 为工作目录执行 claude 命令。
+// defer 顺序保证清理链：cleanupMount → conn.Close（LIFO）。
+func ConnectAndRunClaude(cfg SSHConfig, claudeArgs []string, cwd string) (int, error) {
+	conn, err := sshConnect(cfg)
+	if err != nil {
+		return 0, err
+	}
+	defer conn.Close()
+
+	cleanupMount, err := mountWorkspace(conn, cwd)
+	if err != nil {
+		return 0, fmt.Errorf("目录映射失败: %w", err)
+	}
+	defer cleanupMount()
+
+	return runClaude(conn, claudeArgs)
+}
+
+func sshConnect(cfg SSHConfig) (*ssh.Client, error) {
 	clientCfg := &ssh.ClientConfig{
 		User: cfg.User,
 		Auth: []ssh.AuthMethod{
@@ -37,17 +53,18 @@ func ConnectAndRunClaude(cfg SSHConfig, claudeArgs []string) (int, error) {
 	addr := net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.Port))
 	tcpConn, err := net.DialTimeout("tcp", addr, 10*time.Second)
 	if err != nil {
-		return 0, fmt.Errorf("SSH 连接失败（无法连接 %s）: %w", addr, err)
+		return nil, fmt.Errorf("SSH 连接失败（无法连接 %s）: %w", addr, err)
 	}
 
 	sshConn, chans, reqs, err := ssh.NewClientConn(tcpConn, addr, clientCfg)
 	if err != nil {
 		tcpConn.Close()
-		return 0, fmt.Errorf("SSH 握手失败: %w", err)
+		return nil, fmt.Errorf("SSH 握手失败: %w", err)
 	}
-	conn := ssh.NewClient(sshConn, chans, reqs)
-	defer conn.Close()
+	return ssh.NewClient(sshConn, chans, reqs), nil
+}
 
+func runClaude(conn *ssh.Client, claudeArgs []string) (int, error) {
 	session, err := conn.NewSession()
 	if err != nil {
 		return 0, fmt.Errorf("创建 SSH 会话失败: %w", err)
@@ -95,7 +112,8 @@ func ConnectAndRunClaude(cfg SSHConfig, claudeArgs []string) (int, error) {
 	session.Stdout = os.Stdout
 	session.Stderr = os.Stderr
 
-	remoteCmd := shellescape.QuoteCommand(append([]string{"claude"}, claudeArgs...))
+	claudeCmd := shellescape.QuoteCommand(append([]string{"claude"}, claudeArgs...))
+	remoteCmd := "cd /workspace && " + claudeCmd
 
 	if err := session.Start(remoteCmd); err != nil {
 		return 0, fmt.Errorf("启动远程 Claude Code 失败: %w", err)
