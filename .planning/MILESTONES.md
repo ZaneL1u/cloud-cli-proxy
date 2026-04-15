@@ -1,5 +1,21 @@
 # Milestones
 
+## v2.0 cloud-claude 透明远程 CLI (Shipped: 2026-04-15)
+
+**Phases completed:** 5 phases, 7 plans, 16 tasks
+
+**Key accomplishments:**
+
+- 受管镜像预装 sshfs + fuse3 并配置 FUSE 权限，Worker 附加 --device /dev/fuse 和 --cap-add SYS_ADMIN，SSH Proxy 确认零改造支持多 session channel
+- cobra 入口 + init 配置持久化 + Entry API 认证轮询 + SSH PTY 远程 claude 会话的完整 CLI 闭环
+- shellescape 安全命令构建 + cobra 透传用户 claude 参数 + 非 TTY 管道模式 + 退出码返回值上浮修复 HI-01
+- pkg/sftp 嵌入式 SFTP server + sshfs passive 模式启动 + mountpoint 轮询检测 + fusermount 防御性清理
+- 重构 ConnectAndRunClaude 为 sshConnect→mountWorkspace→runClaude 三阶段架构，main.go 传递 os.Getwd() 实现端到端目录映射
+- worker.go 添加 apparmor=unconfined 解除 FUSE 阻断，238 行验证脚本覆盖 sshfs 真实挂载 + 网络策略共存 + E2E 流程
+- host-preflight.sh 添加 FUSE 内核模块双重检测，中英文部署文档补充 FUSE/AppArmor 兼容性章节和已知限制表
+
+---
+
 ## v1.2 用户自助面板与 Bootstrap 重设计 (Partial: 2026-03-29, remaining deferred)
 
 **Phases completed:** 2 of 6 phases (Phase 11-12), remaining (Phase 13-16) deferred to future milestone
