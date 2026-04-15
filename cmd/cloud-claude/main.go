@@ -131,18 +131,19 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	)
 	if err != nil {
 		errMsg := err.Error()
+		fmt.Fprintln(os.Stderr, "错误: "+errMsg)
 		switch {
-		case strings.Contains(errMsg, "认证失败"):
-			fmt.Fprintln(os.Stderr, "错误: "+errMsg)
+		case strings.Contains(errMsg, "认证失败"),
+			strings.Contains(errMsg, "账号未激活"),
+			strings.Contains(errMsg, "未找到对应主机"):
 			os.Exit(exitAuthFailed)
-		case strings.Contains(errMsg, "网关不可达") || strings.Contains(errMsg, "网关地址无效"):
-			fmt.Fprintln(os.Stderr, "错误: "+errMsg)
+		case strings.Contains(errMsg, "网关不可达"),
+			strings.Contains(errMsg, "网关地址无效"),
+			strings.Contains(errMsg, "认证请求失败"):
 			os.Exit(exitNetworkError)
 		case strings.Contains(errMsg, "超时"):
-			fmt.Fprintln(os.Stderr, "错误: "+errMsg)
 			os.Exit(exitTimeout)
 		default:
-			fmt.Fprintln(os.Stderr, "错误: "+errMsg)
 			os.Exit(exitInternalError)
 		}
 		return nil

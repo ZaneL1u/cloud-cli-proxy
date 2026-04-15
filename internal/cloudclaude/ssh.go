@@ -3,9 +3,11 @@ package cloudclaude
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
@@ -25,13 +27,21 @@ func ConnectAndRunClaude(cfg SSHConfig) error {
 			ssh.Password(cfg.Password),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
 	}
 
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-	conn, err := ssh.Dial("tcp", addr, clientCfg)
+	addr := net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.Port))
+	tcpConn, err := net.DialTimeout("tcp", addr, 10*time.Second)
 	if err != nil {
-		return fmt.Errorf("SSH 连接失败: %w", err)
+		return fmt.Errorf("SSH 连接失败（无法连接 %s）: %w", addr, err)
 	}
+
+	sshConn, chans, reqs, err := ssh.NewClientConn(tcpConn, addr, clientCfg)
+	if err != nil {
+		tcpConn.Close()
+		return fmt.Errorf("SSH 握手失败: %w", err)
+	}
+	conn := ssh.NewClient(sshConn, chans, reqs)
 	defer conn.Close()
 
 	session, err := conn.NewSession()
