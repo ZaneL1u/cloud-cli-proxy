@@ -94,21 +94,65 @@
 
 ---
 
+## Milestone: v2.0 — cloud-claude 透明远程 CLI
+
+**Shipped:** 2026-04-15
+**Phases:** 5 | **Plans:** 7 | **Timeline:** 1 天 (2026-04-15，Phase 24 前一天开始)
+
+### What Was Built
+- Go 单一二进制 `cloud-claude`：cobra 入口 + init 配置持久化 + Entry API 认证轮询 + SSH PTY 远程 claude 会话
+- sshfs slave + 嵌入式 SFTP server 实现本地目录到容器 /workspace 实时双向映射
+- shellescape 安全命令构建 + 非 TTY 管道模式 + claude 参数原样透传
+- TTY/信号/窗口大小/退出码完全透传，体验与本地 claude 无差异
+- 受管镜像预装 sshfs/fuse3 + AppArmor unconfined + FUSE 兼容性验证脚本 + 部署文档补充
+
+### What Worked
+- **SSH Proxy 零改造**：Phase 24 代码审查确认现有多 session channel + 全类型转发天然支持 cloud-claude，服务端无需任何修改
+- **三阶段生命周期**：sshConnect → mountWorkspace → runClaude 的拆分使每个阶段可独立测试和替换
+- **可注入轮询模式**：waitForMount 与 WaitForSSHReady 共享 timer+ticker+select 结构，纯单元测试无需真实 SSH 连接
+- **退出码返回值上浮**：禁止 os.Exit 确保 defer term.Restore 始终执行，从架构层面修复终端恢复缺陷
+- **极快的交付节奏**：5 个阶段 7 个计划 16 个任务在一天内全部完成，每个计划 1-5 分钟
+
+### What Was Inefficient
+- **Go module proxy 不稳定**：proxy.golang.org 多次 connection reset，需要手动切换到 goproxy.cn，增加了执行中的等待
+- **人工验证项较多**：Phase 25-28 均为 human_needed 状态，代码层面完备但端到端验证依赖运行环境，无法在开发阶段全部覆盖
+
+### Patterns Established
+- **internal/cloudclaude 包结构**：所有客户端逻辑集中在一个包内（config/entry/ssh/mount），cmd 仅做入口编排
+- **cobra-flag-passthrough**：DisableFlagParsing + ArbitraryArgs 透传远程 CLI 参数，init 子命令路由不受影响
+- **SSH session pipe 适配模式**：channelRWC 将 session stdin/stdout 包装为 io.ReadWriteCloser 供协议库使用
+- **verify-*.sh 结构化输出**：[PASS]/[FAIL]/[WARN] 前缀 + 汇总计数 + 非零退出码
+
+### Key Lessons
+1. **零改造验证应尽早做**：Phase 24 确认 SSH Proxy 零改造为后续 4 个阶段消除了最大风险，如果验证失败整个架构需要重新设计
+2. **sshfs slave 模式比预期更简洁**：SFTP server 嵌入 Go 进程 + sshfs passive 模式，不需要额外的端口或进程管理
+3. **shellescape 比手写转义更安全**：POSIX 单引号规则库成熟可靠，手写转义容易遗漏边界情况
+4. **AppArmor 与 FUSE 的冲突是隐蔽陷阱**：docker-default profile 的 deny mount 规则会阻断 FUSE 挂载，但错误信息不明显
+
+### Cost Observations
+- Model mix: 以 fast model 为主，research/planning 使用默认模型
+- Sessions: 约 5 次会话完成全部 5 个阶段
+- Notable: 最高效的里程碑——平均每个计划 2.1 分钟，得益于 v1.0/v1.1 建立的模式和基础设施复用
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
 
-| Milestone | Timeline | Phases | Key Change |
-|-----------|----------|--------|------------|
-| v1.0 | 3 days | 6 | 首个里程碑 — 建立了完整的 GSD 工作流（研究→规划→执行→验证→审计→归档） |
-| v1.1 | 3 days | 4 | 审计驱动的技术债务修复 — 里程碑审计发现问题后立即创建修复阶段 |
+| Milestone | Timeline | Phases | Plans | Key Change |
+|-----------|----------|--------|-------|------------|
+| v1.0 | 3 days | 6 | 19 | 首个里程碑 — 建立了完整的 GSD 工作流 |
+| v1.1 | 3 days | 4 | 11 | 审计驱动的技术债务修复 — 审计发现问题后立即创建修复阶段 |
+| v2.0 | 1 day | 5 | 7 | 最高效里程碑 — 平均每个计划 2.1 分钟，复用现有基础设施 |
 
 ### Cumulative Quality
 
-| Milestone | Tests | LOC | Plans |
-|-----------|-------|-----|-------|
-| v1.0 | 76 | ~14,272 | 19 |
-| v1.1 | 76+ | ~16,958 | 11 |
+| Milestone | Tests | LOC | Plans | Avg Plan Duration |
+|-----------|-------|-----|-------|-------------------|
+| v1.0 | 76 | ~14,272 | 19 | — |
+| v1.1 | 76+ | ~16,958 | 11 | — |
+| v2.0 | 76+ | ~28,877 | 7 | ~2.1 min |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -117,3 +161,5 @@
 3. 错误码的定义端和消费端应同步建立映射
 4. 对称设计（如 Provider 工厂 + 流水线对称结构）能大幅降低新功能的实现成本
 5. 审计应在里程碑末期立即执行，发现的问题当天修复，避免跨里程碑遗留
+6. 零改造验证应尽早做——确认现有组件能否复用，是后续阶段最大的风险消除
+7. 基础设施复用是提速关键——v2.0 复用了 SSH Proxy、Entry API、受管镜像等 v1.x 基础设施，开发效率倍增
