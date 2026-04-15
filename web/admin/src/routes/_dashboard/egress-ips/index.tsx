@@ -110,10 +110,6 @@ function EgressIPsPage() {
   const egressIPs = data?.egress_ips ?? [];
 
   async function handleTest(ip: EgressIP) {
-    if (ip.tunnel_type !== "proxy") {
-      toast.info("WireGuard 类型出口 IP 在容器启动时自动验证，不支持手动测试");
-      return;
-    }
     setTestingIds((prev) => new Set(prev).add(ip.id));
     try {
       const result = await apiFetch<TestResult>(`/egress-ips/${ip.id}/test`, {
@@ -156,7 +152,7 @@ function EgressIPsPage() {
     <div className="space-y-6">
       <PageHeader
         title="出口 IP 管理"
-        description="配置代理或 WireGuard 出口，供用户主机绑定并统一出网"
+        description="配置代理出口，供用户主机绑定并统一出网"
       >
         <Button
           onClick={() => {
@@ -239,7 +235,7 @@ function EgressIPsPage() {
                             <RefreshCw className="h-3 w-3" />
                           </button>
                         </span>
-                      ) : ip.tunnel_type === "proxy" ? (
+                      ) : (
                         <button
                           onClick={() => handleTest(ip)}
                           className="flex items-center gap-1.5 text-sm text-primary hover:underline"
@@ -247,8 +243,6 @@ function EgressIPsPage() {
                           <FlaskConical className="h-3.5 w-3.5" />
                           检测
                         </button>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -264,10 +258,7 @@ function EgressIPsPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             onClick={() => handleTest(ip)}
-                            disabled={
-                              testingIds.has(ip.id) ||
-                              ip.tunnel_type !== "proxy"
-                            }
+                            disabled={testingIds.has(ip.id)}
                           >
                             {testingIds.has(ip.id) ? (
                               <Loader2 className="animate-spin" />

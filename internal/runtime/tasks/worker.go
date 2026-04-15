@@ -28,7 +28,6 @@ type WorkerRepo interface {
 	UpdateTaskStatus(context.Context, string, string, string, string, string) (repository.Task, error)
 	UpdateHostStatus(ctx context.Context, hostID string, status string) error
 	GetEgressIPByHost(ctx context.Context, hostID string) (repository.EgressIP, error)
-	GetHostWgKeys(ctx context.Context, hostID string) (string, string, error)
 	RecordEvent(ctx context.Context, params repository.RecordEventParams) (repository.Event, error)
 }
 
@@ -588,21 +587,11 @@ func (rv *repoValidator) GetEgressIPByHost(ctx context.Context, hostID string) (
 		return network.EgressIPRecord{}, err
 	}
 	return network.EgressIPRecord{
-		ID:             eip.ID,
-		IPAddress:      eip.IPAddress,
-		TunnelType:     eip.TunnelType,
-		ProxyConfig:    eip.ProxyConfig,
-		WgEndpoint:     eip.WgEndpoint,
-		WgPublicKey:    eip.WgPublicKey,
-		WgPresharedKey: eip.WgPresharedKey,
-		WgAllowedIPs:   eip.WgAllowedIPs,
-		WgDNSServer:    eip.WgDNSServer,
-		WgPeerAddress:  eip.WgPeerAddress,
+		ID:          eip.ID,
+		IPAddress:   eip.IPAddress,
+		TunnelType:  network.TunnelTypeProxy,
+		ProxyConfig: eip.ProxyConfig,
 	}, nil
-}
-
-func (rv *repoValidator) GetHostWgKeys(ctx context.Context, hostID string) (string, string, error) {
-	return rv.repo.GetHostWgKeys(ctx, hostID)
 }
 
 func loadProxyPublicKey() string {

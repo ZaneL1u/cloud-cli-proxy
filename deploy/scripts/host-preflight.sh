@@ -17,17 +17,7 @@ if ! command -v nft >/dev/null 2>&1 && ! command -v iptables >/dev/null 2>&1; th
   exit 1
 fi
 
-# Phase 2: WireGuard kernel module must be loadable
-if ! modprobe -n wireguard 2>/dev/null; then
-  if ip link add wg-test type wireguard 2>/dev/null; then
-    ip link del wg-test 2>/dev/null || true
-  else
-    echo "missing wireguard kernel module" >&2
-    exit 1
-  fi
-fi
-
-# Phase 28: FUSE kernel module must be loadable (required for sshfs directory mapping)
+# FUSE kernel module must be loadable (required for sshfs directory mapping)
 if ! modprobe fuse 2>/dev/null; then
   if [ ! -c /dev/fuse ]; then
     echo "missing fuse kernel module (required for sshfs directory mapping)" >&2

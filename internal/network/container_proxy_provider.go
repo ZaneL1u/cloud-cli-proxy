@@ -30,9 +30,8 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 		return nil
 	}
 
-	if spec.Egress.TunnelType != TunnelTypeProxy || spec.Egress.Proxy == nil {
-		p.logger.Warn("container-proxy: only proxy tunnel type is supported on this platform, skipping network setup",
-			"host_id", spec.HostID, "tunnel_type", spec.Egress.TunnelType)
+	if spec.Egress.Proxy == nil {
+		p.logger.Warn("container-proxy: no proxy config, skipping network setup", "host_id", spec.HostID)
 		return nil
 	}
 

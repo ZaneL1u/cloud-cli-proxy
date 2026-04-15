@@ -67,10 +67,6 @@ const statusConfig: Record<
   pending: { label: "等待中", variant: "outline" },
 };
 
-const tunnelTypeLabels: Record<string, string> = {
-  wireguard: "WireGuard",
-  proxy: "代理隧道",
-};
 
 function PortalHostDetail() {
   const { hostId } = Route.useParams();
@@ -197,7 +193,7 @@ function PortalHostDetail() {
                   <div className="flex items-center gap-1.5">
                     <Shield className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">
-                      {tunnelTypeLabels[binding.tunnel_type] ?? binding.tunnel_type}
+                      代理隧道
                     </span>
                   </div>
                 </div>

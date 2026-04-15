@@ -13,12 +13,11 @@ function proxyServerPort(config: Record<string, unknown>): number | undefined {
 }
 
 /**
- * 出口 IP 列表「代理服务器」列：代理隧道固定展示 proxy_config.server（及端口），
+ * 出口 IP 列表「代理服务器」列：展示 proxy_config.server（及端口），
  * 与 ip_address 字段解耦（域名代理时 ip_address 常为 0.0.0.0）。
- * WireGuard 展示对端 endpoint，否则回退公网 ip_address。
  */
 export function egressProxyEntryDisplay(ip: EgressIP): string {
-  if (ip.tunnel_type === "proxy" && ip.proxy_config) {
+  if (ip.proxy_config) {
     const c = ip.proxy_config as Record<string, unknown>;
     const server = typeof c.server === "string" ? c.server.trim() : "";
     if (server) {
@@ -31,12 +30,6 @@ export function egressProxyEntryDisplay(ip: EgressIP): string {
       }
       return server;
     }
-    return "—";
-  }
-  if (ip.tunnel_type === "wireguard") {
-    const ep = ip.wg_endpoint?.trim();
-    if (ep) return ep;
-    if (ip.ip_address && ip.ip_address !== "0.0.0.0") return ip.ip_address;
     return "—";
   }
   if (ip.ip_address && ip.ip_address !== "0.0.0.0") return ip.ip_address;

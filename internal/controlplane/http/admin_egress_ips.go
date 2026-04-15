@@ -12,7 +12,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/zanel1u/cloud-cli-proxy/internal/network"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
 
@@ -100,7 +99,6 @@ func sanitizeProxyConfig(raw json.RawMessage) json.RawMessage {
 }
 
 func sanitizeEgressIP(ip *repository.EgressIP) {
-	ip.WgPresharedKey = nil
 	ip.ProxyConfig = sanitizeProxyConfig(ip.ProxyConfig)
 }
 
@@ -163,17 +161,10 @@ func (h *AdminEgressIPsHandler) Get() nethttp.Handler {
 }
 
 type createEgressIPRequest struct {
-	Label          string          `json:"label"`
-	IPAddress      string          `json:"ip_address"`
-	Provider       string          `json:"provider"`
-	TunnelType     string          `json:"tunnel_type"`
-	WgEndpoint     *string         `json:"wg_endpoint"`
-	WgPublicKey    *string         `json:"wg_public_key"`
-	WgPresharedKey *string         `json:"wg_preshared_key"`
-	WgAllowedIPs   string          `json:"wg_allowed_ips"`
-	WgDNSServer    *string         `json:"wg_dns_server"`
-	WgPeerAddress  *string         `json:"wg_peer_address"`
-	ProxyConfig    json.RawMessage `json:"proxy_config,omitempty"`
+	Label       string          `json:"label"`
+	IPAddress   string          `json:"ip_address"`
+	Provider    string          `json:"provider"`
+	ProxyConfig json.RawMessage `json:"proxy_config,omitempty"`
 }
 
 func (h *AdminEgressIPsHandler) Create() nethttp.Handler {
@@ -197,45 +188,17 @@ func (h *AdminEgressIPsHandler) Create() nethttp.Handler {
 		if req.Provider == "" {
 			req.Provider = "manual"
 		}
-		if req.WgAllowedIPs == "" {
-			req.WgAllowedIPs = "0.0.0.0/0"
-		}
 
-		if req.TunnelType == "" {
-			req.TunnelType = network.TunnelTypeWireGuard
-		}
-		if req.TunnelType != network.TunnelTypeWireGuard && req.TunnelType != network.TunnelTypeProxy {
-			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "tunnel_type must be wireguard or proxy"})
+		if err := validateProxyConfig(req.ProxyConfig); err != nil {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 
-		if req.TunnelType == network.TunnelTypeProxy {
-			if err := validateProxyConfig(req.ProxyConfig); err != nil {
-				writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": err.Error()})
-				return
-			}
-			req.WgEndpoint = nil
-			req.WgPublicKey = nil
-			req.WgPresharedKey = nil
-			req.WgDNSServer = nil
-			req.WgPeerAddress = nil
-			req.WgAllowedIPs = "0.0.0.0/0"
-		} else {
-			req.ProxyConfig = nil
-		}
-
 		ip, err := h.store.CreateEgressIP(r.Context(), repository.CreateEgressIPParams{
-			Label:          req.Label,
-			IPAddress:      req.IPAddress,
-			Provider:       req.Provider,
-			TunnelType:     req.TunnelType,
-			WgEndpoint:     req.WgEndpoint,
-			WgPublicKey:    req.WgPublicKey,
-			WgPresharedKey: req.WgPresharedKey,
-			WgAllowedIPs:   req.WgAllowedIPs,
-			WgDNSServer:    req.WgDNSServer,
-			WgPeerAddress:  req.WgPeerAddress,
-			ProxyConfig:    req.ProxyConfig,
+			Label:       req.Label,
+			IPAddress:   req.IPAddress,
+			Provider:    req.Provider,
+			ProxyConfig: req.ProxyConfig,
 		})
 		if err != nil {
 			if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
@@ -252,7 +215,7 @@ func (h *AdminEgressIPsHandler) Create() nethttp.Handler {
 				Level:    "info",
 				Type:     "admin.egress_ip.created",
 				Message:  "管理员创建出口 IP 资源",
-				Metadata: map[string]any{"operator": "admin", "egress_ip_id": ip.ID, "label": ip.Label, "ip_address": ip.IPAddress, "tunnel_type": ip.TunnelType},
+				Metadata: map[string]any{"operator": "admin", "egress_ip_id": ip.ID, "label": ip.Label, "ip_address": ip.IPAddress},
 			}); err != nil {
 				h.logger.Error("record event failed", "type", "admin.egress_ip.created", "error", err)
 			}
@@ -264,18 +227,11 @@ func (h *AdminEgressIPsHandler) Create() nethttp.Handler {
 }
 
 type updateEgressIPRequest struct {
-	Label          string          `json:"label"`
-	IPAddress      string          `json:"ip_address"`
-	Provider       string          `json:"provider"`
-	Status         string          `json:"status"`
-	TunnelType     string          `json:"tunnel_type"`
-	WgEndpoint     *string         `json:"wg_endpoint"`
-	WgPublicKey    *string         `json:"wg_public_key"`
-	WgPresharedKey *string         `json:"wg_preshared_key"`
-	WgAllowedIPs   string          `json:"wg_allowed_ips"`
-	WgDNSServer    *string         `json:"wg_dns_server"`
-	WgPeerAddress  *string         `json:"wg_peer_address"`
-	ProxyConfig    json.RawMessage `json:"proxy_config,omitempty"`
+	Label       string          `json:"label"`
+	IPAddress   string          `json:"ip_address"`
+	Provider    string          `json:"provider"`
+	Status      string          `json:"status"`
+	ProxyConfig json.RawMessage `json:"proxy_config,omitempty"`
 }
 
 func (h *AdminEgressIPsHandler) Update() nethttp.Handler {
@@ -293,43 +249,18 @@ func (h *AdminEgressIPsHandler) Update() nethttp.Handler {
 			return
 		}
 
-		if req.TunnelType == "" {
-			req.TunnelType = network.TunnelTypeWireGuard
-		}
-		if req.TunnelType != network.TunnelTypeWireGuard && req.TunnelType != network.TunnelTypeProxy {
-			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "tunnel_type must be wireguard or proxy"})
+		req.ProxyConfig = mergeProxyPassword(r.Context(), h.store, ipID, req.ProxyConfig)
+		if err := validateProxyConfig(req.ProxyConfig); err != nil {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 
-		if req.TunnelType == network.TunnelTypeProxy {
-			req.ProxyConfig = mergeProxyPassword(r.Context(), h.store, ipID, req.ProxyConfig)
-			if err := validateProxyConfig(req.ProxyConfig); err != nil {
-				writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": err.Error()})
-				return
-			}
-			req.WgEndpoint = nil
-			req.WgPublicKey = nil
-			req.WgPresharedKey = nil
-			req.WgDNSServer = nil
-			req.WgPeerAddress = nil
-			req.WgAllowedIPs = "0.0.0.0/0"
-		} else {
-			req.ProxyConfig = nil
-		}
-
 		ip, err := h.store.UpdateEgressIP(r.Context(), ipID, repository.UpdateEgressIPParams{
-			Label:          req.Label,
-			IPAddress:      req.IPAddress,
-			Provider:       req.Provider,
-			Status:         req.Status,
-			TunnelType:     req.TunnelType,
-			WgEndpoint:     req.WgEndpoint,
-			WgPublicKey:    req.WgPublicKey,
-			WgPresharedKey: req.WgPresharedKey,
-			WgAllowedIPs:   req.WgAllowedIPs,
-			WgDNSServer:    req.WgDNSServer,
-			WgPeerAddress:  req.WgPeerAddress,
-			ProxyConfig:    req.ProxyConfig,
+			Label:       req.Label,
+			IPAddress:   req.IPAddress,
+			Provider:    req.Provider,
+			Status:      req.Status,
+			ProxyConfig: req.ProxyConfig,
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {

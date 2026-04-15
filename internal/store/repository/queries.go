@@ -434,9 +434,7 @@ func (r *Repository) ListHostBindings(ctx context.Context, hostID string) ([]Hos
 
 func (r *Repository) ListEgressIPs(ctx context.Context) ([]EgressIP, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id::text, label, host(ip_address), provider, status, tunnel_type,
-			wg_endpoint, wg_public_key, wg_preshared_key,
-			COALESCE(wg_allowed_ips, '0.0.0.0/0'), wg_dns_server, wg_peer_address::text,
+		SELECT id::text, label, host(ip_address), provider, status,
 			proxy_config, created_at, updated_at
 		FROM egress_ips
 		ORDER BY created_at DESC
@@ -450,9 +448,7 @@ func (r *Repository) ListEgressIPs(ctx context.Context) ([]EgressIP, error) {
 	for rows.Next() {
 		var item EgressIP
 		if err := rows.Scan(
-			&item.ID, &item.Label, &item.IPAddress, &item.Provider, &item.Status, &item.TunnelType,
-			&item.WgEndpoint, &item.WgPublicKey, &item.WgPresharedKey,
-			&item.WgAllowedIPs, &item.WgDNSServer, &item.WgPeerAddress,
+			&item.ID, &item.Label, &item.IPAddress, &item.Provider, &item.Status,
 			&item.ProxyConfig, &item.CreatedAt, &item.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan egress ip: %w", err)
@@ -468,21 +464,15 @@ func (r *Repository) ListEgressIPs(ctx context.Context) ([]EgressIP, error) {
 func (r *Repository) CreateEgressIP(ctx context.Context, params CreateEgressIPParams) (EgressIP, error) {
 	var item EgressIP
 	if err := r.db.QueryRow(ctx, `
-		INSERT INTO egress_ips (label, ip_address, provider, status, wg_endpoint, wg_public_key, wg_preshared_key, wg_allowed_ips, wg_dns_server, wg_peer_address, tunnel_type, proxy_config)
-		VALUES ($1, $2::inet, $3, 'available', $4, $5, $6, $7, $8, $9::cidr, $10, $11)
-		RETURNING id::text, label, host(ip_address), provider, status, tunnel_type,
-			wg_endpoint, wg_public_key, wg_preshared_key,
-			COALESCE(wg_allowed_ips, '0.0.0.0/0'), wg_dns_server, wg_peer_address::text,
+		INSERT INTO egress_ips (label, ip_address, provider, status, proxy_config)
+		VALUES ($1, $2::inet, $3, 'available', $4)
+		RETURNING id::text, label, host(ip_address), provider, status,
 			proxy_config, created_at, updated_at
 	`,
 		params.Label, params.IPAddress, params.Provider,
-		params.WgEndpoint, params.WgPublicKey, params.WgPresharedKey,
-		params.WgAllowedIPs, params.WgDNSServer, params.WgPeerAddress,
-		defaultIfEmpty(params.TunnelType, "wireguard"), params.ProxyConfig,
+		params.ProxyConfig,
 	).Scan(
-		&item.ID, &item.Label, &item.IPAddress, &item.Provider, &item.Status, &item.TunnelType,
-		&item.WgEndpoint, &item.WgPublicKey, &item.WgPresharedKey,
-		&item.WgAllowedIPs, &item.WgDNSServer, &item.WgPeerAddress,
+		&item.ID, &item.Label, &item.IPAddress, &item.Provider, &item.Status,
 		&item.ProxyConfig, &item.CreatedAt, &item.UpdatedAt,
 	); err != nil {
 		return EgressIP{}, fmt.Errorf("create egress ip: %w", err)
@@ -495,25 +485,17 @@ func (r *Repository) UpdateEgressIP(ctx context.Context, egressIPID string, para
 	if err := r.db.QueryRow(ctx, `
 		UPDATE egress_ips SET
 			label = $2, ip_address = $3::inet, provider = $4, status = $5,
-			wg_endpoint = $6, wg_public_key = $7, wg_preshared_key = $8,
-			wg_allowed_ips = $9, wg_dns_server = $10, wg_peer_address = $11::cidr,
-			tunnel_type = $12, proxy_config = $13,
+			proxy_config = $6,
 			updated_at = NOW()
 		WHERE id = $1
-		RETURNING id::text, label, host(ip_address), provider, status, tunnel_type,
-			wg_endpoint, wg_public_key, wg_preshared_key,
-			COALESCE(wg_allowed_ips, '0.0.0.0/0'), wg_dns_server, wg_peer_address::text,
+		RETURNING id::text, label, host(ip_address), provider, status,
 			proxy_config, created_at, updated_at
 	`,
 		egressIPID,
 		params.Label, params.IPAddress, params.Provider, params.Status,
-		params.WgEndpoint, params.WgPublicKey, params.WgPresharedKey,
-		params.WgAllowedIPs, params.WgDNSServer, params.WgPeerAddress,
-		defaultIfEmpty(params.TunnelType, "wireguard"), params.ProxyConfig,
+		params.ProxyConfig,
 	).Scan(
-		&item.ID, &item.Label, &item.IPAddress, &item.Provider, &item.Status, &item.TunnelType,
-		&item.WgEndpoint, &item.WgPublicKey, &item.WgPresharedKey,
-		&item.WgAllowedIPs, &item.WgDNSServer, &item.WgPeerAddress,
+		&item.ID, &item.Label, &item.IPAddress, &item.Provider, &item.Status,
 		&item.ProxyConfig, &item.CreatedAt, &item.UpdatedAt,
 	); err != nil {
 		return EgressIP{}, fmt.Errorf("update egress ip: %w", err)
@@ -579,9 +561,7 @@ func (r *Repository) GetHostDetail(ctx context.Context, hostID string) (HostDeta
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT b.id::text, e.id::text, e.label, host(e.ip_address), e.provider, e.status, e.tunnel_type,
-			e.wg_endpoint, e.wg_public_key, e.wg_preshared_key,
-			COALESCE(e.wg_allowed_ips, '0.0.0.0/0'), e.wg_dns_server, e.wg_peer_address::text,
+		SELECT b.id::text, e.id::text, e.label, host(e.ip_address), e.provider, e.status,
 			e.proxy_config, e.created_at, e.updated_at, b.created_at
 		FROM host_egress_bindings b
 		JOIN egress_ips e ON e.id = b.egress_ip_id
@@ -598,9 +578,7 @@ func (r *Repository) GetHostDetail(ctx context.Context, hostID string) (HostDeta
 		var b BindingWithIP
 		if err := rows.Scan(
 			&b.BindingID,
-			&b.EgressIP.ID, &b.EgressIP.Label, &b.EgressIP.IPAddress, &b.EgressIP.Provider, &b.EgressIP.Status, &b.EgressIP.TunnelType,
-			&b.EgressIP.WgEndpoint, &b.EgressIP.WgPublicKey, &b.EgressIP.WgPresharedKey,
-			&b.EgressIP.WgAllowedIPs, &b.EgressIP.WgDNSServer, &b.EgressIP.WgPeerAddress,
+			&b.EgressIP.ID, &b.EgressIP.Label, &b.EgressIP.IPAddress, &b.EgressIP.Provider, &b.EgressIP.Status,
 			&b.EgressIP.ProxyConfig, &b.EgressIP.CreatedAt, &b.EgressIP.UpdatedAt, &b.CreatedAt,
 		); err != nil {
 			return HostDetail{}, fmt.Errorf("scan binding with ip: %w", err)
@@ -659,9 +637,7 @@ func (r *Repository) ListHostsWithUsername(ctx context.Context) ([]HostWithUsern
 func (r *Repository) GetEgressIP(ctx context.Context, egressIPID string) (EgressIP, error) {
 	var item EgressIP
 	if err := r.db.QueryRow(ctx, `
-		SELECT id::text, label, host(ip_address), provider, status, tunnel_type,
-			wg_endpoint, wg_public_key, wg_preshared_key,
-			COALESCE(wg_allowed_ips, '0.0.0.0/0'), wg_dns_server, wg_peer_address::text,
+		SELECT id::text, label, host(ip_address), provider, status,
 			proxy_config, created_at, updated_at
 		FROM egress_ips
 		WHERE id = $1
@@ -671,13 +647,6 @@ func (r *Repository) GetEgressIP(ctx context.Context, egressIPID string) (Egress
 		&item.IPAddress,
 		&item.Provider,
 		&item.Status,
-		&item.TunnelType,
-		&item.WgEndpoint,
-		&item.WgPublicKey,
-		&item.WgPresharedKey,
-		&item.WgAllowedIPs,
-		&item.WgDNSServer,
-		&item.WgPeerAddress,
 		&item.ProxyConfig,
 		&item.CreatedAt,
 		&item.UpdatedAt,
@@ -691,9 +660,7 @@ func (r *Repository) GetEgressIP(ctx context.Context, egressIPID string) (Egress
 func (r *Repository) GetEgressIPByHost(ctx context.Context, hostID string) (EgressIP, error) {
 	var item EgressIP
 	if err := r.db.QueryRow(ctx, `
-		SELECT e.id::text, e.label, host(e.ip_address), e.provider, e.status, e.tunnel_type,
-			e.wg_endpoint, e.wg_public_key, e.wg_preshared_key,
-			COALESCE(e.wg_allowed_ips, '0.0.0.0/0'), e.wg_dns_server, e.wg_peer_address::text,
+		SELECT e.id::text, e.label, host(e.ip_address), e.provider, e.status,
 			e.proxy_config, e.created_at, e.updated_at
 		FROM host_egress_bindings b
 		JOIN egress_ips e ON e.id = b.egress_ip_id
@@ -706,13 +673,6 @@ func (r *Repository) GetEgressIPByHost(ctx context.Context, hostID string) (Egre
 		&item.IPAddress,
 		&item.Provider,
 		&item.Status,
-		&item.TunnelType,
-		&item.WgEndpoint,
-		&item.WgPublicKey,
-		&item.WgPresharedKey,
-		&item.WgAllowedIPs,
-		&item.WgDNSServer,
-		&item.WgPeerAddress,
 		&item.ProxyConfig,
 		&item.CreatedAt,
 		&item.UpdatedAt,
@@ -721,38 +681,6 @@ func (r *Repository) GetEgressIPByHost(ctx context.Context, hostID string) (Egre
 	}
 
 	return item, nil
-}
-
-func (r *Repository) GetHostWgKeys(ctx context.Context, hostID string) (wgPrivateKey, wgPublicKey string, err error) {
-	var privKey, pubKey *string
-	if err := r.db.QueryRow(ctx, `
-		SELECT wg_private_key, wg_public_key
-		FROM hosts
-		WHERE id = $1
-	`, hostID).Scan(&privKey, &pubKey); err != nil {
-		return "", "", fmt.Errorf("get host wg keys: %w", err)
-	}
-
-	if privKey != nil {
-		wgPrivateKey = *privKey
-	}
-	if pubKey != nil {
-		wgPublicKey = *pubKey
-	}
-	return wgPrivateKey, wgPublicKey, nil
-}
-
-func (r *Repository) SetHostWgKeys(ctx context.Context, hostID, wgPrivateKey, wgPublicKey string) error {
-	_, err := r.db.Exec(ctx, `
-		UPDATE hosts
-		SET wg_private_key = $2, wg_public_key = $3, updated_at = NOW()
-		WHERE id = $1
-	`, hostID, wgPrivateKey, wgPublicKey)
-	if err != nil {
-		return fmt.Errorf("set host wg keys: %w", err)
-	}
-
-	return nil
 }
 
 func (r *Repository) GetHost(ctx context.Context, hostID string) (Host, error) {

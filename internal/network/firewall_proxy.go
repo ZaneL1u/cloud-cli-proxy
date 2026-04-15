@@ -16,8 +16,7 @@ import (
 const ipprotoUDP = 17
 
 // ApplyProxyFirewallRules installs nftables rules inside the container network
-// namespace for proxy mode. Similar to ApplyFirewallRules but uses tun0 instead
-// of the WireGuard interface and adds a whitelist for the proxy server on mgmt0.
+// namespace. Uses tun0 and adds a whitelist for the proxy server on mgmt0.
 func ApplyProxyFirewallRules(containerNS netns.NsHandle, tunIfIndex, loIfIndex, mgmtIfIndex int, proxyServerIP net.IP, proxyServerPort uint16) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()

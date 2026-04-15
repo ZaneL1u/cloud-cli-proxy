@@ -7,13 +7,6 @@ export interface EgressIP {
   ip_address: string;
   provider: string;
   status: string;
-  wg_endpoint: string | null;
-  wg_public_key: string | null;
-  wg_preshared_key: string | null;
-  wg_allowed_ips: string;
-  wg_dns_server: string | null;
-  wg_peer_address: string | null;
-  tunnel_type: string;
   proxy_config: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;

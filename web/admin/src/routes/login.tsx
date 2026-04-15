@@ -101,7 +101,7 @@ function LoginPage() {
           <div className="flex gap-6 pt-4 text-sm text-white/40">
             <div className="flex items-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              WireGuard 全隧道
+              全隧道出网
             </div>
             <div className="flex items-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-emerald-400" />

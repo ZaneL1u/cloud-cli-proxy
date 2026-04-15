@@ -97,8 +97,7 @@ func (h *UserHostsHandler) Get() nethttp.Handler {
 		bindings := make([]repository.UserEgressBinding, 0, len(detail.Bindings))
 		for _, b := range detail.Bindings {
 			bindings = append(bindings, repository.UserEgressBinding{
-				IPAddress:  b.EgressIP.IPAddress,
-				TunnelType: b.EgressIP.TunnelType,
+				IPAddress: b.EgressIP.IPAddress,
 			})
 		}
 

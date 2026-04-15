@@ -48,7 +48,7 @@ const adminSteps: Step[] = [
     details: [
       "点击左侧菜单「出口 IP」",
       "点击「添加」按钮，填写 IP 地址和隧道配置",
-      "支持 WireGuard 和代理两种隧道类型",
+      "支持多种代理协议（SOCKS、VMess、VLESS、Shadowsocks、Trojan、HTTP）",
       "确认 IP 状态为「可用」",
     ],
     tip: "没有出口 IP 的主机无法启动，请至少配置一个。",

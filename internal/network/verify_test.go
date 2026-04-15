@@ -85,7 +85,7 @@ func TestFirstNetworkError_EgressMismatch(t *testing.T) {
 func TestFirstNetworkError_DNSLeak(t *testing.T) {
 	cfg := EgressConfig{
 		ExpectedIP: "1.2.3.4",
-		Tunnel:     &TunnelSpec{DNSServer: "10.0.0.1"},
+		Proxy:      &ProxySpec{DNSServer: "10.0.0.1"},
 	}
 	result := VerifyResult{EgressIPMatch: true, DNSCorrect: false, ActualDNS: "8.8.8.8", LeakBlocked: true}
 

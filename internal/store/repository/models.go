@@ -93,21 +93,14 @@ type Event struct {
 }
 
 type EgressIP struct {
-	ID             string    `json:"id"`
-	Label          string    `json:"label"`
-	IPAddress      string    `json:"ip_address"`
-	Provider       string    `json:"provider"`
-	Status         string    `json:"status"`
-	TunnelType     string    `json:"tunnel_type"`
-	WgEndpoint     *string   `json:"wg_endpoint,omitempty"`
-	WgPublicKey    *string   `json:"wg_public_key,omitempty"`
-	WgPresharedKey *string   `json:"wg_preshared_key,omitempty"`
-	WgAllowedIPs   string    `json:"wg_allowed_ips"`
-	WgDNSServer    *string   `json:"wg_dns_server,omitempty"`
-	WgPeerAddress  *string          `json:"wg_peer_address,omitempty"`
-	ProxyConfig    json.RawMessage  `json:"proxy_config,omitempty"`
-	CreatedAt      time.Time        `json:"created_at"`
-	UpdatedAt      time.Time        `json:"updated_at"`
+	ID          string          `json:"id"`
+	Label       string          `json:"label"`
+	IPAddress   string          `json:"ip_address"`
+	Provider    string          `json:"provider"`
+	Status      string          `json:"status"`
+	ProxyConfig json.RawMessage `json:"proxy_config,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 type DashboardStats struct {
@@ -131,32 +124,18 @@ type BootstrapUserAuth struct {
 }
 
 type CreateEgressIPParams struct {
-	Label          string
-	IPAddress      string
-	Provider       string
-	WgEndpoint     *string
-	WgPublicKey    *string
-	WgPresharedKey *string
-	WgAllowedIPs   string
-	WgDNSServer    *string
-	WgPeerAddress  *string
-	TunnelType     string
-	ProxyConfig    json.RawMessage
+	Label       string
+	IPAddress   string
+	Provider    string
+	ProxyConfig json.RawMessage
 }
 
 type UpdateEgressIPParams struct {
-	Label          string
-	IPAddress      string
-	Provider       string
-	Status         string
-	WgEndpoint     *string
-	WgPublicKey    *string
-	WgPresharedKey *string
-	WgAllowedIPs   string
-	WgDNSServer    *string
-	WgPeerAddress  *string
-	TunnelType     string
-	ProxyConfig    json.RawMessage
+	Label       string
+	IPAddress   string
+	Provider    string
+	Status      string
+	ProxyConfig json.RawMessage
 }
 
 type HostDetail struct {
@@ -206,8 +185,7 @@ type ConnectionInfo struct {
 }
 
 type UserEgressBinding struct {
-	IPAddress  string `json:"ip_address"`
-	TunnelType string `json:"tunnel_type"`
+	IPAddress string `json:"ip_address"`
 }
 
 type CreateUserParams struct {

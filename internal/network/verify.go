@@ -44,9 +44,7 @@ func VerifyNetworkIntegrity(ctx context.Context, containerPID uint32, expected E
 
 	// Check 2: DNS resolver points to tunnel DNS
 	var expectedDNS string
-	if expected.Tunnel != nil {
-		expectedDNS = expected.Tunnel.DNSServer
-	} else if expected.Proxy != nil {
+	if expected.Proxy != nil {
 		expectedDNS = expected.Proxy.DNSServer
 	}
 	verifyDNS(ctx, prefix, expectedDNS, &result)
@@ -126,17 +124,10 @@ func firstNetworkError(expected EgressConfig, r VerifyResult) *NetworkError {
 
 	if !r.EgressIPMatch {
 		if r.ActualEgressIP == "" {
-			var endpoint any
-			if expected.Tunnel != nil {
-				endpoint = expected.Tunnel.PeerEndpoint
-			}
 			return &NetworkError{
 				Type:    ErrEgressUnreachable,
 				Message: "egress connectivity check failed",
 				HostID:  hostID,
-				Metadata: map[string]any{
-					"endpoint": fmt.Sprintf("%v", endpoint),
-				},
 			}
 		}
 		return &NetworkError{
@@ -152,9 +143,7 @@ func firstNetworkError(expected EgressConfig, r VerifyResult) *NetworkError {
 
 	if !r.DNSCorrect {
 		var expectedDNS string
-		if expected.Tunnel != nil {
-			expectedDNS = expected.Tunnel.DNSServer
-		} else if expected.Proxy != nil {
+		if expected.Proxy != nil {
 			expectedDNS = expected.Proxy.DNSServer
 		}
 		return &NetworkError{

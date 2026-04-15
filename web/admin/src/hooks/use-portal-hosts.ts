@@ -11,7 +11,6 @@ export interface PortalHost {
 
 export interface PortalEgressBinding {
   ip_address: string;
-  tunnel_type: string;
 }
 
 export interface ConnectionInfo {

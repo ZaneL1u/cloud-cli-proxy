@@ -18,8 +18,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/net/proxy"
-
-	"github.com/zanel1u/cloud-cli-proxy/internal/network"
 )
 
 type ProbeResult struct {
@@ -473,15 +471,6 @@ func (h *AdminEgressIPsHandler) TestProxy() nethttp.Handler {
 			}
 			h.logger.Error("get egress ip for test failed", "ip_id", ipID, "error", err)
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "get egress ip failed"})
-			return
-		}
-
-		if ip.TunnelType != network.TunnelTypeProxy {
-			writeJSON(w, nethttp.StatusOK, ProbeResult{
-				Status:   "error",
-				TestedAt: time.Now().UTC(),
-				Message:  "WireGuard 类型出口 IP 在容器启动时自动验证，不支持手动测试",
-			})
 			return
 		}
 

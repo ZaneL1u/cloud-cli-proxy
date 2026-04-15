@@ -60,8 +60,7 @@ func TestAdminEgressIPsHandler(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 	sampleIP := repository.EgressIP{
 		ID: "ip1", Label: "test-ip", IPAddress: "1.2.3.4",
-		Provider: "manual", Status: "available", TunnelType: "wireguard",
-		WgAllowedIPs: "0.0.0.0/0",
+		Provider: "manual", Status: "available",
 		CreatedAt: now, UpdatedAt: now,
 	}
 
@@ -93,9 +92,12 @@ func TestAdminEgressIPsHandler(t *testing.T) {
 			name:   "Create egress IP 201",
 			method: "POST",
 			path:   "/v1/admin/egress-ips",
-			body: map[string]string{
+			body: map[string]any{
 				"label": "new-ip", "ip_address": "5.6.7.8",
-				"provider": "aws", "wg_allowed_ips": "0.0.0.0/0",
+				"provider": "aws",
+				"proxy_config": map[string]any{
+					"type": "socks", "server": "proxy.example.com", "server_port": 1080,
+				},
 			},
 			store:      &stubEgressIPStore{createIP: sampleIP},
 			wantStatus: 201,
@@ -136,19 +138,27 @@ func TestAdminEgressIPsHandler(t *testing.T) {
 			name:   "Update egress IP 200",
 			method: "PUT",
 			path:   "/v1/admin/egress-ips/ip1",
-			body: map[string]string{
+			body: map[string]any{
 				"label": "updated", "ip_address": "5.6.7.8",
 				"provider": "aws", "status": "available",
+				"proxy_config": map[string]any{
+					"type": "socks", "server": "proxy.example.com", "server_port": 1080,
+				},
 			},
 			store:      &stubEgressIPStore{updateIP: sampleIP},
 			wantStatus: 200,
 			wantField:  "egress_ip",
 		},
 		{
-			name:       "Update egress IP 404",
-			method:     "PUT",
-			path:       "/v1/admin/egress-ips/missing",
-			body:       map[string]string{"label": "x"},
+			name:   "Update egress IP 404",
+			method: "PUT",
+			path:   "/v1/admin/egress-ips/missing",
+			body: map[string]any{
+				"label": "x",
+				"proxy_config": map[string]any{
+					"type": "socks", "server": "proxy.example.com", "server_port": 1080,
+				},
+			},
 			store:      &stubEgressIPStore{updateErr: pgx.ErrNoRows},
 			wantStatus: 404,
 		},
@@ -174,58 +184,47 @@ func TestAdminEgressIPsHandler(t *testing.T) {
 				"label":      "proxy-ip",
 				"ip_address": "5.6.7.8",
 				"provider":   "manual",
-				"tunnel_type": "proxy",
 				"proxy_config": map[string]any{
 					"type": "socks", "server": "proxy.example.com", "server_port": 1080,
 				},
 			},
 			store: &stubEgressIPStore{createIP: repository.EgressIP{
 				ID: "ip2", Label: "proxy-ip", IPAddress: "5.6.7.8",
-				Provider: "manual", Status: "available", TunnelType: "proxy",
-				WgAllowedIPs: "0.0.0.0/0", CreatedAt: now, UpdatedAt: now,
+				Provider: "manual", Status: "available",
+				CreatedAt: now, UpdatedAt: now,
 			}},
 			wantStatus: 201,
 			wantField:  "egress_ip",
 		},
 		{
-			name:   "Create invalid tunnel_type 400",
+			name:   "Create missing proxy_config 400",
 			method: "POST",
 			path:   "/v1/admin/egress-ips",
 			body: map[string]any{
-				"label": "bad", "ip_address": "1.2.3.4", "tunnel_type": "invalid",
+				"label": "no-config", "ip_address": "1.2.3.4",
 			},
 			store:      &stubEgressIPStore{},
 			wantStatus: 400,
 		},
 		{
-			name:   "Create proxy missing proxy_config 400",
+			name:   "Create unsupported outbound type 400",
 			method: "POST",
 			path:   "/v1/admin/egress-ips",
 			body: map[string]any{
-				"label": "no-config", "ip_address": "1.2.3.4", "tunnel_type": "proxy",
-			},
-			store:      &stubEgressIPStore{},
-			wantStatus: 400,
-		},
-		{
-			name:   "Create proxy unsupported outbound type 400",
-			method: "POST",
-			path:   "/v1/admin/egress-ips",
-			body: map[string]any{
-				"label": "bad-type", "ip_address": "1.2.3.4", "tunnel_type": "proxy",
+				"label": "bad-type", "ip_address": "1.2.3.4",
 				"proxy_config": map[string]any{
-					"type": "wireguard", "server": "example.com", "server_port": 1080,
+					"type": "unsupported", "server": "example.com", "server_port": 1080,
 				},
 			},
 			store:      &stubEgressIPStore{},
 			wantStatus: 400,
 		},
 		{
-			name:   "Create proxy missing server 400",
+			name:   "Create missing server 400",
 			method: "POST",
 			path:   "/v1/admin/egress-ips",
 			body: map[string]any{
-				"label": "no-server", "ip_address": "1.2.3.4", "tunnel_type": "proxy",
+				"label": "no-server", "ip_address": "1.2.3.4",
 				"proxy_config": map[string]any{
 					"type": "socks", "server_port": 1080,
 				},
@@ -238,24 +237,13 @@ func TestAdminEgressIPsHandler(t *testing.T) {
 			method: "POST",
 			path:   "/v1/admin/egress-ips",
 			body: map[string]any{
-				"label": "no-uuid", "ip_address": "1.2.3.4", "tunnel_type": "proxy",
+				"label": "no-uuid", "ip_address": "1.2.3.4",
 				"proxy_config": map[string]any{
 					"type": "vmess", "server": "proxy.example.com", "server_port": 443,
 				},
 			},
 			store:      &stubEgressIPStore{},
 			wantStatus: 400,
-		},
-		{
-			name:   "Create without tunnel_type defaults to wireguard 201",
-			method: "POST",
-			path:   "/v1/admin/egress-ips",
-			body: map[string]string{
-				"label": "wg-default", "ip_address": "9.8.7.6", "provider": "manual",
-			},
-			store:      &stubEgressIPStore{createIP: sampleIP},
-			wantStatus: 201,
-			wantField:  "egress_ip",
 		},
 	}
 

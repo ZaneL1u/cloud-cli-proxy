@@ -7,27 +7,23 @@ import (
 	"log/slog"
 )
 
-// RoutingProvider implements Provider by delegating to TunnelProvider or
-// SingBoxProvider based on the egress TunnelType. This is the single injection
-// point used by host-agent — callers don't need to know which provider handles
-// a given host.
+// RoutingProvider implements Provider by delegating to SingBoxProvider for
+// proxy egress mode. This is the single injection point used by host-agent.
 type RoutingProvider struct {
-	tunnel  *TunnelProvider
 	singbox *SingBoxProvider
 	logger  *slog.Logger
 }
 
-// NewRoutingProvider creates a RoutingProvider that owns both a TunnelProvider
-// and a SingBoxProvider for WireGuard and proxy egress modes respectively.
+// NewRoutingProvider creates a RoutingProvider that owns a SingBoxProvider
+// for proxy egress mode.
 func NewRoutingProvider(logger *slog.Logger) *RoutingProvider {
 	return &RoutingProvider{
-		tunnel:  NewTunnelProvider(logger),
 		singbox: NewSingBoxProvider(logger),
 		logger:  logger,
 	}
 }
 
-// PrepareHost routes to the correct provider based on TunnelType.
+// PrepareHost routes to the sing-box provider.
 func (rp *RoutingProvider) PrepareHost(ctx context.Context, spec HostNetworkSpec) error {
 	if spec.Egress == nil {
 		return &NetworkError{
@@ -37,20 +33,12 @@ func (rp *RoutingProvider) PrepareHost(ctx context.Context, spec HostNetworkSpec
 		}
 	}
 
-	switch spec.Egress.TunnelType {
-	case TunnelTypeProxy:
-		rp.logger.Info("routing to sing-box provider", "host_id", spec.HostID, "tunnel_type", spec.Egress.TunnelType)
-		return rp.singbox.PrepareHost(ctx, spec)
-	default:
-		rp.logger.Info("routing to wireguard provider", "host_id", spec.HostID, "tunnel_type", spec.Egress.TunnelType)
-		return rp.tunnel.PrepareHost(ctx, spec)
-	}
+	rp.logger.Info("routing to sing-box provider", "host_id", spec.HostID)
+	return rp.singbox.PrepareHost(ctx, spec)
 }
 
-// CleanupHost cleans up artifacts from both providers. Since we may not know
-// which provider was used (e.g. after a crash), both are called defensively.
+// CleanupHost cleans up artifacts from the sing-box provider.
 func (rp *RoutingProvider) CleanupHost(ctx context.Context, spec HostNetworkSpec) error {
-	rp.tunnel.CleanupHost(ctx, spec)
 	rp.singbox.CleanupHost(ctx, spec)
 	return nil
 }
