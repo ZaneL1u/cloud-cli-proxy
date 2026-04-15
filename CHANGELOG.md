@@ -4,6 +4,32 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v2.0 - 2026-04-15
+## What's Changed
+
+### Backend (Go / API)
+- feat(28-01): add --security-opt apparmor=unconfined to createHost() (fa90fbe)
+- feat(27-02): pass current working directory to ConnectAndRunClaude (6614104)
+- refactor(27-02): split ConnectAndRunClaude into sshConnect/mountWorkspace/runClaude three-phase architecture (5bcc546)
+- test(27-01): waitForMount 单元测试 (aa29d87)
+- feat(27-01): 添加 pkg/sftp 依赖并创建 mount.go (30d691a)
+- feat(26-01): cobra 根命令透传与退出码统一 (125e773)
+- feat(26-01): SSH 模块重构——参数接收、安全命令构建、非 TTY 分支与退出码上浮 (3a7f666)
+- feat(25-01): SSH 会话增加连接超时与根命令退出码完善 (8550bfe)
+- feat(25-01): 完善 Entry 认证响应处理与就绪轮询错误分类 (5d18243)
+- feat(25-01): cloud-claude CLI 骨架——cobra 入口、配置模块、init 子命令 (6fd35c3)
+- feat(24-01): Worker 创建容器附加 FUSE 设备和 SYS_ADMIN 能力 (07a7b06)
+
+### Runtime & Deployment
+- feat(28-02): add FUSE kernel module detection to host-preflight.sh (bf22560)
+- feat(24-01): 受管镜像预装 sshfs/fuse3 并配置 FUSE 权限 (d853b50)
+
+### Docs
+- docs(28-02): add FUSE prerequisites and AppArmor compatibility to deployment guides (fca403e)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v1.6.10...v2.0
+
+
 ## v1.6.10 - 2026-04-10
 ## What's Changed
 
