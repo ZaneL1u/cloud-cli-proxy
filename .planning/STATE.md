@@ -18,19 +18,19 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-14)
+See: .planning/PROJECT.md (updated 2026-04-15)
 
 **Core value:** 给每个用户提供一台开箱即用的 SSH 云主机，并且严格保证其所有出网流量都走受控的指定出口 IP
-**Current focus:** Phase 25 — cloud-claude-cli
+**Current focus:** Phase 26 — 参数透传与终端体验
 
 ## Current Position
 
 Phase: 26
 Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-15
+Status: Ready to plan
+Last activity: 2026-04-15 -- Phase 25 complete, transitioning to Phase 26
 
-Progress: [░░░░░░░░░░] 0% (v2.0)
+Progress: [██████████████████░░] 88% (v2.0)
 
 ## Performance Metrics
 
@@ -73,10 +73,10 @@ None yet.
 ### Blockers/Concerns
 
 - FUSE + AppArmor/seccomp 兼容性需在目标 Linux 宿主上验证（Phase 28 专项）
-- golang.org/x/crypto 全仓版本统一需在 Phase 25 开发前完成
+- [Phase 25] 代码审查发现 SSH 退出时 TTY raw 模式未恢复（HI-01），建议在 Phase 26 终端体验工作中一并修复
 
 ## Session Continuity
 
-Last session: 2026-04-15T04:12:48.996Z
-Stopped at: Completed 25-01-PLAN.md
+Last session: 2026-04-15T04:20:00.000Z
+Stopped at: Phase 25 complete, ready to discuss Phase 26
 Resume file: None
