@@ -76,6 +76,9 @@ export function CreateHostDialog({
   const createMutation = useCreateHost();
   const { data: task } = useTaskPolling(taskId);
 
+  const isTracking = !!taskId;
+  const taskStatus = task?.status ?? "pending";
+
   const qc = useQueryClient();
   const prevTaskStatus = useRef<string | null>(null);
 
@@ -93,9 +96,6 @@ export function CreateHostDialog({
   const egressIPs = (egressData?.egress_ips ?? []).filter(
     (ip: any) => ip.status === "available",
   );
-
-  const isTracking = !!taskId;
-  const taskStatus = task?.status ?? "pending";
   const isDone =
     taskStatus === "succeeded" ||
     taskStatus === "failed" ||
