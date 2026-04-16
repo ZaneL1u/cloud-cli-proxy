@@ -104,7 +104,7 @@ func mountWorkspace(conn *ssh.Client, localDir, remotePath string) (cleanup func
 		return sess.Run(checkCmd)
 	}
 
-	if err := waitForMount(check, 200*time.Millisecond, 10*time.Second); err != nil {
+	if err := waitForMount(remotePath, check, 200*time.Millisecond, 10*time.Second); err != nil {
 		sshfsSession.Close()
 		<-sftpDone
 		server.Close()
@@ -123,7 +123,7 @@ func mountWorkspace(conn *ssh.Client, localDir, remotePath string) (cleanup func
 }
 
 // waitForMount 轮询 check 函数直到挂载就绪或超时。
-func waitForMount(check func() error, interval, timeout time.Duration) error {
+func waitForMount(mountPath string, check func() error, interval, timeout time.Duration) error {
 	var lastErr error
 	if err := check(); err == nil {
 		return nil
@@ -140,7 +140,7 @@ func waitForMount(check func() error, interval, timeout time.Duration) error {
 		select {
 		case <-deadline.C:
 			return &MountNotReadyError{
-				MountPath: "(remote)",
+				MountPath: mountPath,
 				Timeout:   timeout,
 				LastErr:   lastErr,
 			}

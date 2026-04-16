@@ -11,7 +11,7 @@ func TestWaitForMount(t *testing.T) {
 	t.Run("succeeds when check passes immediately", func(t *testing.T) {
 		check := func() error { return nil }
 
-		err := waitForMount(check, 10*time.Millisecond, 100*time.Millisecond)
+		err := waitForMount("/workspace", check, 10*time.Millisecond, 100*time.Millisecond)
 		if err != nil {
 			t.Fatalf("expected nil error, got %v", err)
 		}
@@ -27,7 +27,7 @@ func TestWaitForMount(t *testing.T) {
 			return nil
 		}
 
-		err := waitForMount(check, 10*time.Millisecond, 500*time.Millisecond)
+		err := waitForMount("/workspace", check, 10*time.Millisecond, 500*time.Millisecond)
 		if err != nil {
 			t.Fatalf("expected nil error, got %v", err)
 		}
@@ -39,7 +39,7 @@ func TestWaitForMount(t *testing.T) {
 	t.Run("returns MountNotReadyError on timeout", func(t *testing.T) {
 		check := func() error { return errors.New("not mounted") }
 
-		err := waitForMount(check, 10*time.Millisecond, 50*time.Millisecond)
+		err := waitForMount("/workspace", check, 10*time.Millisecond, 50*time.Millisecond)
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
