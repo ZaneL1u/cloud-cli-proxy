@@ -248,7 +248,7 @@ func (r *Repository) GetBootstrapUserByUsername(ctx context.Context, username st
 func (r *Repository) GetPrimaryHostByUserID(ctx context.Context, userID string) (Host, error) {
 	var item Host
 	if err := r.db.QueryRow(ctx, `
-		SELECT id::text, user_id::text, status, COALESCE(short_id, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, created_at, updated_at
+		SELECT id::text, user_id::text, status, COALESCE(short_id, ''), COALESCE(entry_password, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, created_at, updated_at
 		FROM hosts
 		WHERE user_id = $1 AND slot_key = 'primary'
 		LIMIT 1
@@ -257,6 +257,7 @@ func (r *Repository) GetPrimaryHostByUserID(ctx context.Context, userID string) 
 		&item.UserID,
 		&item.Status,
 		&item.ShortID,
+		&item.EntryPassword,
 		&item.TemplateImageRef,
 		&item.HomeVolumeName,
 		&item.SlotKey,

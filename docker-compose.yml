@@ -23,7 +23,7 @@ services:
         condition: service_healthy
         required: false
     environment:
-      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      DATABASE_URL: postgres://${POSTGRES_USER:-cloudproxy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-cloudproxy}?sslmode=disable
       CONTROL_PLANE_ADDR: ":8080"
       HOST_AGENT_MODE: embedded
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
