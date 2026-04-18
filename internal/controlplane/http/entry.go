@@ -20,6 +20,29 @@ type EntryStore interface {
 	GetPrimaryHostByUserID(context.Context, string) (repository.Host, error)
 	GetHostByShortID(context.Context, string) (repository.HostSSHAuth, error)
 	GetUser(context.Context, string) (repository.User, error)
+	// ResolveClaudeAccountIDForEntry 供 ready 响应填充 claude_account_id（Phase 30 D-05）。
+	// 未命中返回 ok=false，而非错误。
+	ResolveClaudeAccountIDForEntry(ctx context.Context, userID, hostID string) (string, bool, error)
+}
+
+// v3CapBaseline 是 Phase 30 受管镜像的 v3 基线 tag：当 image_version 与它字符串相等时
+// supports_mutagen / supports_mergerfs 同时为 true（D-07）。本阶段不引入多 tag 对照表。
+const v3CapBaseline = "v3.0.0"
+
+// deriveEntryCapabilities 按 D-06/D-07 从 template_image_ref 推导 Entry API 能力字段。
+// 规则：
+//  1. 整体 trim 空白；
+//  2. 取最后一个 ":" 之后的 tag；若不存在 ":"，整串视为 tag；
+//  3. 再对 tag trim 空白（兼容异常配置）；
+//  4. supports_mutagen = supports_mergerfs = (tag == v3CapBaseline)。
+func deriveEntryCapabilities(templateImageRef string) (imageVersion string, supportsMutagen, supportsMergerfs bool) {
+	tag := strings.TrimSpace(templateImageRef)
+	if idx := strings.LastIndex(tag, ":"); idx != -1 {
+		tag = tag[idx+1:]
+	}
+	tag = strings.TrimSpace(tag)
+	supports := tag == v3CapBaseline
+	return tag, supports, supports
 }
 
 type EntryHandler struct {
@@ -99,7 +122,7 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 		}
 
 		var user repository.User
-		var hostShortID, hostEntryPassword, hostStatus string
+		var hostID, hostShortID, hostEntryPassword, hostStatus, templateImageRef string
 
 		hostAuth, hostErr := h.store.GetHostByShortID(r.Context(), shortID)
 		if hostErr == nil {
@@ -112,9 +135,11 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 				return
 			}
 			user = u
+			hostID = hostAuth.HostID
 			hostShortID = hostAuth.HostShortID
 			hostEntryPassword = hostAuth.EntryPassword
 			hostStatus = hostAuth.HostStatus
+			templateImageRef = hostAuth.TemplateImageRef
 		} else {
 			u, err := h.store.GetUserByShortID(r.Context(), shortID)
 			if err != nil {
@@ -142,9 +167,11 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 			}
 			h.logger.Info("entry auth: resolved by user short_id (fallback to primary host)",
 				"short_id", shortID, "host_id", primaryHost.ID, "host_status", primaryHost.Status)
+			hostID = primaryHost.ID
 			hostShortID = primaryHost.ShortID
 			hostEntryPassword = primaryHost.EntryPassword
 			hostStatus = primaryHost.Status
+			templateImageRef = primaryHost.TemplateImageRef
 		}
 
 		if user.Status != "active" {
@@ -171,12 +198,35 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 			sshHost = sshHost[:idx]
 		}
 
-		writeJSON(w, nethttp.StatusOK, map[string]any{
-			"ssh_user": hostShortID,
-			"ssh_pass": hostEntryPassword,
-			"ssh_host": sshHost,
-			"ssh_port": 2222,
-			"status":   "ready",
-		})
+		// Phase 30 D-06/D-07：仅依据 template_image_ref 推导能力字段，
+		// 不访问 host-agent / Docker registry（D-04 维持 Phase 29 结论）。
+		imageVersion, supportsMutagen, supportsMergerfs := deriveEntryCapabilities(templateImageRef)
+
+		resp := map[string]any{
+			"ssh_user":          hostShortID,
+			"ssh_pass":          hostEntryPassword,
+			"ssh_host":          sshHost,
+			"ssh_port":          2222,
+			"status":            "ready",
+			"image_version":     imageVersion,
+			"supports_mutagen":  supportsMutagen,
+			"supports_mergerfs": supportsMergerfs,
+		}
+
+		// Phase 30 D-05：ready 路径按账号解析结果追加 claude_account_id；
+		// 未命中 -> 省略字段（omitempty 语义），报错 -> 500 fail-fast，
+		// 避免把"数据库错误"静默降级成"无账号"。
+		accountID, ok, err := h.store.ResolveClaudeAccountIDForEntry(r.Context(), user.ID, hostID)
+		if err != nil {
+			h.logger.Error("entry auth: resolve claude account failed",
+				"host_id", hostID, "user_id", user.ID, "error", err)
+			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		if ok {
+			resp["claude_account_id"] = accountID
+		}
+
+		writeJSON(w, nethttp.StatusOK, resp)
 	})
 }
