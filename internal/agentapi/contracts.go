@@ -48,6 +48,10 @@ type HostActionRequest struct {
 	SSHPrivateKey string            `json:"ssh_private_key,omitempty"`
 	SSHKeys       []SSHKeyEntry     `json:"ssh_keys,omitempty"`
 	Volumes       []VolumeMount     `json:"volumes,omitempty"`
+	// ClaudeAccountID 携带 Phase 30 D-09 规定的账号维度标识，供 Phase 33 worker
+	// 组装 `claude-state-{claude_account_id}` volume 与容器 label 使用。
+	// `omitempty` 是契约：空串表示"本次 action 无账号维度"，禁止写入空字符串来表达"已分配但未知"。
+	ClaudeAccountID string `json:"claude_account_id,omitempty"`
 }
 
 type TaskStatusUpdate struct {
