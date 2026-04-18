@@ -107,7 +107,7 @@
 | 26. 参数透传与终端体验 | v2.0 | 1/1 | Complete | 2026-04-15 |
 | 27. 双 session 目录映射 | v2.0 | 2/2 | Complete | 2026-04-15 |
 | 28. 生产 FUSE 兼容性验证 | v2.0 | 2/2 | Complete | 2026-04-15 |
-| 29. 受管镜像 v3 + Worker 容器参数 | v3.0 | 1/6 | In Progress|  |
+| 29. 受管镜像 v3 + Worker 容器参数 | v3.0 | 2/6 | In Progress|  |
 | 30. 控制面数据模型 + Entry API | v3.0 | 0/2 | Pending | — |
 | 31. CLI 三层文件映射重构 | v3.0 | 0/3 | Pending | — |
 | 32. SSH 会话可靠性 + tmux + 多端 | v3.0 | 0/3 | Pending | — |
