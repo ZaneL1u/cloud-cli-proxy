@@ -170,3 +170,38 @@ func TestResolveClaudeAccountIDForEntry_Signature(t *testing.T) {
 		t.Errorf("返回值 2 必须是 error；实际 %s", mt.Out(2))
 	}
 }
+
+// TestWave1_DataLayerBoundary 保护 Phase 30 Plan 01 只覆盖 migration + repository 变更，
+// 避免在数据层提前引入 Wave 2（HTTP / cloudclaude）的职责。
+// 任一违约都说明波次边界被破坏（D-11/D-12，ROADMAP Phase 30 Scope）。
+func TestWave1_DataLayerBoundary(t *testing.T) {
+	// 1) Wave 1 的关键产物必须存在且位于 internal/store/**。
+	migrationPath := filepath.Join("..", "migrations", migration0014Filename)
+	if _, err := os.Stat(migrationPath); err != nil {
+		t.Fatalf("Wave 1 必须交付 %s：%v", migrationPath, err)
+	}
+
+	// 2) D-05 两条查询必须保持参数化、非字符串拼接（T-30-01 缓解）。
+	sqls := map[string]string{
+		"resolveClaudeAccountByHostSQL":         resolveClaudeAccountByHostSQL,
+		"resolveClaudeAccountByUserFallbackSQL": resolveClaudeAccountByUserFallbackSQL,
+		"getHostByShortIDSQL":                   getHostByShortIDSQL,
+	}
+	for name, q := range sqls {
+		if strings.Contains(q, "fmt.Sprintf") || strings.Contains(q, "||") {
+			t.Errorf("%s 疑似出现字符串拼接；数据层必须全部走 pgx 参数化：\n%s", name, q)
+		}
+		if !strings.Contains(q, "$1") {
+			t.Errorf("%s 必须至少有一个占位符（$1）；实际:\n%s", name, q)
+		}
+	}
+
+	// 3) 数据层只应位于 internal/store/**；断言当前测试文件的归属路径。
+	abs, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatalf("resolve cwd: %v", err)
+	}
+	if !strings.Contains(abs, filepath.Join("internal", "store", "repository")) {
+		t.Errorf("本测试必须归属 internal/store/repository（Wave 1 边界）；实际 %s", abs)
+	}
+}
