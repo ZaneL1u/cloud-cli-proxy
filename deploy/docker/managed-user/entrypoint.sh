@@ -57,6 +57,63 @@ wait_for_x_display() {
   return 1
 }
 
+# ===== v3.0 stages — D-09 / PITFALLS M4 串行快速失败 =====
+
+prepare_v3_dirs() {
+  echo "[entrypoint] v3: chown /home/claude /workspace-hot /workspace-cold /var/lib/claude-persist"
+  chown -R 1000:1000 \
+    /home/claude \
+    /workspace-hot \
+    /workspace-cold \
+    /var/lib/claude-persist 2>/dev/null || true
+}
+
+prepare_mutagen_agent() {
+  local src=/opt/mutagen-agents.tar.gz
+  local dest=/usr/local/libexec/mutagen/agents
+  if [[ ! -f "$src" ]]; then
+    echo "[entrypoint] v3: FATAL missing $src" >&2
+    exit 1
+  fi
+  mkdir -p "$dest"
+  if [[ ! -f "$dest/.extracted" ]]; then
+    tar -xzf "$src" -C "$dest"
+    touch "$dest/.extracted"
+  fi
+  echo "[entrypoint] v3: mutagen agents ready at $dest"
+}
+
+prepare_mergerfs_check() {
+  if ! command -v mergerfs >/dev/null 2>&1; then
+    echo "[entrypoint] v3: FATAL mergerfs binary missing" >&2
+    exit 1
+  fi
+  local ver
+  ver="$(mergerfs --version 2>&1 | head -n1 || true)"
+  echo "[entrypoint] v3: mergerfs available ($ver) — mount deferred to cloud-claude (Phase 31)"
+  # SC1 / C1 / C2 — documented params for Phase 31 (static traceability):
+  #   func.readdir=cor:4,cache.attr=30,cache.entry=30,cache.readdir=true,cache.files=off
+  #   category.create=ff, inodecalc=path-hash
+  #   2-way: /workspace-hot=RW:/workspace-cold=NC,RO
+  # Q10: CLOUD_CLAUDE_MERGERFS_BRANCHES reserved for Phase 31
+  echo "[entrypoint] v3: mergerfs params (Phase 31): func.readdir=cor:4 category.create=ff inodecalc=path-hash"
+}
+
+assert_tmux_version() {
+  local tmux_ver
+  tmux_ver="$(tmux -V 2>/dev/null | awk '{print $2}' || true)"
+  case "$tmux_ver" in
+    3.4*|3.5*|3.6*|3.7*|3.8*|3.9*|[4-9].*)
+      echo "[entrypoint] v3: tmux ${tmux_ver} >= 3.4 ok"
+      echo "$tmux_ver" >/etc/cloud-claude/tmux.version
+      ;;
+    *)
+      echo "[entrypoint] v3: FATAL tmux ${tmux_ver} < 3.4" >&2
+      exit 1
+      ;;
+  esac
+}
+
 # SSH setup
 mkdir -p /var/run/sshd
 if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
@@ -181,6 +238,12 @@ su "${RUN_USER}" -c 'DISPLAY=:99 HOME=/workspace pcmanfm --desktop --profile def
 
 # 预热一遍 Chromium 检测，方便排查图标点击失败。
 su "${RUN_USER}" -c 'HOME=/workspace /usr/local/bin/launch-chromium.sh --version' >>"${CHROMIUM_LOG}" 2>&1 || true
+
+# ===== v3.0 stages (serialized fail-fast, D-09 order) =====
+prepare_v3_dirs
+prepare_mutagen_agent
+prepare_mergerfs_check
+assert_tmux_version
 
 # Foreground: sshd
 exec /usr/sbin/sshd -D -e
