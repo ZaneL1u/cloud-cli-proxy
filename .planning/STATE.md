@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 远端开发体验升级
-status: defining_requirements
-stopped_at: Milestone v3.0 started — defining requirements
-last_updated: "2026-04-17T00:00:00.000Z"
-last_activity: 2026-04-17
+status: Defining requirements
+stopped_at: Phase 29 context gathered
+last_updated: "2026-04-18T08:04:31.686Z"
+last_activity: 2026-04-17 — Milestone v3.0 started
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -40,6 +40,7 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0% (v3.
 Full decision log in PROJECT.md Key Decisions table.
 
 v3.0 关键方向已定：
+
 - 文件映射改为 Mutagen + sshfs + mergerfs 三层（替代纯 sshfs）
 - 容器内默认包一层 tmux/dtach 实现会话可恢复
 - 多端连接默认 attach 同一 session，`--new-session` 独占
@@ -64,6 +65,6 @@ None — 等待 REQUIREMENTS.md 与 ROADMAP.md 产出后进入 phase 执行。
 
 ## Session Continuity
 
-Last session: 2026-04-17
-Stopped at: v3.0 milestone 启动，准备 research 与 REQUIREMENTS.md
-Resume file: None
+Last session: 2026-04-18T08:04:31.674Z
+Stopped at: Phase 29 context gathered
+Resume file: .planning/phases/29-v3-worker/29-CONTEXT.md
