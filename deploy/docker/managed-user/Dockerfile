@@ -73,6 +73,26 @@ RUN echo "deb [trusted=yes arch=$(dpkg --print-architecture)] http://deb.debian.
     && apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
+# mergerfs 2.41.1 — GitHub release static .deb（D-04 / M3 防御）
+ARG MERGERFS_VERSION=2.41.1
+ARG MERGERFS_SHA256_AMD64=118a95b62dc1dd16f1bb9529670ef412a78b4a1a0b576ffbd319b41511a5c12d
+ARG MERGERFS_SHA256_ARM64=06161f44dff1050933566b25ca9d9a4599ae3aad857e53bf7c12b77e5ff808f5
+RUN ARCH=$(dpkg --print-architecture) \
+    && case "${ARCH}" in \
+         amd64) EXPECTED_SHA="${MERGERFS_SHA256_AMD64}" ;; \
+         arm64) EXPECTED_SHA="${MERGERFS_SHA256_ARM64}" ;; \
+         *) echo "unsupported arch: ${ARCH}" >&2; exit 1 ;; \
+       esac \
+    && if [ -z "${EXPECTED_SHA}" ]; then \
+         echo "MERGERFS sha256 not set for architecture: ${ARCH}" >&2; exit 1; \
+       fi \
+    && curl -fsSL -o /tmp/mergerfs.deb \
+        "https://github.com/trapexit/mergerfs/releases/download/${MERGERFS_VERSION}/mergerfs_${MERGERFS_VERSION}.ubuntu-noble_${ARCH}.deb" \
+    && echo "${EXPECTED_SHA}  /tmp/mergerfs.deb" | sha256sum -c - \
+    && dpkg -i /tmp/mergerfs.deb \
+    && rm /tmp/mergerfs.deb \
+    && mergerfs --version
+
 RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
