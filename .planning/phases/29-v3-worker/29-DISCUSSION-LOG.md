@@ -116,3 +116,35 @@
 - host-preflight.sh `--apply` 自动修复模式（运维反馈后评估）
 - mergerfs 3 路 branch（通过 env 预留，Phase 31 决策）
 - arm64 真机验收（推迟到 Phase 35 或 v3.1）
+
+---
+
+## 修正记录 2026-04-18 — D-23 AppArmor override 路径
+
+**背景：** `gsd-phase-researcher`（29-RESEARCH.md）通过 WebSearch 2026-04-18 实时验证时发现，D-23 最初指定的 `/etc/apparmor.d/local/docker-default` 路径与上游主流修复方式不一致。
+
+**技术原因：** Ubuntu 25.04 在 fuse 3.14.0-10 中新增了独立的 `/etc/apparmor.d/fusermount3` profile，它才是在 25.04+ 下拦截 `capability dac_override` 的真正执行者。修改 `docker-default` 的 local override 无法影响这个独立 profile——按原 D-23 实现，host-preflight.sh 即使通过，容器内 FUSE 挂载（mergerfs / sshfs / mutagen）仍会报 `fusermount3: mount failed: Permission denied`，连 `--privileged` 也无法绕过。Critical Pitfall **C6** 的防御会实际失效。
+
+**证据链：**
+- Launchpad bug [#2111105](https://bugs.launchpad.net/ubuntu/+source/fuse3/+bug/2111105)
+- moby/moby#50013
+- nestybox/sysbox#947
+- containerd/stargz-snapshotter#2144
+
+**候选方案：**
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| A. 修正 D-23 路径为 `/etc/apparmor.d/local/fusermount3`，同步更新运维手册与 Success Criteria #7 断言 | 技术正确，单一路径，运维文档清晰 | ✓ |
+| B. host-preflight.sh 双检测 `docker-default` + `fusermount3`，任一通过即 OK | 更保守但运维文档会歧义 | |
+| C. 保留 D-23 原文，接受在 Ubuntu 25.04 真机上 C6 复现风险 | 等于放弃 C6 防御 | |
+
+**User's choice（2026-04-18，显式澄清）:** A — 修正为 `fusermount3` 路径
+
+**影响范围：**
+- D-23：检测与修复命令路径改为 `/etc/apparmor.d/local/fusermount3`；`apparmor_parser -r /etc/apparmor.d/fusermount3`
+- D-25：运维手册按新路径撰写
+- Success Criteria #7（ROADMAP）：在 25.04 宿主机缺 override 时，host-preflight.sh 断言 `fusermount3` 文件内容，退出码 1 并打印正确修复命令
+- 29-RESEARCH.md §host-preflight.sh 骨架已按 `fusermount3` 路径实现，planner 可直接消费
+
+**Notes:** D-23 文本已在 29-CONTEXT.md 内就地修正并附修正说明；不删除修正历史，便于后续审计追溯。
