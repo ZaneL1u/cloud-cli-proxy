@@ -158,11 +158,14 @@ RUN mkdir -p \
         /var/lib/claude-persist
 
 COPY deploy/docker/managed-user/sshd_config /etc/ssh/sshd_config
+COPY deploy/docker/managed-user/tmux.conf /etc/tmux.conf
+COPY deploy/docker/managed-user/profile.d-cloud-claude.sh /etc/profile.d/cloud-claude.sh
 COPY deploy/docker/managed-user/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY deploy/docker/managed-user/launch-chromium.sh /usr/local/bin/launch-chromium.sh
 COPY deploy/docker/managed-user/restart-vnc.sh /usr/local/bin/restart-vnc
 COPY deploy/docker/managed-user/claude-wrapper.sh /usr/local/bin/claude
 
+RUN chmod 0644 /etc/tmux.conf /etc/profile.d/cloud-claude.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/launch-chromium.sh /usr/local/bin/restart-vnc /usr/local/bin/claude
 
 WORKDIR /workspace
