@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -5,6 +6,12 @@ ENV HOME=/workspace
 ENV WORKSPACE_USER=workspace
 ENV WORKSPACE_UID=1000
 ENV WORKSPACE_GID=1000
+
+# 启用 BuildKit apt cache mount（必须先移除 docker-clean，否则 cache 会被自动清空）
+# 参考：https://docs.docker.com/build/cache/optimize (D-03, M18 防御)
+RUN rm -f /etc/apt/apt.conf.d/docker-clean \
+    && echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' \
+        > /etc/apt/apt.conf.d/keep-cache
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
