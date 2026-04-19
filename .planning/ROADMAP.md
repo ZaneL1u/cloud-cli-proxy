@@ -76,7 +76,11 @@
 
 - [ ] **Phase 29: 受管镜像 v3 + Worker 容器参数扩展** — Dockerfile 加 mergerfs/mutagen-agent、entrypoint 串行编排、Worker `Volumes` 字段、`image.lock` 凸 v3.0.0、AppArmor 部署文档 (0/3 plans)
 - [ ] **Phase 30: 控制面数据模型 + Entry API 扩展** — `claude_accounts.persistent_volume_name` migration、`HostActionRequest` 扩展、Entry API 返回 `image_version` / `supports_*` / `claude_account_id`（向后兼容） (0/2 plans，已规划见下)
-- [ ] **Phase 31: CLI 三层文件映射重构** — cloud-claude 拆分 `mount_strategy`/`mount_mutagen`/`mount_sshfs`/`mount_merge`，实现 `--mount-mode` 降级状态机、Mutagen 白名单 + ignore、Mutagen ‖ sshfs 并发 (0/3 plans)
+- [ ] **Phase 31: CLI 三层文件映射重构** — cloud-claude 拆分 `mount_strategy`/`mount_mutagen`/`mount_sshfs`/`mount_merge`，实现 `--mount-mode` 降级状态机、Mutagen 白名单 + ignore、Mutagen ‖ sshfs 并发 (0/3 plans，已规划见下)
+  Plans:
+  - [ ] `.planning/phases/31-cli/plans/01-errcodes-mutagen-embed/PLAN.md` — errcodes 注册表雏形（15 条）+ Mutagen v0.18.1 4 平台 go:embed + 跨平台 case-insensitive Go probe（Wave 1）
+  - [ ] `.planning/phases/31-cli/plans/02-mount-three-layer/PLAN.md` — mount.go 拆 4 文件 + `--mount-mode` 状态机 + 安全门 + 50MB 拒绝 + askpass / sshfs 抖动 watcher / last-session.json + `ConnectAndRunClaudeV3` + cobra flag（Wave 2）
+  - [ ] `.planning/phases/31-cli/plans/03-oauth-conflicts-integration/PLAN.md` — OAuth 三态检查 + Mutagen conflict 冒泡（--template）+ `cloud-claude sync conflicts` 子命令 + 6 个集成测试 + docker compose fixture（Wave 3）
 - [ ] **Phase 32: SSH 会话可靠性 + tmux 包装 + 多端** — `session.go` tmux 决策、KeepAlive + 退避重连、`--new-session`/`--take-over`、多端 banner、账号级 Mutagen 单例锁 (0/3 plans)
 - [ ] **Phase 33: Claude Code 状态持久化（CLI + 镜像 + admin GC）** — entrypoint symlink `/var/lib/claude-persist`、Worker `docker volume create` 幂等、admin DELETE 事务联动 `volume rm` (0/2 plans)
 - [ ] **Phase 34: cloud-claude doctor v3 + 错误码统一** — `doctor` 5 维度子命令 + `--fix`/`--json`、统一错误码 `<DOMAIN>_<KIND>_<NUM>`、`cloud-claude explain` (0/3 plans)
@@ -109,7 +113,7 @@
 | 28. 生产 FUSE 兼容性验证 | v2.0 | 2/2 | Complete | 2026-04-15 |
 | 29. 受管镜像 v3 + Worker 容器参数 | v3.0 | 6/6 | Complete    | 2026-04-18 |
 | 30. 控制面数据模型 + Entry API | v3.0 | 2/2 | Complete    | 2026-04-18 |
-| 31. CLI 三层文件映射重构 | v3.0 | 0/3 | Pending | — |
+| 31. CLI 三层文件映射重构 | v3.0 | 1/3 | In Progress|  |
 | 32. SSH 会话可靠性 + tmux + 多端 | v3.0 | 0/3 | Pending | — |
 | 33. Claude Code 状态持久化 | v3.0 | 0/2 | Pending | — |
 | 34. cloud-claude doctor v3 + 错误码统一 | v3.0 | 0/3 | Pending | — |

@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 远端开发体验升级
 status: executing
-stopped_at: Phase 31 context gathered
-last_updated: "2026-04-18T16:44:57.851Z"
-last_activity: 2026-04-18
+stopped_at: Completed 31-cli/01-errcodes-mutagen-embed-PLAN.md
+last_updated: "2026-04-19T08:37:52.190Z"
+last_activity: 2026-04-19
 progress:
   total_phases: 7
   completed_phases: 0
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** 给每个用户提供一台开箱即用的 SSH 云主机，并且严格保证其所有出网流量都走受控的指定出口 IP
-**Current focus:** Phase 30 — entry-api
+**Current focus:** Phase 31 — cli
 
 ## Current Position
 
 Milestone: v3.0 远端开发体验升级
-Phase: 31
-Plan: Not started
-Status: Executing Phase 30
-Last activity: 2026-04-18
+Phase: 31 (cli) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-04-19
 
 Progress: [░░░░░░░░░░░░░░░░░░░░] 0%（v3.0；Phase 29 待执行）
 
@@ -49,6 +49,8 @@ v3.0 关键方向已定：
 - doctor 升级为五维度自检
 - Claude Code 登录态以 claude_account 为粒度持久化
 - 性能基线：rg/ls ≤ 本地 1.5×、首连 ≤ 8s、30s 抖动无感
+- [Phase 31-cli]: errcodes 命名正则放宽为 ^[A-Z]+_[A-Z]+_[A-Z0-9]+(_[A-Z0-9]+)*$（PLAN 原 3 段表达式与实际 4 段 code 冲突；Plan 31-01 Rule 1 修订）
+- [Phase 31-cli]: mutagen_bin/.gitattributes 关闭 LFS 行 + 占位 stub 提交，由 CI build-images workflow 拉取真实 v0.18.1 二进制（Plan 31-01 Task 1.2 自决）
 
 ### Pending Todos
 
@@ -72,6 +74,6 @@ None — 等待 REQUIREMENTS.md 与 ROADMAP.md 产出后进入 phase 执行。
 
 ## Session Continuity
 
-Last session: 2026-04-18T16:44:57.845Z
-Stopped at: Phase 31 context gathered
-Resume file: .planning/phases/31-cli/31-CONTEXT.md
+Last session: 2026-04-19T08:37:52.187Z
+Stopped at: Completed 31-cli/01-errcodes-mutagen-embed-PLAN.md
+Resume file: None

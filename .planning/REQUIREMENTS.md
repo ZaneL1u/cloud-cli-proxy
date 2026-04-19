@@ -62,8 +62,8 @@
 
 ### C3 · 错误码与中文提示统一升级（F8）
 
-- [ ] **REQ-F8-A**：v3.0 新引入的所有错误路径纳入统一错误码体系，code 格式 `<DOMAIN>_<KIND>_<NUM>`；新增分类前缀 `MOUNT_*` / `SESSION_*` / `NET_*` / `STATE_*`
-- [ ] **REQ-F8-B**：每条错误输出包含三要素：错误码 + 中文原因 + 中文下一步建议（缺一不可）
+- [x] **REQ-F8-A**：v3.0 新引入的所有错误路径纳入统一错误码体系，code 格式 `<DOMAIN>_<KIND>_<NUM>`；新增分类前缀 `MOUNT_*` / `SESSION_*` / `NET_*` / `STATE_*`
+- [x] **REQ-F8-B**：每条错误输出包含三要素：错误码 + 中文原因 + 中文下一步建议（缺一不可）
 - [ ] **REQ-F8-C**：`cloud-claude explain <code>` 子命令对每个错误码给出详细中文说明与常见修复步骤（对标 `rustc --explain`）
 
 ---
@@ -194,8 +194,8 @@
 | REQ-F7-B | Phase 33 | Pending | 容器重建 OAuth 保留 |
 | REQ-F7-C | Phase 31 | Pending | 连接握手期 OAuth 过期中文提示 |
 | REQ-F7-D | Phase 33 | Pending | admin DELETE 事务联动 `volume rm` |
-| REQ-F8-A | Phase 34 | Pending | 错误码 `<DOMAIN>_<KIND>_<NUM>` 体系（横切：各 phase 落码时遵循） |
-| REQ-F8-B | Phase 34 | Pending | 错误三要素（横切：各 phase 落码时遵循） |
+| REQ-F8-A | Phase 34 | Complete | 错误码 `<DOMAIN>_<KIND>_<NUM>` 体系（横切：各 phase 落码时遵循） |
+| REQ-F8-B | Phase 34 | Complete | 错误三要素（横切：各 phase 落码时遵循） |
 | REQ-F8-C | Phase 34 | Pending | `cloud-claude explain <code>` |
 | BASE-01 | Phase 35 | Pending | 元数据响应 1.5× 真机基准 |
 | BASE-02 | Phase 35 | Pending | 首连 ≤ 8s 真机基准 |
