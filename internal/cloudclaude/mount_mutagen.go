@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +38,21 @@ type MutagenStatus struct {
 	SyncReady   bool
 	Conflicts   int
 	Reason      string
+}
+
+// MutagenSyncStatus 是 mountMutagen 返回的扩展状态（Plan 03 新增）。
+//
+// 在 sync create 成功之后由 `mutagen sync list --template` 解析填充：
+//   - SessionName  ：本次 mutagen sync session 的名字（与 cfg.SessionName 一致）
+//   - ConflictCount：累计冲突文件数（CONTEXT D-28；REQ-F1-E）
+//   - LastError    ：mutagen sync 自身报告的 lastError 字段（可能为空）
+//
+// mount_strategy.MountWorkspace 会把 ConflictCount 上报到 banner 后的中文警告
+// 与 last-session.json snapshot.ConflictCount。
+type MutagenSyncStatus struct {
+	SessionName   string
+	ConflictCount int
+	LastError     string
 }
 
 // MutagenHealthCheck 把四个 bool/int 包装成 MutagenStatus + Reason 文案。
@@ -191,29 +207,32 @@ func defaultMutagenDeps() mountMutagenDeps {
 //  6. 写 ~/.cloud-claude/mutagen-defaults.yml
 //  7. 创建 askpass helper（密码不进 argv）
 //  8. mutagen sync create（conn-C 由 mutagen 内部 fork ssh 子进程承担）
+//  9. mutagen sync list --template 解析 conflict count（Plan 03 / CONTEXT D-28；
+//     v0.18.1 不支持 --json，固定走 --template；解析失败仅丢失 conflict 信息，
+//     不阻断 mount 路径）
 //
 // cleanup：mutagen sync terminate <SessionName> + helper.Cleanup()。daemon 不停（CONTEXT D-05）。
-func mountMutagen(connA *ssh.Client, cfg MutagenSyncConfig, deps mountMutagenDeps) (cleanup func(), conflicts int, err error) {
+func mountMutagen(connA *ssh.Client, cfg MutagenSyncConfig, deps mountMutagenDeps) (cleanup func(), status MutagenSyncStatus, err error) {
 	deps = mergeMutagenDeps(deps)
 
 	// 1) 抽取二进制
 	binPath := deps.mutagenBinPath
 	if err := deps.extractBinary(binPath); err != nil {
-		return nil, 0, newMutagenErr(errcodes.MOUNT_MUTAGEN_TRANSPORT_FAILED, err.Error())
+		return nil, MutagenSyncStatus{}, newMutagenErr(errcodes.MOUNT_MUTAGEN_TRANSPORT_FAILED, err.Error())
 	}
 
 	// 2) daemon start（幂等）
 	env := []string{"MUTAGEN_DATA_DIRECTORY=" + deps.dataDir}
 	out, derr := deps.runLocal(binPath, []string{"daemon", "start"}, env)
 	if derr != nil && !strings.Contains(out, "daemon already started") && !strings.Contains(out, "already running") {
-		return nil, 0, newMutagenErr(errcodes.MOUNT_MUTAGEN_DAEMON_UNAVAILABLE, derr.Error())
+		return nil, MutagenSyncStatus{}, newMutagenErr(errcodes.MOUNT_MUTAGEN_DAEMON_UNAVAILABLE, derr.Error())
 	}
 
 	// 3) 版本握手
 	if connA != nil {
 		remoteVer, _ := deps.remoteVersion(connA)
 		if remoteVer != "" && !strings.Contains(remoteVer, strings.TrimPrefix(MutagenBinaryVersion, "v")) {
-			return nil, 0, newMutagenErr(errcodes.MOUNT_MUTAGEN_VERSION_SKEW, MutagenBinaryVersion, remoteVer)
+			return nil, MutagenSyncStatus{}, newMutagenErr(errcodes.MOUNT_MUTAGEN_VERSION_SKEW, MutagenBinaryVersion, remoteVer)
 		}
 	}
 
@@ -226,7 +245,7 @@ func mountMutagen(connA *ssh.Client, cfg MutagenSyncConfig, deps mountMutagenDep
 		if topStr == "" {
 			topStr = "(无大子目录信息)"
 		}
-		return nil, 0, newMutagenErr(errcodes.MOUNT_MUTAGEN_WHITELIST_REJECT,
+		return nil, MutagenSyncStatus{}, newMutagenErr(errcodes.MOUNT_MUTAGEN_WHITELIST_REJECT,
 			cfg.AlphaCwd, size/1024/1024, topStr)
 	}
 
@@ -235,19 +254,19 @@ func mountMutagen(connA *ssh.Client, cfg MutagenSyncConfig, deps mountMutagenDep
 	if isAlphaEmpty(entries) && connA != nil {
 		nonEmpty, _ := deps.remoteFindBeta(connA, "/workspace-hot")
 		if nonEmpty {
-			return nil, 0, newMutagenErr(errcodes.MOUNT_MUTAGEN_SAFETY_GUARD, cfg.AlphaCwd)
+			return nil, MutagenSyncStatus{}, newMutagenErr(errcodes.MOUNT_MUTAGEN_SAFETY_GUARD, cfg.AlphaCwd)
 		}
 	}
 
 	// 6) 写 ignore yaml
 	if err := deps.writeIgnoreYML(deps.defaultsYml); err != nil {
-		return nil, 0, newMutagenErr(errcodes.MOUNT_MUTAGEN_SYNC_FAILED, "写 mutagen-defaults.yml 失败: "+err.Error())
+		return nil, MutagenSyncStatus{}, newMutagenErr(errcodes.MOUNT_MUTAGEN_SYNC_FAILED, "写 mutagen-defaults.yml 失败: "+err.Error())
 	}
 
 	// 7) askpass helper
 	helper, herr := deps.newAskpass()
 	if herr != nil {
-		return nil, 0, newMutagenErr(errcodes.MOUNT_MUTAGEN_TRANSPORT_FAILED, "创建 askpass helper 失败: "+herr.Error())
+		return nil, MutagenSyncStatus{}, newMutagenErr(errcodes.MOUNT_MUTAGEN_TRANSPORT_FAILED, "创建 askpass helper 失败: "+herr.Error())
 	}
 
 	// 8) mutagen sync create
@@ -267,7 +286,7 @@ func mountMutagen(connA *ssh.Client, cfg MutagenSyncConfig, deps mountMutagenDep
 	createOut, cerr := deps.runLocal(binPath, createArgs, createEnv)
 	if cerr != nil {
 		helper.Cleanup()
-		return nil, 0, newMutagenErr(errcodes.MOUNT_MUTAGEN_SYNC_FAILED,
+		return nil, MutagenSyncStatus{}, newMutagenErr(errcodes.MOUNT_MUTAGEN_SYNC_FAILED,
 			fmt.Sprintf("%s: %s", cerr.Error(), strings.TrimSpace(createOut)))
 	}
 
@@ -276,7 +295,32 @@ func mountMutagen(connA *ssh.Client, cfg MutagenSyncConfig, deps mountMutagenDep
 			[]string{"MUTAGEN_DATA_DIRECTORY=" + deps.dataDir})
 		helper.Cleanup()
 	}
-	return cleanup, 0, nil
+
+	// 9) 解析 conflict count（Plan 03；CONTEXT D-28；RESEARCH §1.1：v0.18.1 不支持 --json，用 --template）
+	status = MutagenSyncStatus{SessionName: cfg.SessionName}
+	tmplArgs := []string{
+		"sync", "list",
+		"--template", `{{range .}}{{.Name}}|{{len .Conflicts}}|{{.LastError}}` + "\n" + `{{end}}`,
+	}
+	listOut, listErr := deps.runLocal(binPath, tmplArgs, env)
+	if listErr != nil {
+		// list 失败仅丢失 conflict 信息，不阻断 mount；记入 LastError 供 doctor 排查。
+		status.LastError = listErr.Error()
+		return cleanup, status, nil
+	}
+	for _, line := range strings.Split(strings.TrimSpace(listOut), "\n") {
+		parts := strings.SplitN(line, "|", 3)
+		if len(parts) >= 2 && parts[0] == cfg.SessionName {
+			if n, perr := strconv.Atoi(strings.TrimSpace(parts[1])); perr == nil {
+				status.ConflictCount = n
+				if len(parts) >= 3 {
+					status.LastError = strings.TrimSpace(parts[2])
+				}
+				break
+			}
+		}
+	}
+	return cleanup, status, nil
 }
 
 // isAlphaEmpty 过滤 ignore 列表后判断 alpha 目录是否「业务上为空」。

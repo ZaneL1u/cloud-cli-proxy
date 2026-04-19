@@ -13,6 +13,8 @@ import (
 	"al.essio.dev/pkg/shellescape"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
+
+	"github.com/zanel1u/cloud-cli-proxy/internal/cloudclaude/errcodes"
 )
 
 type SSHConfig struct {
@@ -106,9 +108,35 @@ func ConnectAndRunClaudeV3(cfg SSHConfig, claudeArgs []string, cwd string,
 		}
 	}
 
-	// TODO(plan-03): OAuth credentials 检查（mount ready 之后、runClaude 之前）
-	// 调用 CheckOAuthCredentials(connA, mountCfg.ClaudeAccountID) →
-	// 命中 NET_OAUTH_NOT_FOUND/EXPIRED 时返回对应 ExitOAuth* 退出码。
+	// OAuth 检查（CONTEXT D-22 / D-23 / D-24；Plan 03 Task 3.2）：
+	//   - claude_account_id 缺失 → 跳过 + 中文提示（不阻塞 mount）
+	//   - mount ready 后执行；Expired / NotFound 命中 → cleanup mount + 退出非 0
+	//   - ExpiringSoon (< 5min) 仅警告，不阻断
+	//
+	// 退出码引用 cloudclaude.Exit* 命名常量（避开 v2.0 main.go ExitConfigError=4 /
+	// ExitInternalError=5 撞码；OAuthNotFound=6 / OAuthExpired=7）。
+	if mountCfg.ClaudeAccountID == "" {
+		fmt.Fprintln(mountCfg.Logger, "[!] gateway 未返回 claude_account_id，跳过 OAuth 过期检查（建议升级 gateway 至 v3.0）")
+	} else {
+		status, oauthErr := CheckOAuthCredentials(connA, mountCfg.ClaudeAccountID)
+		if oauthErr != nil {
+			// CheckOAuthCredentials 内部已收敛错误到 OAuthNotFound；理论上 err 不会非 nil。
+			fmt.Fprintln(mountCfg.Logger, "[!] OAuth 检查异常: "+oauthErr.Error())
+		} else {
+			switch status.State {
+			case OAuthExpired:
+				fmt.Fprintln(mountCfg.Logger, errcodes.Format(errcodes.NET_OAUTH_EXPIRED, mountCfg.ClaudeAccountID))
+				return ExitOAuthExpired, nil
+			case OAuthNotFound:
+				fmt.Fprintln(mountCfg.Logger, errcodes.Format(errcodes.NET_OAUTH_NOT_FOUND, mountCfg.ClaudeAccountID))
+				return ExitOAuthNotFound, nil
+			case OAuthExpiringSoon:
+				fmt.Fprintln(mountCfg.Logger, errcodes.Format(errcodes.NET_OAUTH_EXPIRING_SOON, status.MinutesToExpire))
+			case OAuthValid:
+				// 不输出（避免噪音）
+			}
+		}
+	}
 
 	return runClaude(connA, claudeArgs, cwd, len(proxyCommands) > 0)
 }

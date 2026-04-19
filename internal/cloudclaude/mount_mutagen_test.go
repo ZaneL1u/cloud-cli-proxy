@@ -176,12 +176,15 @@ func Test_DaemonStartIdempotent(t *testing.T) {
 
 func Test_MutagenHappyPath_CleansUpOnTerminate(t *testing.T) {
 	deps, helperCleanups, calls := baseDeps(t, t.TempDir())
-	cleanup, conf, err := mountMutagen(&ssh.Client{}, newSyncCfg(t.TempDir()), deps)
+	cleanup, status, err := mountMutagen(&ssh.Client{}, newSyncCfg(t.TempDir()), deps)
 	if err != nil {
 		t.Fatalf("happy path failed: %v", err)
 	}
-	if conf != 0 {
-		t.Errorf("happy path conflicts=%d, want 0", conf)
+	if status.ConflictCount != 0 {
+		t.Errorf("happy path ConflictCount=%d, want 0", status.ConflictCount)
+	}
+	if status.SessionName != "cloud-claude-acct-1-aabbccdd" {
+		t.Errorf("status.SessionName = %q, want fixture name", status.SessionName)
 	}
 	if cleanup == nil {
 		t.Fatal("cleanup must not be nil")
@@ -190,8 +193,10 @@ func Test_MutagenHappyPath_CleansUpOnTerminate(t *testing.T) {
 	if *helperCleanups != 1 {
 		t.Errorf("askpass cleanup called %d times, want 1", *helperCleanups)
 	}
-	if len(*calls) < 3 {
-		t.Errorf("expected ≥3 runLocal calls (daemon + sync create + terminate), got %d: %v", len(*calls), *calls)
+	// Plan 03 在 sync create 后追加了 sync list --template 调用，
+	// 因此 happy path 总调用数 ≥4：daemon + sync create + sync list + sync terminate。
+	if len(*calls) < 4 {
+		t.Errorf("expected ≥4 runLocal calls (daemon + sync create + sync list + terminate), got %d: %v", len(*calls), *calls)
 	}
 }
 

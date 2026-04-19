@@ -92,8 +92,11 @@ type MountConfig struct {
 
 // strategyHooks 让 mount_strategy_test.go 注入三层 mount 的 mock 实现，
 // 不依赖真实 ssh / mutagen / mergerfs。
+//
+// Plan 03 把 tryMutagen 第二返回值从 int 升级为 MutagenSyncStatus，
+// 让 mount_strategy 同时拿到 ConflictCount 与 LastError。
 type strategyHooks struct {
-	tryMutagen func() (cleanup func(), conflicts int, err error)
+	tryMutagen func() (cleanup func(), status MutagenSyncStatus, err error)
 	trySSHFS   func() (cleanup func(), err error)
 	tryMerge   func() (cleanup func(), err error)
 }
@@ -171,14 +174,14 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 		// 三段式进度：先决策再打印（CONTEXT D-18 强约束 — 不出现「打了又改主意」）
 		printProgress(cfg.Logger, mode)
 
-		modeCleanup, conflicts, mErr := tryMode(connA, connB, mode, cfg)
+		modeCleanup, mutagenStatus, mErr := tryMode(connA, connB, mode, cfg)
 		if mErr == nil {
 			snapshot.ActualMode = mode.String()
-			snapshot.ConflictCount = conflicts
+			snapshot.ConflictCount = mutagenStatus.ConflictCount
 
 			printBanner(cfg.Logger, mode, cfg.NoColor)
-			if conflicts > 0 {
-				fmt.Fprintf(cfg.Logger, "⚠ 有 %d 个文件同步冲突，运行 cloud-claude sync conflicts 查看\n", conflicts)
+			if mutagenStatus.ConflictCount > 0 {
+				fmt.Fprintf(cfg.Logger, "⚠ 有 %d 个文件同步冲突，运行 cloud-claude sync conflicts 查看\n", mutagenStatus.ConflictCount)
 			}
 
 			writeLastSessionWarn(cfg.LastSessionPath, snapshot, cfg.Logger)
@@ -218,14 +221,14 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 //   - SSHFSOnly = sshfs 单层（v2.0 路径）
 //
 // 测试通过 cfg.hooks 注入 mock；生产走 tryModeReal。
-func tryMode(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup func(), conflicts int, err error) {
+func tryMode(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup func(), status MutagenSyncStatus, err error) {
 	if cfg.hooks != nil {
 		return tryModeWithHooks(mode, cfg.hooks)
 	}
 	return tryModeReal(connA, connB, mode, cfg)
 }
 
-func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), conflicts int, err error) {
+func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), status MutagenSyncStatus, err error) {
 	var cleanups []func()
 	finalCleanup := func() {
 		for i := len(cleanups) - 1; i >= 0; i-- {
@@ -236,12 +239,12 @@ func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), conflicts in
 	switch mode {
 	case ModeFull:
 		if h.tryMutagen != nil {
-			cl, conf, e := h.tryMutagen()
+			cl, st, e := h.tryMutagen()
 			if e != nil {
 				finalCleanup()
-				return nil, 0, e
+				return nil, MutagenSyncStatus{}, e
 			}
-			conflicts = conf
+			status = st
 			if cl != nil {
 				cleanups = append(cleanups, cl)
 			}
@@ -250,7 +253,7 @@ func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), conflicts in
 			cl, e := h.trySSHFS()
 			if e != nil {
 				finalCleanup()
-				return nil, 0, e
+				return nil, MutagenSyncStatus{}, e
 			}
 			if cl != nil {
 				cleanups = append(cleanups, cl)
@@ -260,52 +263,52 @@ func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), conflicts in
 			cl, e := h.tryMerge()
 			if e != nil {
 				finalCleanup()
-				return nil, 0, e
+				return nil, MutagenSyncStatus{}, e
 			}
 			if cl != nil {
 				cleanups = append(cleanups, cl)
 			}
 		}
-		return finalCleanup, conflicts, nil
+		return finalCleanup, status, nil
 	case ModeMutagenOnly:
 		if h.tryMutagen != nil {
-			cl, conf, e := h.tryMutagen()
+			cl, st, e := h.tryMutagen()
 			if e != nil {
-				return nil, 0, e
+				return nil, MutagenSyncStatus{}, e
 			}
 			if cl == nil {
 				cl = func() {}
 			}
-			return cl, conf, nil
+			return cl, st, nil
 		}
-		return func() {}, 0, errors.New("mock tryMutagen 未注入")
+		return func() {}, MutagenSyncStatus{}, errors.New("mock tryMutagen 未注入")
 	case ModeSSHFSOnly:
 		if h.trySSHFS != nil {
 			cl, e := h.trySSHFS()
 			if e != nil {
-				return nil, 0, e
+				return nil, MutagenSyncStatus{}, e
 			}
 			if cl == nil {
 				cl = func() {}
 			}
-			return cl, 0, nil
+			return cl, MutagenSyncStatus{}, nil
 		}
-		return func() {}, 0, errors.New("mock trySSHFS 未注入")
+		return func() {}, MutagenSyncStatus{}, errors.New("mock trySSHFS 未注入")
 	}
-	return func() {}, 0, fmt.Errorf("未知 mode: %v", mode)
+	return func() {}, MutagenSyncStatus{}, fmt.Errorf("未知 mode: %v", mode)
 }
 
 // tryModeReal 是生产路径：调用真实 mountSSHFS / mountMutagen / mountMerge。
 // 本阶段对 Mutagen / Mergerfs 只做最小串接，整链路集成测试由 Plan 03 落地。
-func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup func(), conflicts int, err error) {
+func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup func(), status MutagenSyncStatus, err error) {
 	// SSHFSOnly：v2.0 路径，已稳定
 	if mode == ModeSSHFSOnly {
 		cl, e := mountSSHFS(connA, cfg.Cwd, cfg.Cwd)
 		if e != nil {
-			return nil, 0, e
+			return nil, MutagenSyncStatus{}, e
 		}
 		// 启动 watcher（v2.0 行为不变；watcher 在 Plan 03 / Phase 32 进一步包装 ctx）
-		return cl, 0, nil
+		return cl, MutagenSyncStatus{}, nil
 	}
 
 	// MutagenOnly / Full：调 mountMutagen
@@ -316,20 +319,20 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup 
 		SessionName:     buildSessionName(cfg.ClaudeAccountID, cfg.Cwd),
 	}
 
-	mCleanup, conf, mErr := mountMutagen(connA, mutagenCfg, defaultMutagenDeps())
+	mCleanup, mStatus, mErr := mountMutagen(connA, mutagenCfg, defaultMutagenDeps())
 	if mErr != nil {
-		return nil, 0, mErr
+		return nil, MutagenSyncStatus{}, mErr
 	}
 
 	if mode == ModeMutagenOnly {
-		return mCleanup, conf, nil
+		return mCleanup, mStatus, nil
 	}
 
 	// Full：mutagen 起来后，挂 sshfs 到 /workspace-cold，再 mergerfs 合并到 /workspace
 	sCleanup, sErr := mountSSHFS(connA, cfg.Cwd, "/workspace-cold")
 	if sErr != nil {
 		mCleanup()
-		return nil, 0, sErr
+		return nil, MutagenSyncStatus{}, sErr
 	}
 
 	branches := []string{"/workspace-hot=RW", "/workspace-cold=NC,RO"}
@@ -337,7 +340,7 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup 
 	if mergeErr != nil {
 		sCleanup()
 		mCleanup()
-		return nil, 0, mergeErr
+		return nil, MutagenSyncStatus{}, mergeErr
 	}
 
 	// 启动 sshfs_watcher：cold 抖动 → 摘除 cold branch
@@ -353,7 +356,7 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup 
 		sCleanup()
 		mCleanup()
 	}
-	return cleanup, conf, nil
+	return cleanup, mStatus, nil
 }
 
 // printProgress 按 finalMode 输出三段式中文进度（CONTEXT D-18）。

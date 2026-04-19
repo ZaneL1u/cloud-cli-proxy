@@ -39,11 +39,11 @@ type stratCase struct {
 
 func newHooks(c stratCase) *strategyHooks {
 	h := &strategyHooks{}
-	h.tryMutagen = func() (func(), int, error) {
+	h.tryMutagen = func() (func(), MutagenSyncStatus, error) {
 		if !c.mutagenOK {
-			return nil, 0, &fakeMutagenErr{code: errcodes.MOUNT_MUTAGEN_DAEMON_UNAVAILABLE}
+			return nil, MutagenSyncStatus{}, &fakeMutagenErr{code: errcodes.MOUNT_MUTAGEN_DAEMON_UNAVAILABLE}
 		}
-		return func() {}, 0, nil
+		return func() {}, MutagenSyncStatus{}, nil
 	}
 	h.trySSHFS = func() (func(), error) {
 		if !c.sshfsOK {
@@ -232,8 +232,8 @@ func Test_Downgrade_BannerEachStep(t *testing.T) {
 		Logger:           &buf,
 		LastSessionPath:  filepath.Join(t.TempDir(), "last.json"),
 		hooks: &strategyHooks{
-			tryMutagen: func() (func(), int, error) {
-				return nil, 0, &fakeMutagenErr{code: errcodes.MOUNT_MUTAGEN_DAEMON_UNAVAILABLE}
+			tryMutagen: func() (func(), MutagenSyncStatus, error) {
+				return nil, MutagenSyncStatus{}, &fakeMutagenErr{code: errcodes.MOUNT_MUTAGEN_DAEMON_UNAVAILABLE}
 			},
 			trySSHFS: func() (func(), error) {
 				return func() {}, nil
@@ -304,7 +304,9 @@ func Test_Downgrade_CapabilityFromAuthResp(t *testing.T) {
 			Logger:           &buf,
 			LastSessionPath:  filepath.Join(t.TempDir(), "last.json"),
 			hooks: &strategyHooks{
-				tryMutagen: func() (func(), int, error) { return func() {}, 0, nil },
+				tryMutagen: func() (func(), MutagenSyncStatus, error) {
+					return func() {}, MutagenSyncStatus{}, nil
+				},
 			},
 		}
 		cleanup, mode, err := MountWorkspace(nil, nil, cfg)
@@ -350,8 +352,8 @@ func Test_ForceMode_FailureUsesForceCode(t *testing.T) {
 		Logger:           &buf,
 		LastSessionPath:  filepath.Join(t.TempDir(), "last.json"),
 		hooks: &strategyHooks{
-			tryMutagen: func() (func(), int, error) {
-				return nil, 0, &fakeMutagenErr{code: errcodes.MOUNT_MUTAGEN_VERSION_SKEW}
+			tryMutagen: func() (func(), MutagenSyncStatus, error) {
+				return nil, MutagenSyncStatus{}, &fakeMutagenErr{code: errcodes.MOUNT_MUTAGEN_VERSION_SKEW}
 			},
 			trySSHFS: func() (func(), error) { return func() {}, nil },
 			tryMerge: func() (func(), error) { return func() {}, nil },
