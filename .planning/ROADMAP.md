@@ -113,7 +113,7 @@
 | 28. 生产 FUSE 兼容性验证 | v2.0 | 2/2 | Complete | 2026-04-15 |
 | 29. 受管镜像 v3 + Worker 容器参数 | v3.0 | 6/6 | Complete    | 2026-04-18 |
 | 30. 控制面数据模型 + Entry API | v3.0 | 2/2 | Complete    | 2026-04-18 |
-| 31. CLI 三层文件映射重构 | v3.0 | 1/3 | In Progress|  |
+| 31. CLI 三层文件映射重构 | v3.0 | 2/3 | In Progress|  |
 | 32. SSH 会话可靠性 + tmux + 多端 | v3.0 | 0/3 | Pending | — |
 | 33. Claude Code 状态持久化 | v3.0 | 0/2 | Pending | — |
 | 34. cloud-claude doctor v3 + 错误码统一 | v3.0 | 0/3 | Pending | — |

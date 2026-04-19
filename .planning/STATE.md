@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 远端开发体验升级
 status: executing
-stopped_at: Completed 31-cli/01-errcodes-mutagen-embed-PLAN.md
-last_updated: "2026-04-19T08:37:52.190Z"
+stopped_at: Completed 31-cli/02-mount-three-layer-PLAN.md
+last_updated: "2026-04-19T09:35:14.546Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 7
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 
 Milestone: v3.0 远端开发体验升级
 Phase: 31 (cli) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-19
 
@@ -51,6 +51,8 @@ v3.0 关键方向已定：
 - 性能基线：rg/ls ≤ 本地 1.5×、首连 ≤ 8s、30s 抖动无感
 - [Phase 31-cli]: errcodes 命名正则放宽为 ^[A-Z]+_[A-Z]+_[A-Z0-9]+(_[A-Z0-9]+)*$（PLAN 原 3 段表达式与实际 4 段 code 冲突；Plan 31-01 Rule 1 修订）
 - [Phase 31-cli]: mutagen_bin/.gitattributes 关闭 LFS 行 + 占位 stub 提交，由 CI build-images workflow 拉取真实 v0.18.1 二进制（Plan 31-01 Task 1.2 自决）
+- [Phase 31-cli]: Plan 02：三层 mount 状态机落地，Mode={Auto,Full,MutagenOnly,SSHFSOnly}，Auto 任一档失败 ≤2s 降级到下一档；exitcodes.go 9 个常量与 v2.0 0-5 对齐 + OAuth/mount 6-8
+- [Phase 31-cli]: Plan 02：M13 防御「禁止静默降级」由 stderr MOUNT_AUTO_DOWNGRADED + last-session.json downgrade_chain 双留痕；ConnectAndRunClaudeV3 留 TODO(plan-03) OAuth hook 点
 
 ### Pending Todos
 
@@ -74,6 +76,6 @@ None — 等待 REQUIREMENTS.md 与 ROADMAP.md 产出后进入 phase 执行。
 
 ## Session Continuity
 
-Last session: 2026-04-19T08:37:52.187Z
-Stopped at: Completed 31-cli/01-errcodes-mutagen-embed-PLAN.md
+Last session: 2026-04-19T09:35:03.006Z
+Stopped at: Completed 31-cli/02-mount-three-layer-PLAN.md
 Resume file: None

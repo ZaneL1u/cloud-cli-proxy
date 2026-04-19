@@ -14,17 +14,17 @@
 
 ### A1 · 三层文件系统架构（F1）
 
-- [ ] **REQ-F1-A**：容器内仅暴露单一 `/workspace` 路径；用户与 Claude Code 不感知 hot/cold 分层（mergerfs 把 Mutagen 同步分支与 sshfs 兜底分支合并为单一视图）
-- [ ] **REQ-F1-B**：cloud-claude 启动后，从命令执行到出现可输入 prompt 的总耗时 ≤ 8s（含首轮 Mutagen 同步），过程中输出三段式中文进度：`初始化文件映射 (1/3) 热同步源码中…`
-- [ ] **REQ-F1-C**：在 10k 文件源码树执行 `rg .` / `ls -R` 的延迟 ≤ 等价本地操作的 1.5×
-- [ ] **REQ-F1-D**：候选同步目录大小 > 50MB 时，cloud-claude 拒绝热同步并自动改用 sshfs 兜底，同时给出明确中文提示与 ignore 配置建议
+- [x] **REQ-F1-A**：容器内仅暴露单一 `/workspace` 路径；用户与 Claude Code 不感知 hot/cold 分层（mergerfs 把 Mutagen 同步分支与 sshfs 兜底分支合并为单一视图）
+- [x] **REQ-F1-B**：cloud-claude 启动后，从命令执行到出现可输入 prompt 的总耗时 ≤ 8s（含首轮 Mutagen 同步），过程中输出三段式中文进度：`初始化文件映射 (1/3) 热同步源码中…`
+- [x] **REQ-F1-C**：在 10k 文件源码树执行 `rg .` / `ls -R` 的延迟 ≤ 等价本地操作的 1.5×
+- [x] **REQ-F1-D**：候选同步目录大小 > 50MB 时，cloud-claude 拒绝热同步并自动改用 sshfs 兜底，同时给出明确中文提示与 ignore 配置建议
 - [ ] **REQ-F1-E**：Mutagen 同步出现 conflict 时，下次回车前在 prompt 上方插入中文警告：`⚠ 有 N 个文件同步冲突，运行 cloud-claude sync conflicts 查看`
 
 ### A2 · 降级路径与 `--mount-mode` 手动切换（F2）
 
-- [ ] **REQ-F2-A**：CLI 支持 `--mount-mode=auto|full|mutagen-only|sshfs-only` 四档切换，默认 `auto`
-- [ ] **REQ-F2-B**：三层 mount 任一失败时，cloud-claude 必须在 2 秒内降级到下一档；禁止静默降级（stderr 必须输出当前生效模式 + 错误码）
-- [ ] **REQ-F2-C**：每次连接成功的 banner 必须用彩色标签显示当前 mount 模式（尊重 `NO_COLOR` 环境变量）
+- [x] **REQ-F2-A**：CLI 支持 `--mount-mode=auto|full|mutagen-only|sshfs-only` 四档切换，默认 `auto`
+- [x] **REQ-F2-B**：三层 mount 任一失败时，cloud-claude 必须在 2 秒内降级到下一档；禁止静默降级（stderr 必须输出当前生效模式 + 错误码）
+- [x] **REQ-F2-C**：每次连接成功的 banner 必须用彩色标签显示当前 mount 模式（尊重 `NO_COLOR` 环境变量）
 
 ### B1 · SSH 会话稳定性与自动重连（F3）
 
@@ -167,14 +167,14 @@
 
 | Requirement | Phase | Status | 说明 |
 |-------------|-------|--------|------|
-| REQ-F1-A | Phase 31 | Pending | 三层 mount 单一 `/workspace` 视图 |
-| REQ-F1-B | Phase 31 | Pending | 首连 ≤ 8s 含三段式中文进度（最终验收对接 Phase 35 / BASE-02） |
-| REQ-F1-C | Phase 31 | Pending | 10k 文件 1.5× 性能（最终验收对接 Phase 35 / BASE-01） |
-| REQ-F1-D | Phase 31 | Pending | > 50MB 候选目录拒绝 + 自动降级 sshfs |
+| REQ-F1-A | Phase 31 | Complete | 三层 mount 单一 `/workspace` 视图 |
+| REQ-F1-B | Phase 31 | Complete | 首连 ≤ 8s 含三段式中文进度（最终验收对接 Phase 35 / BASE-02） |
+| REQ-F1-C | Phase 31 | Complete | 10k 文件 1.5× 性能（最终验收对接 Phase 35 / BASE-01） |
+| REQ-F1-D | Phase 31 | Complete | > 50MB 候选目录拒绝 + 自动降级 sshfs |
 | REQ-F1-E | Phase 31 | Pending | Mutagen conflict 中文冒泡 |
-| REQ-F2-A | Phase 31 | Pending | `--mount-mode` 四档切换 |
-| REQ-F2-B | Phase 31 | Pending | 任一层失败 ≤ 2s 降级 + 禁止静默 |
-| REQ-F2-C | Phase 31 | Pending | banner 彩色 mount 模式标签 |
+| REQ-F2-A | Phase 31 | Complete | `--mount-mode` 四档切换 |
+| REQ-F2-B | Phase 31 | Complete | 任一层失败 ≤ 2s 降级 + 禁止静默 |
+| REQ-F2-C | Phase 31 | Complete | banner 彩色 mount 模式标签 |
 | REQ-F3-A | Phase 32 | Pending | KeepAlive 15s/4 与服务端 15s/8 基线（服务端 sshd_config 在 Phase 29 落地） |
 | REQ-F3-B | Phase 32 | Pending | 断网本地输入缓冲 + 灰色未确认样式 |
 | REQ-F3-C | Phase 32 | Pending | 重连失败 prompt 原因 + 下一步 |
