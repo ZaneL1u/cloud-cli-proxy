@@ -18,7 +18,7 @@
 - [x] **REQ-F1-B**：cloud-claude 启动后，从命令执行到出现可输入 prompt 的总耗时 ≤ 8s（含首轮 Mutagen 同步），过程中输出三段式中文进度：`初始化文件映射 (1/3) 热同步源码中…`
 - [x] **REQ-F1-C**：在 10k 文件源码树执行 `rg .` / `ls -R` 的延迟 ≤ 等价本地操作的 1.5×
 - [x] **REQ-F1-D**：候选同步目录大小 > 50MB 时，cloud-claude 拒绝热同步并自动改用 sshfs 兜底，同时给出明确中文提示与 ignore 配置建议
-- [ ] **REQ-F1-E**：Mutagen 同步出现 conflict 时，下次回车前在 prompt 上方插入中文警告：`⚠ 有 N 个文件同步冲突，运行 cloud-claude sync conflicts 查看`
+- [x] **REQ-F1-E**：Mutagen 同步出现 conflict 时，下次回车前在 prompt 上方插入中文警告：`⚠ 有 N 个文件同步冲突，运行 cloud-claude sync conflicts 查看`
 
 ### A2 · 降级路径与 `--mount-mode` 手动切换（F2）
 
@@ -57,7 +57,7 @@
 
 - [ ] **REQ-F7-A**：`~/.claude/` 与 `~/.cache/claude` 通过独立 Docker named volume 持久化；命名粒度 = 单个 `claude_account`（建议 `claude-state-{claude_account_id}`，带 label `com.cloud-cli-proxy.account_id`）
 - [ ] **REQ-F7-B**：容器重建后未过期的 OAuth credentials 必须保留，用户无需重新执行 `claude login`
-- [ ] **REQ-F7-C**：credentials 即将过期或已过期时，cloud-claude 必须在连接建立前给出明确的中文提示，不能让 claude 进程进入报错后才发现
+- [x] **REQ-F7-C**：credentials 即将过期或已过期时，cloud-claude 必须在连接建立前给出明确的中文提示，不能让 claude 进程进入报错后才发现
 - [ ] **REQ-F7-D**：通过 admin API 删除 claude_account 时，事务性联动删除对应的 Docker named volume
 
 ### C3 · 错误码与中文提示统一升级（F8）
@@ -171,7 +171,7 @@
 | REQ-F1-B | Phase 31 | Complete | 首连 ≤ 8s 含三段式中文进度（最终验收对接 Phase 35 / BASE-02） |
 | REQ-F1-C | Phase 31 | Complete | 10k 文件 1.5× 性能（最终验收对接 Phase 35 / BASE-01） |
 | REQ-F1-D | Phase 31 | Complete | > 50MB 候选目录拒绝 + 自动降级 sshfs |
-| REQ-F1-E | Phase 31 | Pending | Mutagen conflict 中文冒泡 |
+| REQ-F1-E | Phase 31 | Complete | Mutagen conflict 中文冒泡 |
 | REQ-F2-A | Phase 31 | Complete | `--mount-mode` 四档切换 |
 | REQ-F2-B | Phase 31 | Complete | 任一层失败 ≤ 2s 降级 + 禁止静默 |
 | REQ-F2-C | Phase 31 | Complete | banner 彩色 mount 模式标签 |
@@ -192,7 +192,7 @@
 | REQ-F6-D | Phase 34 | Pending | doctor `--verbose` / `--json` / 退出码 0/1/2 |
 | REQ-F7-A | Phase 33 | Pending | named volume `claude-state-{id}` + label（数据模型在 Phase 30） |
 | REQ-F7-B | Phase 33 | Pending | 容器重建 OAuth 保留 |
-| REQ-F7-C | Phase 31 | Pending | 连接握手期 OAuth 过期中文提示 |
+| REQ-F7-C | Phase 31 | Complete | 连接握手期 OAuth 过期中文提示 |
 | REQ-F7-D | Phase 33 | Pending | admin DELETE 事务联动 `volume rm` |
 | REQ-F8-A | Phase 34 | Complete | 错误码 `<DOMAIN>_<KIND>_<NUM>` 体系（横切：各 phase 落码时遵循） |
 | REQ-F8-B | Phase 34 | Complete | 错误三要素（横切：各 phase 落码时遵循） |
