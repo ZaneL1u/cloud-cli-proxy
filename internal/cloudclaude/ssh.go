@@ -2,6 +2,7 @@ package cloudclaude
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -83,9 +84,29 @@ func ConnectAndRunClaudeV3(cfg SSHConfig, claudeArgs []string, cwd string,
 	if mountCfg.Logger == nil {
 		mountCfg.Logger = os.Stderr
 	}
+	// [Phase 32 Plan 03 / D-18 / RESEARCH §6.4] 用真实 flock 包装替换 mountCfg.SyncSessionLock 默认 noop。
+	// 必须在 MountWorkspace 调用之前覆盖（mount_strategy.MountWorkspace 经此 hook 拿账号级 flock）。
+	// 命中 ErrSyncLocked 时：
+	//   1) mountCfg.IsSecondaryClient = true（透传到 SessionConfig，让 last-session.json
+	//      ClientRole / 文件注册表 client_role 写 "secondary"）；
+	//   2) stderr 输出 [SESSION_SYNC_LOCKED]（与 Phase 31 mount_strategy 在 errSyncLocked
+	//      路径输出 [MOUNT_AUTO_DOWNGRADED] 形成双层可见性 — Phase 34 doctor / explain 复用）。
+	// accountID == "" 时 AcquireSyncLock 自身走 noop 路径（D-19）。
 	if mountCfg.SyncSessionLock == nil {
-		mountCfg.SyncSessionLock = func(_ string) (func(), error) {
-			return func() {}, nil
+		mountCfg.SyncSessionLock = func(accountID string) (func(), error) {
+			release, err := AcquireSyncLock(connA, accountID)
+			if err != nil {
+				if errors.Is(err, ErrSyncLocked) {
+					mountCfg.IsSecondaryClient = true
+					if mountCfg.Logger != nil {
+						fmt.Fprintln(mountCfg.Logger, errcodes.Format(errcodes.SESSION_SYNC_LOCKED, accountID))
+					} else {
+						fmt.Fprintln(os.Stderr, errcodes.Format(errcodes.SESSION_SYNC_LOCKED, accountID))
+					}
+				}
+				return nil, err
+			}
+			return release, nil
 		}
 	}
 	mountCfg.Cwd = cwd
@@ -157,6 +178,7 @@ func ConnectAndRunClaudeV3(cfg SSHConfig, claudeArgs []string, cwd string,
 		Cwd:               cwd,
 		LocalHostname:     mountCfg.LocalHostname,
 		LastSessionPath:   mountCfg.LastSessionPath,
+		IsSecondaryClient: mountCfg.IsSecondaryClient, // [Phase 32 Plan 03] 由 SyncSessionLock 闭包置位
 	}
 	available, _, reason := DetectTmux(connA)
 	sessionCfg.TmuxAvailable = available

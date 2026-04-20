@@ -60,6 +60,12 @@ type SessionConfig struct {
 	Cwd               string
 	LocalHostname     string
 	LastSessionPath   string
+
+	// [Phase 32 Plan 03 新增] 由 ssh.go 从 mountCfg.IsSecondaryClient 透传而来。
+	// true → writeLastSessionTmuxField 写 ClientRole="secondary" + writeClientFile
+	//        client_role="secondary"；
+	// false（默认）→ "primary"（即 attach 上即视为本端持有 Mutagen 同步锁）。
+	IsSecondaryClient bool
 }
 
 // clientsRegistryDir 是容器内文件注册表目录（D-12 完整方案）。
@@ -225,12 +231,18 @@ func sshOutput(conn *ssh.Client, cmd string) (string, error) {
 //  3. 远程 mkdir + printf '%s' <json_q> > <pid>.json
 //
 // 失败仅返回 (0, err)；caller 记录 warning 即可，不阻塞 attach。
-func writeClientFile(conn *ssh.Client, sessionName, accountID, hostname string) (int, error) {
+//
+// role 由 caller 决定（"primary" / "secondary"）— Plan 03 通过
+// SessionConfig.IsSecondaryClient 透传到 pTYAttachOnce 再传入此函数。
+func writeClientFile(conn *ssh.Client, sessionName, accountID, hostname, role string) (int, error) {
 	if conn == nil {
 		return 0, fmt.Errorf("nil ssh.Client")
 	}
 	if hostname == "" {
 		hostname = "unknown-host"
+	}
+	if role == "" {
+		role = "primary"
 	}
 
 	pidOut, err := sshOutput(conn, "tmux display-message -p '#{client_pid}' 2>/dev/null")
@@ -249,7 +261,7 @@ func writeClientFile(conn *ssh.Client, sessionName, accountID, hostname string) 
 		TmuxSession:     sessionName,
 		AttachAtUnix:    time.Now().Unix(),
 		ClaudeAccountID: accountID,
-		ClientRole:      "primary",
+		ClientRole:      role,
 	}
 	jsonBytes, err := json.Marshal(entry)
 	if err != nil {
@@ -573,7 +585,11 @@ func runClaudeWithSession(ctx context.Context, conn *ssh.Client, sshCfg SSHConfi
 	}
 
 	printAttachBanner(os.Stderr, conn, sessionName, sessionCfg.NoColor)
-	writeLastSessionTmuxField(sessionCfg.LastSessionPath, sessionName, "primary")
+	role := "primary"
+	if sessionCfg.IsSecondaryClient {
+		role = "secondary"
+	}
+	writeLastSessionTmuxField(sessionCfg.LastSessionPath, sessionName, role)
 
 	claudeCmd := buildClaudeCmd(claudeArgs, hasProxy, sessionCfg.Cwd)
 	remoteCmd := buildTmuxRemoteCmd(sessionCfg.Cwd, sessionName, claudeCmd)
@@ -736,7 +752,11 @@ func pTYAttachOnce(ctx context.Context, conn *ssh.Client, remoteCmd, sessionName
 	// 异步写文件注册表（不阻塞 PTY 主路径）。
 	if *registryPid == 0 {
 		go func() {
-			pid, werr := writeClientFile(conn, sessionName, sessionCfg.AccountID, sessionCfg.LocalHostname)
+			clientRole := "primary"
+			if sessionCfg.IsSecondaryClient {
+				clientRole = "secondary"
+			}
+			pid, werr := writeClientFile(conn, sessionName, sessionCfg.AccountID, sessionCfg.LocalHostname, clientRole)
 			if werr != nil {
 				fmt.Fprintln(os.Stderr, "[!] writeClientFile 失败（banner hostname 将显示 unknown）:", werr)
 				return

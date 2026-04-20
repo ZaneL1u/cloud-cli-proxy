@@ -91,6 +91,11 @@ type MountConfig struct {
 	SessionTakeOver bool   // --take-over flag
 	LocalHostname   string // os.Hostname()，session.go 文件注册表用
 
+	// [Phase 32 Plan 03 新增] 由 ssh.go 注入的 SyncSessionLock 闭包在拿不到 flock
+	// 时（ErrSyncLocked）置 true；session.go::runClaudeWithSession 据此把
+	// last-session.json 的 ClientRole 写为 "secondary"（默认 "primary"）。
+	IsSecondaryClient bool
+
 	// 测试 hook：仅用于单测注入；生产路径 nil 时走真实实现。
 	overrideCaseInsensitive *bool
 	hooks                   *strategyHooks
