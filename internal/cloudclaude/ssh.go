@@ -167,6 +167,16 @@ func ConnectAndRunClaudeV3(cfg SSHConfig, claudeArgs []string, cwd string,
 	return runClaudeWithSession(context.Background(), connA, cfg, claudeArgs, sessionCfg, len(proxyCommands) > 0)
 }
 
+// SSHConnect 暴露给 cmd 层 sessions 子命令使用（Phase 32 Task 2.3）。
+// 仅是 sshConnect 的 export 包装，行为完全一致：
+//
+//   - 拨号 + ssh.NewClientConn + ssh.NewClient
+//   - 拨号成功后 best-effort ConfigureTCPKeepAlive（Phase 32 Plan 01）
+//
+// 调用方 (cmd/cloud-claude/sessions.go) 用此入口拿 *ssh.Client 直接喂给
+// internal/cloudclaude.RunSessionsLs / RunSessionsAttach。
+func SSHConnect(cfg SSHConfig) (*ssh.Client, error) { return sshConnect(cfg) }
+
 func sshConnect(cfg SSHConfig) (*ssh.Client, error) {
 	clientCfg := &ssh.ClientConfig{
 		User: cfg.User,
