@@ -35,6 +35,7 @@ type Service struct {
 		GetUser(context.Context, string) (repository.User, error)
 		CreateTask(context.Context, repository.CreateTaskParams) (repository.Task, error)
 		ListSSHKeysByUser(context.Context, string) ([]repository.SSHKey, error)
+		RecordEvent(context.Context, repository.RecordEventParams) (repository.Event, error)
 	}
 	dispatcher interface {
 		Dispatch(context.Context, agentapi.HostActionRequest) (agentapi.HostActionResponse, error)
@@ -49,6 +50,7 @@ func NewService(
 		GetUser(context.Context, string) (repository.User, error)
 		CreateTask(context.Context, repository.CreateTaskParams) (repository.Task, error)
 		ListSSHKeysByUser(context.Context, string) ([]repository.SSHKey, error)
+		RecordEvent(context.Context, repository.RecordEventParams) (repository.Event, error)
 	},
 	dispatcher interface {
 		Dispatch(context.Context, agentapi.HostActionRequest) (agentapi.HostActionResponse, error)
@@ -147,8 +149,23 @@ func (s *Service) QueueHostAction(ctx context.Context, hostID string, action age
 	}
 
 	if request.EntryPassword == "" {
-		slog.Warn("host entry_password is empty, container will use default password",
-			"host_id", hostID, "action", action, "username", owner.Username)
+		hid := hostID
+		if s.repo != nil {
+			_, _ = s.repo.RecordEvent(ctx, repository.RecordEventParams{
+				HostID:  &hid,
+				Level:   "error",
+				Type:    "runtime.entry_password_missing",
+				Message: "host entry_password is empty; refusing to queue action",
+				Metadata: map[string]any{
+					"host_id": hostID,
+					"action":  string(action),
+					"source":  "queue",
+				},
+			})
+		}
+		slog.Error("refusing to queue host action: entry_password empty",
+			"host_id", hostID, "action", action)
+		return repository.Task{}, fmt.Errorf("host %s entry_password is empty; refusing to queue %s", hostID, action)
 	}
 	slog.Info("queuing host action",
 		"host_id", hostID, "action", action,
