@@ -233,6 +233,7 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			hostsHandler := NewAdminHostsHandler(deps.Logger, deps.AdminHosts, deps.HostActions, deps.EventRecorder)
 			mux.Handle("GET /v1/admin/hosts", adminGuard(hostsHandler.List()))
 			mux.Handle("POST /v1/admin/hosts", adminGuard(hostsHandler.Create()))
+			mux.Handle("POST /v1/admin/hosts/resync-passwords", adminGuard(hostsHandler.ResyncPasswords()))
 			mux.Handle("GET /v1/admin/hosts/{hostID}", adminGuard(hostsHandler.Get()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/start", adminGuard(hostsHandler.Start()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/stop", adminGuard(hostsHandler.Stop()))

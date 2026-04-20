@@ -418,6 +418,102 @@ func (h *AdminHostsHandler) RotateSSHPassword() nethttp.Handler {
 	})
 }
 
+// ResyncPasswords 遍历所有 running host，把容器内 Linux 用户密码按 DB
+// hosts.entry_password 同步一遍；单 host 失败不影响整体返回。
+// Phase 29.1 存量修复入口。
+func (h *AdminHostsHandler) ResyncPasswords() nethttp.Handler {
+	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		hosts, err := h.store.ListRunningHosts(r.Context())
+		if err != nil {
+			h.logger.Error("list running hosts failed", "error", err)
+			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "list running hosts failed"})
+			return
+		}
+
+		var (
+			succeeded    int
+			failed       int
+			skippedEmpty int
+			results      = make([]map[string]any, 0, len(hosts))
+		)
+		const containerUser = "workspace"
+
+		for i := range hosts {
+			hostID := hosts[i].ID
+			containerName := "cloudproxy-" + hostID
+
+			if hosts[i].EntryPassword == "" {
+				if h.events != nil {
+					if _, evErr := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
+						HostID:   &hostID,
+						Level:    "error",
+						Type:     "runtime.entry_password_missing",
+						Message:  "host entry_password is empty during resync; skipping",
+						Metadata: map[string]any{"host_id": hostID, "container": containerName, "source": "resync"},
+					}); evErr != nil {
+						h.logger.Error("record event failed", "type", "runtime.entry_password_missing", "error", evErr)
+					}
+				}
+				skippedEmpty++
+				results = append(results, map[string]any{"host_id": hostID, "status": "skipped_empty_password"})
+				continue
+			}
+
+			if syncErr := syncContainerPassword(containerName, containerUser, hosts[i].EntryPassword); syncErr != nil {
+				h.logger.Warn("resync password to running container failed",
+					"host_id", hostID, "container", containerName, "error", syncErr)
+				if h.events != nil {
+					if _, evErr := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
+						HostID:   &hostID,
+						Level:    "warn",
+						Type:     "runtime.entry_password_resync_failed",
+						Message:  "docker exec chpasswd failed during admin batch resync",
+						Metadata: map[string]any{"host_id": hostID, "container": containerName, "error": syncErr.Error()},
+					}); evErr != nil {
+						h.logger.Error("record event failed", "type", "runtime.entry_password_resync_failed", "error", evErr)
+					}
+				}
+				failed++
+				results = append(results, map[string]any{"host_id": hostID, "status": "failed", "error": syncErr.Error()})
+				continue
+			}
+
+			if h.events != nil {
+				if _, evErr := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
+					HostID:   &hostID,
+					Level:    "info",
+					Type:     "runtime.entry_password_resynced",
+					Message:  "container entry password resynced from DB",
+					Metadata: map[string]any{"host_id": hostID, "container": containerName, "source": "admin_batch"},
+				}); evErr != nil {
+					h.logger.Error("record event failed", "type", "runtime.entry_password_resynced", "error", evErr)
+				}
+			}
+			succeeded++
+			results = append(results, map[string]any{"host_id": hostID, "status": "ok"})
+		}
+
+		if h.events != nil {
+			if _, evErr := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
+				Level:    "info",
+				Type:     "admin.hosts.password_resync_triggered",
+				Message:  "管理员批量同步主机 SSH 密码",
+				Metadata: map[string]any{"operator": "admin", "target_count": len(hosts)},
+			}); evErr != nil {
+				h.logger.Error("record event failed", "type", "admin.hosts.password_resync_triggered", "error", evErr)
+			}
+		}
+
+		writeJSON(w, nethttp.StatusOK, map[string]any{
+			"total":                  len(hosts),
+			"succeeded":              succeeded,
+			"failed":                 failed,
+			"skipped_empty_password": skippedEmpty,
+			"results":                results,
+		})
+	})
+}
+
 func (h *AdminHostsHandler) RestartVNC() nethttp.Handler {
 	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		hostID := r.PathValue("hostID")
