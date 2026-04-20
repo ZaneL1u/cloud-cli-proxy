@@ -149,6 +149,18 @@ chmod 0700 /workspace/.ssh
 
 echo "${RUN_USER}:${CONTAINER_PASSWORD}" | chpasswd
 
+# Phase 29.1: 验证密码已被成功设置，避免"密码退化为 workspace"的静默失败复现。
+# passwd -S 第 2 列语义：P / PS = 已设置密码；L / LK = 已锁定；NP = 无密码；UNSET = 读取失败。
+status="$(passwd -S "${RUN_USER}" 2>/dev/null | awk '{print $2}' || echo UNSET)"
+case "$status" in
+  P|PS)
+    ;;
+  *)
+    echo "[entrypoint] FATAL: password status for ${RUN_USER} is '${status}', refusing to start" >&2
+    exit 1
+    ;;
+esac
+
 # 禁用 IPv6（防止 IPv6 泄漏真实 IP）
 sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true
 sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1 || true
