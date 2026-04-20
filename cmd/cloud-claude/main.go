@@ -10,6 +10,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/cloudclaude"
+	"github.com/zanel1u/cloud-cli-proxy/internal/cloudclaude/errcodes"
 )
 
 var Version = "dev"
@@ -89,13 +90,13 @@ func main() {
 	rootCmd.PersistentFlags().String("mount-mode", "auto",
 		"文件映射模式: auto|full|mutagen-only|sshfs-only")
 
-	rootCmd.AddCommand(initCmd, envCmd, sshCmd, newSyncCmd())
+	rootCmd.AddCommand(initCmd, envCmd, sshCmd, newSyncCmd(), newSessionsCmd())
 
 	// DisableFlagParsing 会阻止 cobra 识别子命令，
 	// 在检测到已知子命令时关闭它以恢复正常路由。
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "init", "env", "ssh", "sync", "help", "--help", "-h":
+		case "init", "env", "ssh", "sync", "sessions", "help", "--help", "-h":
 			rootCmd.DisableFlagParsing = false
 		}
 	}
@@ -251,17 +252,26 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	}
 
 	// 因 DisableFlagParsing=true，cobra 不会自动解析 PersistentFlags；
-	// 这里手工扫描 --mount-mode 并从 args 中剥离，剩余 args 透传给远端 claude。
+	// 这里手工扫描 --mount-mode / --new-session / --take-over 并从 args 中剥离，
+	// 剩余 args 透传给远端 claude（防止 unknown flag 干扰 claude CLI）。
 	mountMode := "auto"
+	newSession := false
+	takeOver := false
 	filtered := args[:0]
 	for i := 0; i < len(args); i++ {
-		if args[i] == "--mount-mode" && i+1 < len(args) {
+		switch {
+		case args[i] == "--mount-mode" && i+1 < len(args):
 			mountMode = args[i+1]
 			i++
 			continue
-		}
-		if strings.HasPrefix(args[i], "--mount-mode=") {
+		case strings.HasPrefix(args[i], "--mount-mode="):
 			mountMode = strings.TrimPrefix(args[i], "--mount-mode=")
+			continue
+		case args[i] == "--new-session":
+			newSession = true
+			continue
+		case args[i] == "--take-over":
+			takeOver = true
 			continue
 		}
 		filtered = append(filtered, args[i])
@@ -338,6 +348,24 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		KeepAliveCountMax: 4,
 		NoColor:           os.Getenv("NO_COLOR") != "",
 	}
+
+	// [Phase 32 D-29] 注入 cobra flag 透传 + 本机 hostname。
+	mountCfg.SessionTakeOver = takeOver
+	if newSession {
+		mountCfg.SessionShortID = cloudclaude.GenerateShortSessionID()
+	}
+	if hostname, _ := os.Hostname(); hostname != "" {
+		mountCfg.LocalHostname = hostname
+	}
+
+	// [Phase 32 D-03 第 4 条] keepalive_interval < 15s 启动期校验（REQ-F3-A / PITFALLS M11）。
+	// 防御未来用户通过环境变量 / config 覆盖默认 15s。
+	if mountCfg.KeepAliveInterval > 0 && mountCfg.KeepAliveInterval < 15*time.Second {
+		fmt.Fprintln(os.Stderr,
+			errcodes.Format(errcodes.SESSION_KEEPALIVE_TOO_AGGRESSIVE, mountCfg.KeepAliveInterval.String()))
+		os.Exit(exitConfigError)
+	}
+
 	exitCode, err := cloudclaude.ConnectAndRunClaudeV3(
 		sshCfg, args, cwd, cfg.EffectiveProxyCommands(), mountCfg, authResp,
 	)
