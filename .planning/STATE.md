@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 远端开发体验升级
-status: verifying
+status: executing
 stopped_at: Phase 32 context gathered
-last_updated: "2026-04-20T07:12:43.189Z"
-last_activity: 2026-04-19
+last_updated: "2026-04-20T08:16:37.068Z"
+last_activity: 2026-04-20 -- Phase 32 planning complete
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 Milestone: v3.0 远端开发体验升级
 Phase: 31 (cli) — EXECUTING
 Plan: 3 of 3
-Status: Phase complete — ready for verification
-Last activity: 2026-04-19
+Status: Ready to execute
+Last activity: 2026-04-20 -- Phase 32 planning complete
 
 Progress: [░░░░░░░░░░░░░░░░░░░░] 0%（v3.0；Phase 29 待执行）
 
@@ -71,6 +71,10 @@ None — 等待 REQUIREMENTS.md 与 ROADMAP.md 产出后进入 phase 执行。
 |---|-------------|------|--------|-----------|
 | 260416-wvu | injectSSHKeys 幂等化，保留用户手加密钥 | 2026-04-16 | cc18acf | [260416-wvu-make-injectsshkeys-idempotent-so-user-ge](./quick/260416-wvu-make-injectsshkeys-idempotent-so-user-ge/) |
 | 260417-0w4 | 新增 cloud-claude ssh doctor 子命令（owner/mode/PEM 尾换行自检与修复） | 2026-04-16 | d716b14, 3f0567c, 7836821 | [260417-0w4-cloud-claude-cli-ssh-doctor-workspace-ss](./quick/260417-0w4-cloud-claude-cli-ssh-doctor-workspace-ss/) |
+
+### Roadmap Evolution
+
+- Phase 29.1 inserted after Phase 29: 修复 GetHost 缺失 entry_password 字段导致容器密码退化为 workspace（URGENT — 线上 P0）
 
 ### Phase 29 关键修订记录
 
