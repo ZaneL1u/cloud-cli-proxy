@@ -1,11 +1,41 @@
 package cloudclaude
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
+
+// syncBuffer 是 bytes.Buffer 的并发安全包装，仅供测试使用。
+// 生产代码通过 BufferedStdin.echoMu 保证 localEcho 写入的并发安全；
+// 测试主 goroutine 与 bs.Run goroutine 都会访问 echo buffer，需要外部同步。
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuffer) Snapshot() []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]byte, s.buf.Len())
+	copy(out, s.buf.Bytes())
+	return out
+}
+
+func (s *syncBuffer) String() string { return string(s.Snapshot()) }
 
 // --- 命名 helpers ---
 
@@ -325,5 +355,119 @@ func TestWriteLastSessionReconnectCount_MergeMode(t *testing.T) {
 	}
 	if got.ReconnectCount != 5 {
 		t.Errorf("ReconnectCount = %d, want 5", got.ReconnectCount)
+	}
+}
+
+// TestPTYReconnect_BufferedInputFlush 验证 Phase 32 Gap #1 闭合（SC5 / REQ-F3-B）。
+//
+// 等价测试路径（不走真实 ssh.Client，避免 mock 完整 ssh stack）：
+//  1. 手工创建 Reconnector + BufferedStdin 单例（mirror runClaudePTYWithReconnect 循环外逻辑）
+//  2. state.Store(StateReconnecting) 模拟 Reconnector.Run 入口
+//  3. io.Pipe 喂 "abc" 到 BufferedStdin.src
+//  4. 断言 echo buffer 含 ansiGray + 原始字符 + ringBuf 非空（"abc"）
+//  5. state.Store(StateConnected) + bs.Flush() 模拟 Reconnector.Run 成功回调
+//  6. 断言 pipeR 读到 "abc" + echo 含 ansiReset + ringBuf 清空
+//
+// 完整 ssh.Client 拨号路径的端到端验收留 Phase 35 真机 UAT
+// （32-VERIFICATION.md human_verification#1）。
+func TestPTYReconnect_BufferedInputFlush(t *testing.T) {
+	srcR, srcW := io.Pipe()
+	defer srcW.Close()
+	echo := &syncBuffer{} // 并发安全 echo writer（测试 main + bs.Run 双 goroutine 访问）
+
+	// mirror runClaudePTYWithReconnect 外层：NewReconnector + NewBufferedStdin 共享 state。
+	reconnector := NewReconnector(SSHConfig{},
+		nil,
+		func(c *ssh.Client) error { return nil },
+		&bytes.Buffer{}, // statusWriter — 测试不调 reconnector.Run，renderStatus 不会启动
+		true,            // noColor for reconnector（不影响 BufferedStdin 的 ansiGray 输出）
+	)
+	// BufferedStdin noColor=false，确保 ansiGray / ansiReset 真实输出到 echo buffer。
+	bs, pipeR := NewBufferedStdin(srcR, reconnector.StateAddr(), echo, false, reconnector.Trigger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = bs.Run(ctx) }()
+	defer bs.Close()
+
+	// Phase 1: 模拟 Reconnector.Run 入口 —— state=Reconnecting
+	reconnector.StateAddr().Store(int32(StateReconnecting))
+
+	// 喂 "abc" 到 src（异步写，因 io.Pipe 同步阻塞直到读端消费）
+	go func() {
+		_, _ = srcW.Write([]byte("abc"))
+	}()
+
+	// 等 bs.Run 逐字节读 + handleReconnecting 完成（buffer 累积 + echo 写入）
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		bs.ringMu.Lock()
+		ringLen := len(bs.ringBuf)
+		bs.ringMu.Unlock()
+		if ringLen == 3 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// 断言 1：echo buffer 含 ansiGray（灰色未确认开头）
+	echoSnap := echo.Snapshot()
+	if !bytes.Contains(echoSnap, []byte(ansiGray)) {
+		t.Errorf("echo buffer 应含 ansiGray，实际: %q", string(echoSnap))
+	}
+
+	// 断言 2：echo buffer 含原始字符 a/b/c
+	for _, c := range []byte("abc") {
+		if !bytes.Contains(echoSnap, []byte{c}) {
+			t.Errorf("echo buffer 应含 %q，实际: %q", string(c), string(echoSnap))
+		}
+	}
+
+	// 断言 3：ringBuf 非空（3 bytes "abc"）
+	bs.ringMu.Lock()
+	ringLen := len(bs.ringBuf)
+	ringContent := string(bs.ringBuf)
+	bs.ringMu.Unlock()
+	if ringLen != 3 || ringContent != "abc" {
+		t.Fatalf("ringBuf 应含 \"abc\"（len=3），实际 len=%d content=%q", ringLen, ringContent)
+	}
+
+	// Phase 2: 模拟 Reconnector.Run 成功回调 —— state=Connected + Flush
+	reconnector.StateAddr().Store(int32(StateConnected))
+
+	// io.Pipe Flush 会阻塞直到有读者；先把读 goroutine 起来
+	readDone := make(chan []byte, 1)
+	go func() {
+		buf := make([]byte, 16)
+		n, _ := pipeR.Read(buf)
+		readDone <- buf[:n]
+	}()
+	time.Sleep(50 * time.Millisecond) // 让读 goroutine 就绪
+
+	if err := bs.Flush(); err != nil {
+		t.Fatalf("Flush 失败: %v", err)
+	}
+
+	// 断言 4：pipeR 读到 "abc"（按序 / 无丢字）
+	select {
+	case got := <-readDone:
+		if string(got) != "abc" {
+			t.Errorf("pipeR 读到 %q，期望 \"abc\"", string(got))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("pipeR 未在 2s 内读到数据 —— Flush 路径未生效（Gap #1 未闭合）")
+	}
+
+	// 断言 5：Flush 后 ringBuf 清空
+	bs.ringMu.Lock()
+	if len(bs.ringBuf) != 0 {
+		t.Errorf("Flush 后 ringBuf 应清空，实际 len=%d", len(bs.ringBuf))
+	}
+	bs.ringMu.Unlock()
+
+	// 断言 6：Flush 后 echo buffer 含 ansiReset（closeGrayIfOpen 被调用，灰色关闭）
+	echoFinal := echo.Snapshot()
+	if !bytes.Contains(echoFinal, []byte(ansiReset)) {
+		t.Errorf("Flush 后 echo buffer 应含 ansiReset，实际: %q", string(echoFinal))
 	}
 }
