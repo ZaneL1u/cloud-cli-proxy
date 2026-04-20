@@ -1,6 +1,7 @@
 package cloudclaude
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -138,7 +139,32 @@ func ConnectAndRunClaudeV3(cfg SSHConfig, claudeArgs []string, cwd string,
 		}
 	}
 
-	return runClaude(connA, claudeArgs, cwd, len(proxyCommands) > 0)
+	// [Phase 32 D-15 / D-28 / D-29] tmux 探测 + 路由：
+	//   - DetectTmux 失败 → SESSION_TMUX_UNAVAILABLE warning + 走 v2.0 runClaude（不阻塞启动 / REQ-F4-C）
+	//   - 成功 → runClaudeWithSession（tmux new-session -A 包装 + RunKeepAlive + Reconnector + BufferedStdin）
+	//
+	// 注：ConnectAndRunClaudeV3 当前签名无 context.Context（Phase 31 未引入），
+	// 这里使用 context.Background()；用户 Ctrl+C 由 PTY 主循环 / SIGWINCH goroutine
+	// 自然处理；后续若需 ctx-cancel 由独立 phase 调整签名。
+	sessionCfg := SessionConfig{
+		AccountID:         mountCfg.ClaudeAccountID,
+		ShortID:           mountCfg.SessionShortID,
+		TakeOver:          mountCfg.SessionTakeOver,
+		KeepAliveInterval: mountCfg.KeepAliveInterval,
+		KeepAliveCountMax: mountCfg.KeepAliveCountMax,
+		ReconnectEnabled:  true,
+		NoColor:           mountCfg.NoColor,
+		Cwd:               cwd,
+		LocalHostname:     mountCfg.LocalHostname,
+		LastSessionPath:   mountCfg.LastSessionPath,
+	}
+	available, _, reason := DetectTmux(connA)
+	sessionCfg.TmuxAvailable = available
+	if !available {
+		fmt.Fprintln(mountCfg.Logger, errcodes.Format(errcodes.SESSION_TMUX_UNAVAILABLE, reason))
+		return runClaude(connA, claudeArgs, cwd, len(proxyCommands) > 0)
+	}
+	return runClaudeWithSession(context.Background(), connA, cfg, claudeArgs, sessionCfg, len(proxyCommands) > 0)
 }
 
 func sshConnect(cfg SSHConfig) (*ssh.Client, error) {

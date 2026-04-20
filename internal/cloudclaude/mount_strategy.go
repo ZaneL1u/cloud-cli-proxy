@@ -85,6 +85,12 @@ type MountConfig struct {
 	LastSessionPath   string
 	SyncSessionLock   func(accountID string) (release func(), err error)
 
+	// [Phase 32 D-29] cobra --new-session / --take-over flag 透传 + os.Hostname() 注入。
+	// 字段不参与 JSON 序列化（MountConfig 是运行时配置容器，无 JSON tag）。
+	SessionShortID  string // --new-session 时 cmd 层生成的 8 字符 base64url；空 = 默认 session 命名（per-account_id）
+	SessionTakeOver bool   // --take-over flag
+	LocalHostname   string // os.Hostname()，session.go 文件注册表用
+
 	// 测试 hook：仅用于单测注入；生产路径 nil 时走真实实现。
 	overrideCaseInsensitive *bool
 	hooks                   *strategyHooks
