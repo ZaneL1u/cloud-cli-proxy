@@ -160,7 +160,7 @@
 **Goal:** 修复 `GetHost` SELECT 漏 `entry_password` 导致的全链路密码退化：(1) 新建容器 `CONTAINER_SSH_PASSWORD` 与 DB `hosts.entry_password` 严格一致，杜绝 `"workspace"` 字面量 fallback；(2) 仓储层 6 个 Host 读函数整批补齐 `entry_password` 列；(3) worker / runtime 任何 `EntryPassword == ""` 路径改 fail-fast + audit event；(4) entrypoint 新增 `passwd -S` 自检，容器宁可起不来也不起"伪成功"；(5) admin 批量 resync 端点一键修复存量运行容器；(6) 仓储 / worker / handler 三层回归测试 + 端到端人工 UAT。
 **Requirements**: P0-HOTFIX-29.1（无正式 REQ-ID，线上紧急修复）
 **Depends on:** Phase 29
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 - [ ] `.planning/phases/29.1-gethost-entry-password-workspace/29.1-01-PLAN.md` — 仓储层：6 个 Host 读函数 SELECT + Scan 补 `entry_password`，SQL 提升为包级常量，新增 `TestAllHostReadQueriesIncludeEntryPassword` 契约测试（Wave 1）
