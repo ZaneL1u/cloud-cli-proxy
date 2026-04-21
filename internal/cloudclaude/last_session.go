@@ -74,3 +74,37 @@ func WriteLastSession(path string, snap LastSessionSnapshot) error {
 	}
 	return nil
 }
+
+// DefaultLastSessionPath 返回默认 last-session.json 路径（~/.cloud-claude/last-session.json）。
+// home 目录无法定位时返回空串 + error；调用方应当 best-effort 处理（doctor 第一屏 nil banner 兜底）。
+func DefaultLastSessionPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("无法定位 home 目录: %w", err)
+	}
+	return filepath.Join(home, ".cloud-claude", "last-session.json"), nil
+}
+
+// LoadLastSession 从默认路径读取 last-session.json，反序列化为 LastSessionSnapshot。
+//
+// 行为：
+//  1. 文件不存在 → (nil, error)；调用方按 nil 兜底（doctor 第一屏走 STATE_LAST_SESSION_MISSING）
+//  2. JSON 解析失败 → (nil, error)
+//  3. 成功 → (*snap, nil)
+//
+// Phase 34 Plan 02 Task 2.10：doctor RunDoctor 复用，读后传给 convertSnapshotToBanner。
+func LoadLastSession() (*LastSessionSnapshot, error) {
+	path, err := DefaultLastSessionPath()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var snap LastSessionSnapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return nil, fmt.Errorf("解析 last-session 失败: %w", err)
+	}
+	return &snap, nil
+}
