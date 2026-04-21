@@ -448,14 +448,14 @@ func printProgress(w io.Writer, mode Mode) {
 func printBanner(w io.Writer, mode Mode, noColor bool) {
 	enabled := false
 	if fh, ok := w.(fdHolder); ok {
-		enabled = colorEnabled(noColor, fh)
+		enabled = ColorEnabled(noColor, fh)
 	}
-	color := ansiYellow
+	color := AnsiYellow
 	if mode == ModeFull {
-		color = ansiGreen
+		color = AnsiGreen
 	}
 	text := fmt.Sprintf("✓ 文件映射就绪 [%s]", mode.String())
-	fmt.Fprintln(w, colorize(text, color, enabled))
+	fmt.Fprintln(w, Colorize(text, color, enabled))
 }
 
 // applyDowngrade 输出降级 banner 到 stderr 并 append 到 snapshot.DowngradeChain。

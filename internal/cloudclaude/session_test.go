@@ -364,9 +364,9 @@ func TestWriteLastSessionReconnectCount_MergeMode(t *testing.T) {
 //  1. 手工创建 Reconnector + BufferedStdin 单例（mirror runClaudePTYWithReconnect 循环外逻辑）
 //  2. state.Store(StateReconnecting) 模拟 Reconnector.Run 入口
 //  3. io.Pipe 喂 "abc" 到 BufferedStdin.src
-//  4. 断言 echo buffer 含 ansiGray + 原始字符 + ringBuf 非空（"abc"）
+//  4. 断言 echo buffer 含 AnsiGray + 原始字符 + ringBuf 非空（"abc"）
 //  5. state.Store(StateConnected) + bs.Flush() 模拟 Reconnector.Run 成功回调
-//  6. 断言 pipeR 读到 "abc" + echo 含 ansiReset + ringBuf 清空
+//  6. 断言 pipeR 读到 "abc" + echo 含 AnsiReset + ringBuf 清空
 //
 // 完整 ssh.Client 拨号路径的端到端验收留 Phase 35 真机 UAT
 // （32-VERIFICATION.md human_verification#1）。
@@ -380,9 +380,9 @@ func TestPTYReconnect_BufferedInputFlush(t *testing.T) {
 		nil,
 		func(c *ssh.Client) error { return nil },
 		&bytes.Buffer{}, // statusWriter — 测试不调 reconnector.Run，renderStatus 不会启动
-		true,            // noColor for reconnector（不影响 BufferedStdin 的 ansiGray 输出）
+		true,            // noColor for reconnector（不影响 BufferedStdin 的 AnsiGray 输出）
 	)
-	// BufferedStdin noColor=false，确保 ansiGray / ansiReset 真实输出到 echo buffer。
+	// BufferedStdin noColor=false，确保 AnsiGray / AnsiReset 真实输出到 echo buffer。
 	bs, pipeR := NewBufferedStdin(srcR, reconnector.StateAddr(), echo, false, reconnector.Trigger)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -410,10 +410,10 @@ func TestPTYReconnect_BufferedInputFlush(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	// 断言 1：echo buffer 含 ansiGray（灰色未确认开头）
+	// 断言 1：echo buffer 含 AnsiGray（灰色未确认开头）
 	echoSnap := echo.Snapshot()
-	if !bytes.Contains(echoSnap, []byte(ansiGray)) {
-		t.Errorf("echo buffer 应含 ansiGray，实际: %q", string(echoSnap))
+	if !bytes.Contains(echoSnap, []byte(AnsiGray)) {
+		t.Errorf("echo buffer 应含 AnsiGray，实际: %q", string(echoSnap))
 	}
 
 	// 断言 2：echo buffer 含原始字符 a/b/c
@@ -465,9 +465,9 @@ func TestPTYReconnect_BufferedInputFlush(t *testing.T) {
 	}
 	bs.ringMu.Unlock()
 
-	// 断言 6：Flush 后 echo buffer 含 ansiReset（closeGrayIfOpen 被调用，灰色关闭）
+	// 断言 6：Flush 后 echo buffer 含 AnsiReset（closeGrayIfOpen 被调用，灰色关闭）
 	echoFinal := echo.Snapshot()
-	if !bytes.Contains(echoFinal, []byte(ansiReset)) {
-		t.Errorf("Flush 后 echo buffer 应含 ansiReset，实际: %q", string(echoFinal))
+	if !bytes.Contains(echoFinal, []byte(AnsiReset)) {
+		t.Errorf("Flush 后 echo buffer 应含 AnsiReset，实际: %q", string(echoFinal))
 	}
 }

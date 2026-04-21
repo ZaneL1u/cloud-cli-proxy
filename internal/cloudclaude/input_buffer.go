@@ -116,7 +116,7 @@ func (b *BufferedStdin) handleReconnecting(c byte) {
 		// echoMu 保护 grayOpen 与 localEcho 写入，与 Run-Connected / Flush 并发安全（WR-04 co-fix）。
 		b.echoMu.Lock()
 		if !b.grayOpen && !b.noColor {
-			fmt.Fprint(b.localEcho, ansiGray)
+			fmt.Fprint(b.localEcho, AnsiGray)
 			b.grayOpen = true
 		}
 		fmt.Fprintf(b.localEcho, "%c", c)
@@ -139,7 +139,7 @@ func (b *BufferedStdin) closeGrayIfOpen() {
 // closeGrayIfOpenLocked 调用方必须已持有 echoMu。
 func (b *BufferedStdin) closeGrayIfOpenLocked() {
 	if b.grayOpen && b.localEcho != nil && !b.noColor {
-		fmt.Fprint(b.localEcho, ansiReset)
+		fmt.Fprint(b.localEcho, AnsiReset)
 		b.grayOpen = false
 	}
 }

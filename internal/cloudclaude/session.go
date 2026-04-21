@@ -480,8 +480,8 @@ func printAttachBanner(w io.Writer, conn *ssh.Client, sessionName string, noColo
 	clients := parseTmuxListClients(out)
 
 	greeting := fmt.Sprintf("✓ 已 attach 到会话 %s", sessionName)
-	if fh, ok := w.(fdHolder); ok && colorEnabled(noColor, fh) {
-		greeting = colorize(greeting, ansiGreen, true)
+	if fh, ok := w.(fdHolder); ok && ColorEnabled(noColor, fh) {
+		greeting = Colorize(greeting, AnsiGreen, true)
 	}
 	fmt.Fprintln(w, greeting)
 

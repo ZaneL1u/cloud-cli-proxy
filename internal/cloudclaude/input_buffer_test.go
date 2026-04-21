@@ -39,7 +39,7 @@ func TestBufferedStdin_ReconnectingBuffersAndGrayEchoes(t *testing.T) {
 	defer cancel()
 	_ = b.Run(ctx)
 
-	if !bytes.Contains(echo.Bytes(), []byte(ansiGray)) {
+	if !bytes.Contains(echo.Bytes(), []byte(AnsiGray)) {
 		t.Error("Reconnecting 状态应灰色 echo")
 	}
 	if string(b.ringBuf) != "ab" {

@@ -7,26 +7,29 @@ import (
 )
 
 // ANSI 颜色常量（极简实现，避免引入第三方 color 库）。
+// Phase 34 Plan 02 Task 2.1：首字母大写导出，供 doctor 包跨包复用。
 const (
-	ansiReset  = "\033[0m"
-	ansiRed    = "\033[31m"
-	ansiGreen  = "\033[32m"
-	ansiYellow = "\033[33m"
-	ansiCyan   = "\033[36m"
-	ansiGray   = "\033[90m" // [Phase 32 D-23] reconnect "..." / input_buffer 未确认字符
+	AnsiReset  = "\033[0m"
+	AnsiRed    = "\033[31m"
+	AnsiGreen  = "\033[32m"
+	AnsiYellow = "\033[33m"
+	AnsiCyan   = "\033[36m"
+	AnsiGray   = "\033[90m" // [Phase 32 D-23] reconnect "..." / input_buffer 未确认字符
 )
 
-// fdHolder 是 colorEnabled 唯一关心的接口：能拿到 fd 即可探测 TTY。
+// fdHolder 是 ColorEnabled 唯一关心的接口：能拿到 fd 即可探测 TTY。
 // os.File 实现该接口；测试时可传 nil 或自定义实现。
 type fdHolder interface {
 	Fd() uintptr
 }
 
-// colorEnabled 判定是否输出 ANSI 颜色：
+// ColorEnabled 判定是否输出 ANSI 颜色：
 //   - noColor=true 直接关闭
 //   - NO_COLOR 环境变量任意非空 → 关闭（遵循 https://no-color.org/）
 //   - w 为 nil 或非 TTY → 关闭
-func colorEnabled(noColor bool, w fdHolder) bool {
+//
+// Phase 34 Plan 02 Task 2.1：从 lower-case colorEnabled 改名导出，doctor 包复用。
+func ColorEnabled(noColor bool, w fdHolder) bool {
 	if noColor {
 		return false
 	}
@@ -39,10 +42,12 @@ func colorEnabled(noColor bool, w fdHolder) bool {
 	return term.IsTerminal(int(w.Fd()))
 }
 
-// colorize 包装文本为 ANSI 着色。enabled=false 时返回原文。
-func colorize(s, ansi string, enabled bool) string {
+// Colorize 包装文本为 ANSI 着色。enabled=false 时返回原文。
+//
+// Phase 34 Plan 02 Task 2.1：从 lower-case colorize 改名导出，doctor 包复用。
+func Colorize(s, ansi string, enabled bool) string {
 	if !enabled {
 		return s
 	}
-	return ansi + s + ansiReset
+	return ansi + s + AnsiReset
 }
