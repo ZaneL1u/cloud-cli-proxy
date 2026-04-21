@@ -44,8 +44,10 @@ type Dependencies struct {
 	AdminUsers      AdminUserStore
 	AdminEgressIPs  AdminEgressIPStore
 	AdminBindings   AdminBindingStore
-	AdminHosts      AdminHostStore
-	AdminEvents     AdminEventStore
+	AdminHosts          AdminHostStore
+	AdminClaudeAccounts AdminClaudeAccountStore // Phase 33 D-17
+	AgentClient         *agentapi.Client        // Phase 33 D-17
+	AdminEvents         AdminEventStore
 	EventRecorder   EventRecorder
 	EntryStore      EntryStore
 	EntryBaseURL    string
@@ -253,6 +255,11 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			// VNC 入口页 (vnc.html) 带 ?token= 认证；子资源（CSS/JS/图片）
 			// 只是 KasmVNC 通用 UI，安全边界在 WebSocket 连接，无需逐个认证。
 			mux.Handle("/v1/admin/hosts/{hostID}/vnc/{path...}", vncProxy)
+		}
+
+		if deps.AdminClaudeAccounts != nil {
+			claudeHandler := NewAdminClaudeAccountsHandler(deps.Logger, deps.AdminClaudeAccounts, deps.AgentClient, deps.EventRecorder)
+			mux.Handle("DELETE /v1/admin/claude-accounts/{accountID}", adminGuard(claudeHandler.Delete()))
 		}
 
 		if deps.AdminEvents != nil {
