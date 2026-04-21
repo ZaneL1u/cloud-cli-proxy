@@ -92,7 +92,7 @@
   Plans:
   - [x] `.planning/phases/33-claude-code-cli-admin-gc/33-01-image-worker-agentapi-PLAN.md` — 镜像 entrypoint `prepare_persistent_state` + Worker `createHost` 自动补 `claude-state-<id>` volume + agentapi `ActionVolumeRemove` + 仓储 `UpsertClaudeAccountPersistentVolumeName` + 单测 D-25 第 1-4+7 项（Wave 1，Complete 2026-04-21）
   - [x] `.planning/phases/33-claude-code-cli-admin-gc/33-02-admin-delete-host-detail-uat-PLAN.md` — admin `DELETE /v1/admin/claude-accounts/{id}` 强一致+force 两条路径 + admin host detail 追加 `persistent_volume_name` + 仓储 `BeginTx`/`GetHostWithClaudeAccount`/`Lock+DeleteClaudeAccountTx` + 单测 D-25 第 5-6 项 + UAT D-26 + 运维手册（Wave 2，depends_on Plan 01）— **Complete 2026-04-21: 6 个 task 全 ship + UAT APPROVED + 3 post-fix patches (3e2ba6b/27ab2d7/c09a4d0) 闭合 Plan 01 D-04 dispatcher 缺口与真实部署 wiring**
-- [ ] **Phase 34: cloud-claude doctor v3 + 错误码统一** — `doctor` 5 维度子命令 + `--fix`/`--json`、统一错误码 `<DOMAIN>_<KIND>_<NUM>`、`cloud-claude explain` (0/3 plans)
+- [x] **Phase 34: cloud-claude doctor v3 + 错误码统一** — `doctor` 5 维度子命令 + `--fix`/`--json`、统一错误码 `<DOMAIN>_<KIND>_<NUM>`、`cloud-claude explain` (0/3 plans) (completed 2026-04-21)
 - [ ] **Phase 35: E2E 稳定化 + 性能验收** — `rg`/`ls -R` 10k 文件基准、拔网 10s/30s/2min UAT、首连 ≤ 8s 验收、APFS + Ubuntu 25.04 真机、image ≤ 700MB CI gate、运维手册更新 (0/2 plans)
 
 </details>
@@ -125,7 +125,7 @@
 | 31. CLI 三层文件映射重构 | v3.0 | 3/3 | Complete   | 2026-04-19 |
 | 32. SSH 会话可靠性 + tmux + 多端 | v3.0 | 0/0 | Complete    | 2026-04-20 |
 | 33. Claude Code 状态持久化 | v3.0 | 2/2 | Complete    | 2026-04-21 |
-| 34. cloud-claude doctor v3 + 错误码统一 | v3.0 | 3/3 | Complete   | 2026-04-21 |
+| 34. cloud-claude doctor v3 + 错误码统一 | v3.0 | 3/3 | Complete    | 2026-04-21 |
 | 35. E2E 稳定化 + 性能验收 | v3.0 | 0/2 | Pending | — |
 
 ## v3.0 Phase Details
