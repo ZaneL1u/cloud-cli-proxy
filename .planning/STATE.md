@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 远端开发体验升级
-status: executing
-stopped_at: Completed 34-02-doctor-framework-PLAN.md
-last_updated: "2026-04-21T10:42:04.594Z"
+status: verifying
+stopped_at: Completed 34-03-doctor-fix-integration-PLAN.md
+last_updated: "2026-04-21T10:55:21.780Z"
 last_activity: 2026-04-21
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 25
-  completed_plans: 24
-  percent: 96
+  completed_plans: 25
+  percent: 100
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 Milestone: v3.0 远端开发体验升级
 Phase: 34 (cloud-claude-doctor-v3) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-21
 
 Progress: [████████████████████] 100%（Phase 33 plans 全 ship；等 phase-level verification 后 mark complete）
@@ -73,6 +73,7 @@ v3.0 关键方向已定：
 - [Phase 33-01]: 镜像层 entrypoint 追加 `prepare_persistent_state` v3 stage（位于 `prepare_v3_dirs → prepare_mutagen_agent` 之间），通过 `cp -an` 幂等 seed + `ln -sfn` 把 `/home/claude/.claude` 与 `.cache/claude` 重定向到 `/var/lib/claude-persist`；agentapi 增 `ActionVolumeRemove = "volume_remove"` 协议常量（D-13）；worker 新增 `BuildClaudeStateVolumeName / dockerVolumeRunner / ensureDockerVolume / removeDockerVolume / removeVolumes`（包级 var 注入 mock 模式），Execute switch 增 `case ActionVolumeRemove` + `volume_in_use` 错误码映射；`createHost` 在 `ClaudeAccountID != ""` 时自动 ensure volume + 追加 mount + upsert 写库 + 失败写 audit；WorkerRepo 接口扩展 `UpsertClaudeAccountPersistentVolumeName`（Repository 三态语义实现 NULL→写入 / 一致跳过 / 冲突错误，SQL 提升包级 const）。fakeWorkerRepo 同步实现新方法以闭环包测试编译。Audit event metadata 严守白名单 `account_id/volume_name/force/host_id`，`grep Metadata:.*"(email|entry_password|credentials|oauth_token)"` 命中 0。新增 12 条单测全 PASS（2 协议 round-trip + 7 lifecycle + 3 SQL/边界），既有 `internal/runtime/tasks/` + `internal/store/repository/` 全包无回归；`go build ./...` PASS。Carry-over：(a) dispatcher 链路 `ClaudeAccountID:` 字段在生产代码全无注入，目前 createHost 走 D-07 fallback 不激活自动 volume — Plan 02 admin handler 走显式 Volumes 不依赖此字段，但 SC1 端到端激活责任移交后续 phase；(b) `ensureDockerVolume` label 一致性比对推迟 v3.1 backlog。Commits: 7acf3d6 (entrypoint) + 235d969 (agentapi) + 2d0bc22 (worker) + 208df5f (repo)。
 - [Phase 34-cloud-claude-doctor-v3]: [Phase 34-01]: 8 域闭合错误码 Registry (42 条) + ExtendedExplanations 38 条 ≥200 中文字符长说明 + cloud-claude explain <code> CLI 子命令 (rustc-style); ExplainExempt 4 条 Info 豁免 (Rule 1: MOUNT_AUTO_DOWNGRADED Severity=Warn 移到 ExtendedExplanations 避免与 TestExplainExemptOnlyInformational 矛盾); NET_EGRESS_IP_DRIFT 登记到 auth.go init (避免新建独立 network.go); STATE_VOLUME_IN_USE_001 字面量与 Phase 33 admin handler 守恒 (D-27); 9 errcodes test + 3 explain 子进程 test 全 PASS; commits 01d9f12 / b2fcd24 / b421445 / 2a03abe / 6ae00c6 / 6dc4037 / 75ae2d7 / ccd9317
 - [Phase 34-cloud-claude-doctor-v3]: [Phase 34-02]: cloud-claude doctor 五维度自检框架 (18 项 check / 51 单测) — network×3 / auth×3 / ssh×4 / mount×5 / disk×3；M13 (降级 banner 第一屏字面量) + M14 (warn/fail 必带「建议:」+「错误码:」) + SC#5 (JSON schema_version=1 锁死 + 退出码 0/1/2 brew 对齐) 三大锚点全 PASS；Rule 3 deviations: cloudclaude.LoadLastSession 自实现 (plan 引用了不存在的读端 API) + ColorEnabled/Colorize 保留 2-arg/3-arg 签名 (避免重构既有 mount_strategy/session 调用点); Rule 1: authRespExpectedEgressIP 恒返回 '' (entry.go AuthResponse 未导出该字段，v3.1 backlog)；commits 0ddeb10 / c5f6df5 / a945598 / 511753c / aefef3d / 7fb7124 / d77aa8a / 326cdb1 / 3a95373 / 231fe17 / a34e4ce
+- [Phase 34-cloud-claude-doctor-v3]: Plan 34-03 doctor-fix-integration: FixerRegistry 6 entry (5 类 + AUTH_OAUTH_REFRESH_FAILED 派生) + ApplyFixes 60s timeout + Status 不降级 (D-16); confirmDestructive 三级判定 (Yes/JSON/非TTY); 5 个 exec* 包级 var mock + isTerminalFD; integration_test build tag + cc-fixture 实际容器名 (非 plan 示例的 cloud-claude-fixture); ci-doctor-grep.sh 三段断言 (schema=1 + next_action + 错误码) + Makefile ci-gate target; JSON 模式守卫 [fix] 顶部行避免 stdout 污染 (SC#5 守恒); commits 78626e5/f4b7893/73e47ab/f38dfd8/8b63af1/dc4519d/5d4a0d8
 
 ### Pending Todos
 
@@ -100,6 +101,6 @@ None — 等待 REQUIREMENTS.md 与 ROADMAP.md 产出后进入 phase 执行。
 
 ## Session Continuity
 
-Last session: 2026-04-21T10:42:04.591Z
-Stopped at: Completed 34-02-doctor-framework-PLAN.md
+Last session: 2026-04-21T10:55:21.678Z
+Stopped at: Completed 34-03-doctor-fix-integration-PLAN.md
 Resume file: None

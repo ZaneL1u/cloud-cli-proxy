@@ -50,7 +50,7 @@
 
 - [x] **REQ-F6-A**：`cloud-claude doctor` 必须覆盖 5 个维度：**network / auth / ssh / mount（mutagen + sshfs + mergerfs 三层）/ disk**
 - [x] **REQ-F6-B**：每项检查输出包含 4 个要素：状态符号 `[✓][!][✗]` + 简短中文原因 + 中文修复建议 + 错误码（缺一不可）
-- [ ] **REQ-F6-C**：`cloud-claude doctor --fix` 能自动修复至少 5 类常见失败：mutagen agent 无响应、FUSE 残留挂载、known_hosts 冲突、token 过期、DNS 缓存污染
+- [x] **REQ-F6-C**：`cloud-claude doctor --fix` 能自动修复至少 5 类常见失败：mutagen agent 无响应、FUSE 残留挂载、known_hosts 冲突、token 过期、DNS 缓存污染
 - [x] **REQ-F6-D**：doctor 支持 `--verbose`（展开探测细节）、`--json`（脚本消费）、`NO_COLOR`（关闭颜色）；退出码 `0/1/2` 与 `brew doctor` 语义对齐
 
 ### C2 · Claude Code 状态持久化（F7）
@@ -188,7 +188,7 @@
 | REQ-F5-D | Phase 32 | Complete | 账号级 Mutagen 单例锁 |
 | REQ-F6-A | Phase 34 | Complete | doctor 5 维度覆盖 |
 | REQ-F6-B | Phase 34 | Complete | doctor 输出四要素 |
-| REQ-F6-C | Phase 34 | Pending | doctor `--fix` 至少 5 类 |
+| REQ-F6-C | Phase 34 | Complete | doctor `--fix` 至少 5 类 |
 | REQ-F6-D | Phase 34 | Complete | doctor `--verbose` / `--json` / 退出码 0/1/2 |
 | REQ-F7-A | Phase 33 | Pending | named volume `claude-state-{id}` + label（数据模型在 Phase 30） |
 | REQ-F7-B | Phase 33 | Pending | 容器重建 OAuth 保留 |
