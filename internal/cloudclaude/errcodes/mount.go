@@ -48,6 +48,13 @@ func init() {
 	})
 
 	MustRegister(Entry{
+		Code:       MOUNT_HOT_SYNC_FAILED,
+		Severity:   SeverityError,
+		Message:    "热同步失败: %s",
+		NextAction: "检查当前目录可读写、远端 staging 路径权限，或回退到 sshfs-only",
+	})
+
+	MustRegister(Entry{
 		Code:       MOUNT_SSHFS_FAILED,
 		Severity:   SeverityError,
 		Message:    "sshfs 挂载失败: %s",

@@ -1,0 +1,577 @@
+package cloudclaude
+
+import (
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
+
+	"github.com/zanel1u/cloud-cli-proxy/internal/cloudclaude/errcodes"
+)
+
+const defaultHotSyncInterval = 1 * time.Second
+
+// HotSyncConfig 描述基于现有 SSH 隧道的热同步配置。
+// 它替代 Mutagen，不再额外启动任何 ssh/scp/daemon 进程。
+type HotSyncConfig struct {
+	LocalDir       string
+	RemoteDir      string
+	ResetRemote    bool
+	IgnorePatterns []string
+	Logger         io.Writer
+	Interval       time.Duration
+}
+
+// syncFileState 是本地/远端单个文件的可比较快照。
+// 仅保留 size + mtime（精度统一到秒），避免每轮轮询都做哈希。
+type syncFileState struct {
+	Size    int64
+	ModTime time.Time
+}
+
+func normalizeSyncModTime(t time.Time) time.Time {
+	return t.UTC().Truncate(time.Second)
+}
+
+type hotSyncErr struct {
+	reason string
+}
+
+func newHotSyncErr(reason string) *hotSyncErr {
+	return &hotSyncErr{reason: reason}
+}
+
+func (e *hotSyncErr) Error() string       { return errcodes.Format(errcodes.MOUNT_HOT_SYNC_FAILED, e.reason) }
+func (e *hotSyncErr) Code() errcodes.Code { return errcodes.MOUNT_HOT_SYNC_FAILED }
+func (e *hotSyncErr) Reason() string      { return e.reason }
+
+// HotSyncEngine 在 connB 上维持一个 SFTP client，通过秒级轮询实现双向热同步。
+// 约束：
+//   - 不同步 ignore 命中的文件/目录（它们走冷层 sshfs）
+//   - 只处理常规文件；符号链接和特殊文件跳过
+//   - 启动期以本地目录为主，全量推到 remoteDir；运行期再做双向 reconcile
+type HotSyncEngine struct {
+	connA     *ssh.Client
+	connB     *ssh.Client
+	client    *sftp.Client
+	localDir  string
+	remoteDir string
+	logger    io.Writer
+	interval  time.Duration
+	matcher   *IgnoreMatcher
+	resetRemote bool
+
+	stopCh chan struct{}
+	doneCh chan struct{}
+
+	// last 是上一次成功同步后的统一状态快照。轮询时以它作为 base，
+	// 判断 local/remote 哪一侧发生了变化。
+	last map[string]syncFileState
+}
+
+// StartHotSync 基于现有 SSH 连接启动热同步。
+// connA 负责远端 mkdir / cleanup 等 shell 命令；connB 专供 SFTP 数据面。
+func StartHotSync(connA, connB *ssh.Client, cfg HotSyncConfig) (cleanup func(), status MutagenSyncStatus, err error) {
+	if connA == nil || connB == nil {
+		return nil, MutagenSyncStatus{}, newHotSyncErr("hot sync 需要两条可用的 SSH 连接")
+	}
+	if cfg.LocalDir == "" || cfg.RemoteDir == "" {
+		return nil, MutagenSyncStatus{}, newHotSyncErr("localDir / remoteDir 不能为空")
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = os.Stderr
+	}
+	if cfg.Interval <= 0 {
+		cfg.Interval = defaultHotSyncInterval
+	}
+
+	client, err := sftp.NewClient(connB)
+	if err != nil {
+		return nil, MutagenSyncStatus{}, newHotSyncErr("创建 SFTP client 失败: " + err.Error())
+	}
+
+	engine := &HotSyncEngine{
+		connA:     connA,
+		connB:     connB,
+		client:    client,
+		localDir:  cfg.LocalDir,
+		remoteDir: cfg.RemoteDir,
+		logger:    cfg.Logger,
+		interval:  cfg.Interval,
+		matcher:   NewIgnoreMatcher(cfg.LocalDir, cfg.IgnorePatterns),
+		resetRemote: cfg.ResetRemote,
+		stopCh:    make(chan struct{}),
+		doneCh:    make(chan struct{}),
+		last:      make(map[string]syncFileState),
+	}
+
+	if err := engine.prepareRemoteRoot(); err != nil {
+		_ = client.Close()
+		return nil, MutagenSyncStatus{}, newHotSyncErr("创建远端 hot 目录失败: " + err.Error())
+	}
+
+	if err := engine.initialSync(); err != nil {
+		_ = client.Close()
+		return nil, MutagenSyncStatus{}, err
+	}
+
+	go engine.run()
+
+	cleanup = func() {
+		close(engine.stopCh)
+		<-engine.doneCh
+		// 会话退出前最后做一次双向 reconcile，尽量把末尾几百毫秒内的编辑带上。
+		if err := engine.syncOnce(false); err != nil && engine.logger != nil {
+			fmt.Fprintln(engine.logger, "[!] 热同步最终收敛失败: "+err.Error())
+		}
+		_ = engine.client.Close()
+	}
+	return cleanup, MutagenSyncStatus{}, nil
+}
+
+func (e *HotSyncEngine) initialSync() error {
+	localFiles, err := scanLocalSyncFiles(e.localDir, e.matcher)
+	if err != nil {
+		return newHotSyncErr("扫描本地目录失败: " + err.Error())
+	}
+
+	// 隐藏 staging 路径允许重置；直接映射到 cfg.Cwd 的 hot-only 路径则必须保守，
+	// 不能清空用户可见目录。
+	if e.resetRemote {
+		if err := removeRemoteTree(e.client, e.remoteDir); err != nil {
+			return newHotSyncErr("清理远端 hot staging 失败: " + err.Error())
+		}
+		if err := e.client.MkdirAll(e.remoteDir); err != nil {
+			return newHotSyncErr("重建远端 hot staging 失败: " + err.Error())
+		}
+		for rel, state := range localFiles {
+			if err := e.copyLocalToRemote(rel, state); err != nil {
+				return newHotSyncErr("初始化上传失败: " + err.Error())
+			}
+			e.last[rel] = state
+		}
+		return nil
+	}
+
+	remoteFiles, err := scanRemoteSyncFiles(e.client, e.remoteDir, e.matcher)
+	if err != nil {
+		return newHotSyncErr("扫描远端目录失败: " + err.Error())
+	}
+	paths := make(map[string]struct{}, len(localFiles)+len(remoteFiles))
+	for p := range localFiles {
+		paths[p] = struct{}{}
+	}
+	for p := range remoteFiles {
+		paths[p] = struct{}{}
+	}
+	for rel := range paths {
+		localState, hasLocal := localFiles[rel]
+		remoteState, hasRemote := remoteFiles[rel]
+		switch chooseConflictWinner(localState, hasLocal, remoteState, hasRemote) {
+		case "local":
+			if err := e.applyLocal(rel, localState, hasLocal); err != nil {
+				return newHotSyncErr("初始化双向收敛失败: " + err.Error())
+			}
+			if hasLocal {
+				e.last[rel] = localState
+			}
+		default:
+			if err := e.applyRemote(rel, remoteState, hasRemote); err != nil {
+				return newHotSyncErr("初始化双向收敛失败: " + err.Error())
+			}
+			if hasRemote {
+				e.last[rel] = remoteState
+			}
+		}
+	}
+	return nil
+}
+
+func (e *HotSyncEngine) run() {
+	defer close(e.doneCh)
+	ticker := time.NewTicker(e.interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-e.stopCh:
+			return
+		case <-ticker.C:
+			if err := e.syncOnce(true); err != nil && e.logger != nil {
+				fmt.Fprintln(e.logger, "[!] 热同步轮询失败: "+err.Error())
+			}
+		}
+	}
+}
+
+func (e *HotSyncEngine) syncOnce(logConflicts bool) error {
+	localFiles, err := scanLocalSyncFiles(e.localDir, e.matcher)
+	if err != nil {
+		return fmt.Errorf("扫描本地目录失败: %w", err)
+	}
+	remoteFiles, err := scanRemoteSyncFiles(e.client, e.remoteDir, e.matcher)
+	if err != nil {
+		return fmt.Errorf("扫描远端目录失败: %w", err)
+	}
+
+	paths := make(map[string]struct{}, len(e.last)+len(localFiles)+len(remoteFiles))
+	for p := range e.last {
+		paths[p] = struct{}{}
+	}
+	for p := range localFiles {
+		paths[p] = struct{}{}
+	}
+	for p := range remoteFiles {
+		paths[p] = struct{}{}
+	}
+
+	names := make([]string, 0, len(paths))
+	for p := range paths {
+		names = append(names, p)
+	}
+	sort.Strings(names)
+
+	next := make(map[string]syncFileState, len(paths))
+	for _, rel := range names {
+		localState, hasLocal := localFiles[rel]
+		remoteState, hasRemote := remoteFiles[rel]
+		baseState, hasBase := e.last[rel]
+
+		localChanged := !sameSyncState(localState, hasLocal, baseState, hasBase)
+		remoteChanged := !sameSyncState(remoteState, hasRemote, baseState, hasBase)
+
+		switch {
+		case !localChanged && !remoteChanged:
+			if hasBase {
+				next[rel] = baseState
+			}
+		case localChanged && !remoteChanged:
+			if err := e.applyLocal(rel, localState, hasLocal); err != nil {
+				return err
+			}
+			if hasLocal {
+				next[rel] = localState
+			}
+		case !localChanged && remoteChanged:
+			if err := e.applyRemote(rel, remoteState, hasRemote); err != nil {
+				return err
+			}
+			if hasRemote {
+				next[rel] = remoteState
+			}
+		default:
+			winner := chooseConflictWinner(localState, hasLocal, remoteState, hasRemote)
+			if logConflicts && e.logger != nil {
+				fmt.Fprintf(e.logger, "⚠ 热同步冲突已自动解决：%s（保留 %s 侧）\n", rel, winner)
+			}
+			if winner == "local" {
+				if err := e.applyLocal(rel, localState, hasLocal); err != nil {
+					return err
+				}
+				if hasLocal {
+					next[rel] = localState
+				}
+			} else {
+				if err := e.applyRemote(rel, remoteState, hasRemote); err != nil {
+					return err
+				}
+				if hasRemote {
+					next[rel] = remoteState
+				}
+			}
+		}
+	}
+
+	e.last = next
+	return nil
+}
+
+func (e *HotSyncEngine) applyLocal(rel string, state syncFileState, exists bool) error {
+	if !exists {
+		return e.deleteRemote(rel)
+	}
+	return e.copyLocalToRemote(rel, state)
+}
+
+func (e *HotSyncEngine) applyRemote(rel string, state syncFileState, exists bool) error {
+	if !exists {
+		return e.deleteLocal(rel)
+	}
+	return e.copyRemoteToLocal(rel, state)
+}
+
+func (e *HotSyncEngine) copyLocalToRemote(rel string, state syncFileState) error {
+	localPath := filepath.Join(e.localDir, rel)
+	remotePath := remoteJoin(e.remoteDir, rel)
+
+	src, err := os.Open(localPath)
+	if err != nil {
+		return fmt.Errorf("打开本地文件 %s 失败: %w", rel, err)
+	}
+	defer src.Close()
+
+	if err := e.client.MkdirAll(filepath.ToSlash(filepath.Dir(remotePath))); err != nil {
+		return fmt.Errorf("创建远端目录 %s 失败: %w", rel, err)
+	}
+
+	dst, err := e.client.Create(remotePath)
+	if err != nil {
+		return fmt.Errorf("创建远端文件 %s 失败: %w", rel, err)
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		dst.Close()
+		return fmt.Errorf("上传远端文件 %s 失败: %w", rel, err)
+	}
+	if err := dst.Close(); err != nil {
+		return fmt.Errorf("关闭远端文件 %s 失败: %w", rel, err)
+	}
+	_ = e.client.Chtimes(remotePath, state.ModTime, state.ModTime)
+	return nil
+}
+
+func (e *HotSyncEngine) copyRemoteToLocal(rel string, state syncFileState) error {
+	remotePath := remoteJoin(e.remoteDir, rel)
+	localPath := filepath.Join(e.localDir, rel)
+
+	src, err := e.client.Open(remotePath)
+	if err != nil {
+		return fmt.Errorf("打开远端文件 %s 失败: %w", rel, err)
+	}
+	defer src.Close()
+
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		return fmt.Errorf("创建本地目录 %s 失败: %w", rel, err)
+	}
+	dst, err := os.Create(localPath)
+	if err != nil {
+		return fmt.Errorf("创建本地文件 %s 失败: %w", rel, err)
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		dst.Close()
+		return fmt.Errorf("下载远端文件 %s 失败: %w", rel, err)
+	}
+	if err := dst.Close(); err != nil {
+		return fmt.Errorf("关闭本地文件 %s 失败: %w", rel, err)
+	}
+	_ = os.Chtimes(localPath, state.ModTime, state.ModTime)
+	return nil
+}
+
+func (e *HotSyncEngine) deleteRemote(rel string) error {
+	remotePath := remoteJoin(e.remoteDir, rel)
+	if err := e.client.Remove(remotePath); err != nil && !isSFTPNotExist(err) {
+		return fmt.Errorf("删除远端文件 %s 失败: %w", rel, err)
+	}
+	return nil
+}
+
+func (e *HotSyncEngine) deleteLocal(rel string) error {
+	localPath := filepath.Join(e.localDir, rel)
+	if err := os.Remove(localPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("删除本地文件 %s 失败: %w", rel, err)
+	}
+	return nil
+}
+
+func scanLocalSyncFiles(root string, matcher *IgnoreMatcher) (map[string]syncFileState, error) {
+	files := make(map[string]syncFileState)
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if path == root {
+			return nil
+		}
+
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+
+		if d.IsDir() {
+			if isHardcodedSkipDir(d.Name()) || matcher.IsIgnoredRel(rel, true) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		if matcher.IsIgnoredRel(rel, false) {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil || !info.Mode().IsRegular() {
+			return nil
+		}
+		files[rel] = syncFileState{
+			Size:    info.Size(),
+			ModTime: normalizeSyncModTime(info.ModTime()),
+		}
+		return nil
+	})
+	return files, err
+}
+
+func scanRemoteSyncFiles(client *sftp.Client, root string, matcher *IgnoreMatcher) (map[string]syncFileState, error) {
+	files := make(map[string]syncFileState)
+	if _, err := client.Stat(root); err != nil {
+		if isSFTPNotExist(err) {
+			return files, nil
+		}
+		return nil, err
+	}
+
+	var walk func(dir, relBase string) error
+	walk = func(dir, relBase string) error {
+		entries, err := client.ReadDir(dir)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			rel := entry.Name()
+			if relBase != "" {
+				rel = relBase + "/" + entry.Name()
+			}
+			if entry.IsDir() {
+				if isHardcodedSkipDir(entry.Name()) || matcher.IsIgnoredRel(rel, true) {
+					continue
+				}
+				if err := walk(remoteJoin(dir, entry.Name()), rel); err != nil {
+					return err
+				}
+				continue
+			}
+			if !entry.Mode().IsRegular() {
+				continue
+			}
+			if matcher.IsIgnoredRel(rel, false) {
+				continue
+			}
+			files[rel] = syncFileState{
+				Size:    entry.Size(),
+				ModTime: normalizeSyncModTime(entry.ModTime()),
+			}
+		}
+		return nil
+	}
+
+	if err := walk(root, ""); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func sameSyncState(a syncFileState, hasA bool, b syncFileState, hasB bool) bool {
+	if hasA != hasB {
+		return false
+	}
+	if !hasA {
+		return true
+	}
+	return a.Size == b.Size && a.ModTime.Equal(b.ModTime)
+}
+
+func chooseConflictWinner(local syncFileState, hasLocal bool, remote syncFileState, hasRemote bool) string {
+	switch {
+	case hasLocal && !hasRemote:
+		return "local"
+	case !hasLocal && hasRemote:
+		return "remote"
+	case !hasLocal && !hasRemote:
+		return "local"
+	case local.ModTime.After(remote.ModTime):
+		return "local"
+	case remote.ModTime.After(local.ModTime):
+		return "remote"
+	case local.Size >= remote.Size:
+		return "local"
+	default:
+		return "remote"
+	}
+}
+
+func ensureRemoteWritableDir(conn *ssh.Client, path string) error {
+	cmd := fmt.Sprintf(
+		"mkdir -p %s 2>/dev/null || (sudo mkdir -p %s && sudo chown $(id -u):$(id -g) %s)",
+		shellQuote(path), shellQuote(path), shellQuote(path),
+	)
+	return sshRun(conn, cmd)
+}
+
+func (e *HotSyncEngine) prepareRemoteRoot() error {
+	// Full 模式的隐藏 staging 在 /tmp 下，可直接通过 SFTP 目录 API 管理，
+	// 避免再占用 connA 上的 shell session。
+	if isHiddenStagePath(e.remoteDir) {
+		return e.client.MkdirAll(e.remoteDir)
+	}
+	return ensureRemoteWritableDir(e.connA, e.remoteDir)
+}
+
+func remoteJoin(base, rel string) string {
+	base = strings.TrimRight(base, "/")
+	rel = strings.TrimPrefix(filepath.ToSlash(rel), "/")
+	if rel == "" {
+		return base
+	}
+	return base + "/" + rel
+}
+
+func isSFTPNotExist(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not exist") || strings.Contains(msg, "no such file")
+}
+
+func buildStagePaths(cwd string) (base, hot, cold string) {
+	base = "/tmp/.cloud-claude-mounts/" + simpleHash8(cwd)
+	hot = base + "/hot"
+	cold = base + "/cold"
+	return base, hot, cold
+}
+
+func isHiddenStagePath(path string) bool {
+	return strings.HasPrefix(path, "/tmp/.cloud-claude-mounts/")
+}
+
+func removeRemoteTree(client *sftp.Client, root string) error {
+	info, err := client.Stat(root)
+	if err != nil {
+		if isSFTPNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if !info.IsDir() {
+		return client.Remove(root)
+	}
+	entries, err := client.ReadDir(root)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		child := remoteJoin(root, entry.Name())
+		if entry.IsDir() {
+			if err := removeRemoteTree(client, child); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := client.Remove(child); err != nil && !isSFTPNotExist(err) {
+			return err
+		}
+	}
+	if err := client.RemoveDirectory(root); err != nil && !isSFTPNotExist(err) {
+		return err
+	}
+	return nil
+}

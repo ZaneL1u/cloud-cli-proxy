@@ -96,6 +96,14 @@ type MountConfig struct {
 	// last-session.json 的 ClientRole 写为 "secondary"（默认 "primary"）。
 	IsSecondaryClient bool
 
+	// Mutagen beta URL 需要的 SSH 连接参数，从 ConnectAndRunClaudeV3 的
+	// SSHConfig 透传过来。sshfs-only 模式下这些字段不使用（sshfs 走现有的
+	// connA/connB channel，不需要另起 ssh 子进程）。
+	SSHUser     string
+	SSHHost     string
+	SSHPort     int
+	SSHPassword string
+
 	// 测试 hook：仅用于单测注入；生产路径 nil 时走真实实现。
 	overrideCaseInsensitive *bool
 	hooks                   *strategyHooks
@@ -114,9 +122,10 @@ type strategyHooks struct {
 
 // MountWorkspace 是 Phase 31 文件映射顶层入口。
 //
-// 调度逻辑（CONTEXT D-15）：
+// 调度逻辑（CONTEXT D-15，经自研 hot sync 替换 Mutagen 后）：
 //  1. APFS 检测 → 写入 snapshot.APFSCaseInsensitive
-//  2. 能力降级（cfg.SupportsMutagen=false → 强制 SSHFSOnly；SupportsMergerfs=false 且 Mode=Auto/Full → 降级 MutagenOnly）
+//  2. 能力降级（SupportsMergerfs=false 且 Mode=Auto/Full → 降级 MutagenOnly；
+//     该档语义现为 hot-only，保留 flag 兼容但不再依赖外部 Mutagen）
 //  3. 按 Mode 决定 try 顺序：
 //     - Auto: [Full, MutagenOnly, SSHFSOnly]，每档失败 stderr 输出 MOUNT_AUTO_DOWNGRADED 后转下一档
 //     - Force (Full/MutagenOnly/SSHFSOnly)：单档跑，失败 → MOUNT_FORCE_MODE_FAILED + ModeFailed
@@ -154,11 +163,6 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 
 	// 2) 能力降级（CONTEXT D-29）
 	intended := cfg.Mode
-	if !cfg.SupportsMutagen && (intended == ModeAuto || intended == ModeFull || intended == ModeMutagenOnly) {
-		applyDowngrade(cfg.Logger, &snapshot, intended, ModeSSHFSOnly,
-			errcodes.MOUNT_MUTAGEN_VERSION_SKEW, "remote 不支持 mutagen")
-		intended = ModeSSHFSOnly
-	}
 	if !cfg.SupportsMergerfs && (intended == ModeAuto || intended == ModeFull) {
 		applyDowngrade(cfg.Logger, &snapshot, intended, ModeMutagenOnly,
 			errcodes.MOUNT_MERGERFS_FAILED, "remote 不支持 mergerfs")
@@ -189,10 +193,10 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 					From:          intended.String(),
 					To:            ModeSSHFSOnly.String(),
 					ReasonCode:    "sync_locked",
-					ReasonMessage: "账号级 Mutagen 单例锁被另一端占用",
+					ReasonMessage: "账号级热同步单例锁被另一端占用",
 				})
 				fmt.Fprintf(cfg.Logger,
-					"[!] 账号级 Mutagen 单例锁已被另一端占用（%s → %s，原因: sync_locked）\n",
+					"[!] 账号级热同步单例锁已被另一端占用（%s → %s，原因: sync_locked）\n",
 					intended.String(), ModeSSHFSOnly.String())
 				intended = ModeSSHFSOnly
 			}
@@ -364,8 +368,11 @@ func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), status Mutag
 	return func() {}, MutagenSyncStatus{}, fmt.Errorf("未知 mode: %v", mode)
 }
 
-// tryModeReal 是生产路径：调用真实 mountSSHFS / mountMutagen / mountMerge。
-// 本阶段对 Mutagen / Mergerfs 只做最小串接，整链路集成测试由 Plan 03 落地。
+// tryModeReal 是生产路径：调用真实 mountSSHFS / 热同步 / mountMerge。
+// 说明：
+//   - ModeMutagenOnly 保留 CLI flag 兼容，但内部语义已变为 hot-only
+//   - Full = hidden hot sync + hidden sshfs cold + mergerfs -> cfg.Cwd
+//   - SSHFSOnly 保持 v2.0 行为：直接把本地 cwd 挂到同路径
 func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup func(), status MutagenSyncStatus, err error) {
 	// SSHFSOnly：v2.0 路径，已稳定
 	if mode == ModeSSHFSOnly {
@@ -377,42 +384,52 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup 
 		return cl, MutagenSyncStatus{}, nil
 	}
 
-	// MutagenOnly / Full：调 mountMutagen
-	mutagenCfg := MutagenSyncConfig{
-		AlphaCwd:        cfg.Cwd,
-		BetaPath:        "/workspace-hot",
-		ClaudeAccountID: cfg.ClaudeAccountID,
-		SessionName:     buildSessionName(cfg.ClaudeAccountID, cfg.Cwd),
-	}
+	ignorePatterns := LoadMountIgnorePatterns(cfg.Cwd)
 
-	mCleanup, mStatus, mErr := mountMutagen(connA, mutagenCfg, defaultMutagenDeps())
-	if mErr != nil {
-		return nil, MutagenSyncStatus{}, mErr
-	}
-
+	// MutagenOnly 现在的语义是 hot-only：不启冷层、不做合并，直接把热同步目标设为 cfg.Cwd。
 	if mode == ModeMutagenOnly {
-		return mCleanup, mStatus, nil
+		return StartHotSync(connA, connB, HotSyncConfig{
+			LocalDir:       cfg.Cwd,
+			RemoteDir:      cfg.Cwd,
+			ResetRemote:    false,
+			IgnorePatterns: ignorePatterns,
+			Logger:         cfg.Logger,
+		})
 	}
 
-	// Full：mutagen 起来后，挂 sshfs 到 /workspace-cold，再 mergerfs 合并到 /workspace
-	sCleanup, sErr := mountSSHFS(connA, cfg.Cwd, "/workspace-cold")
+	// Full：热同步到隐藏 hot staging，sshfs 把完整目录挂到隐藏 cold staging，
+	// 最后 mergerfs 合到用户可见的 cfg.Cwd（同路径语义）。
+	stageBase, hotRoot, coldRoot := buildStagePaths(cfg.Cwd)
+	hCleanup, hStatus, hErr := StartHotSync(connA, connB, HotSyncConfig{
+		LocalDir:       cfg.Cwd,
+		RemoteDir:      hotRoot,
+		ResetRemote:    true,
+		IgnorePatterns: ignorePatterns,
+		Logger:         cfg.Logger,
+	})
+	if hErr != nil {
+		return nil, MutagenSyncStatus{}, hErr
+	}
+
+	sCleanup, sErr := mountSSHFS(connA, cfg.Cwd, coldRoot)
 	if sErr != nil {
-		mCleanup()
+		hCleanup()
 		return nil, MutagenSyncStatus{}, sErr
 	}
 
-	branches := []string{"/workspace-hot=RW", "/workspace-cold=NC,RO"}
-	mergeCleanup, mergeErr := mountMerge(connA, branches, "/workspace")
+	cleanupStaleFUSE(connA, cfg.Cwd)
+	branches := []string{hotRoot + "=RW", coldRoot + "=RO"}
+	mergeCleanup, mergeErr := mountMerge(connA, branches, cfg.Cwd)
 	if mergeErr != nil {
 		sCleanup()
-		mCleanup()
+		hCleanup()
 		return nil, MutagenSyncStatus{}, mergeErr
 	}
 
-	// 启动 sshfs_watcher：cold 抖动 → 摘除 cold branch
+	// 启动 sshfs_watcher：cold 抖动 → 从用户可见路径中摘除 cold branch。
 	ctx, cancel := context.WithCancel(context.Background())
-	watcher := NewSSHFSWatcher(connA, "/workspace-cold", cfg.Logger, func() error {
-		return RemoveBranch(connA, "/workspace-cold", "/workspace")
+	watcher := NewSSHFSWatcher(connA, coldRoot, cfg.Logger, func() error {
+		return RemoveBranch(connA, coldRoot, cfg.Cwd)
 	})
 	go watcher.Run(ctx)
 
@@ -420,9 +437,11 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup 
 		cancel()
 		mergeCleanup()
 		sCleanup()
-		mCleanup()
+		hCleanup()
+		_ = sshRun(connA, fmt.Sprintf("rm -rf %s 2>/dev/null || true", shellQuote(stageBase)))
+		rmdirChain(connA, cfg.Cwd)
 	}
-	return cleanup, mStatus, nil
+	return cleanup, hStatus, nil
 }
 
 // printProgress 按 finalMode 输出三段式中文进度（CONTEXT D-18）。

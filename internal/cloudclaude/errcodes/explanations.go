@@ -81,6 +81,12 @@ func init() {
 修复路径：macOS 自带 ssh 不需操作；Linux 安装 openssh-client 包；如果用密码登录而非密钥，再装 sshpass；最差情况移除 ProxyCommand 配置走默认。
 关联文档：Phase 31 PATTERNS §3.4 / .planning/research/PITFALLS.md M14`)
 
+	registerExplanation(MOUNT_HOT_SYNC_FAILED, `触发场景：自研热同步层在初始全量上传或后续双向轮询同步过程中失败，未能把代码层变更推到远端 hot staging 或从远端拉回本地。
+根本原因：常见原因包括当前目录中存在不可读文件、远端 hot staging 目录权限不正确、SFTP channel 被提前关闭、轮询过程中某个文件被并发删除、或隐藏 staging 路径与现有挂载状态冲突。
+复现方式：chmod 000 某个源码文件后启动 cloud-claude，或在同步过程中手工删除远端 hot staging 根目录。
+修复路径：先确认本地目录与远端 staging 路径均可读写；若是会话残留，重启 cloud-claude 让 staging 目录重建；若仍失败，可临时回退 sshfs-only，随后查看具体 stderr reason 定位。
+关联文档：replace_mutagen_sync 计划 / 同路径 hot+cold 方案设计`)
+
 	registerExplanation(MOUNT_SSHFS_FAILED, `触发场景：sshfs 命令挂载远端 /workspace 失败（macOS macFUSE 未授权 / Linux fuse 模块未加载 / fusermount3 缺失）。
 根本原因：sshfs 是 cloud-claude 的兜底文件映射方案，依赖宿主机上有 macFUSE / fuse3。macOS 升级后 macFUSE 内核扩展常需重新允许；Linux 容器或最小化镜像可能未装 fuse3。
 复现方式：sudo kextunload com.osxfuse → cloud-claude → sshfs failed。
@@ -173,10 +179,10 @@ func init() {
 修复路径：运行 cloud-claude sessions ls 检查会话状态；最坏情况删除会话重建：cloud-claude exec tmux kill-session -t <name>；运行 cloud-claude doctor 全栈诊断。
 关联文档：Phase 32 D-11 / RESEARCH §2 take-over`)
 
-	registerExplanation(SESSION_SYNC_LOCKED, `触发场景：同一 claude_account 已经有另一个 cloud-claude 实例占用 Mutagen sync 写锁（flock /tmp/cloud-claude/locks/sync-{id}.lock），本端只能拿 sshfs 只读视图。
-根本原因：Mutagen 双向同步同时写两端会冲突，Phase 32 D-17 引入 flock 互斥保证一时刻只一端做 hot 写。secondary 客户端用 sshfs 看到 primary 写入的内容（read-only 视角）。
+	registerExplanation(SESSION_SYNC_LOCKED, `触发场景：同一 claude_account 已经有另一个 cloud-claude 实例占用热同步写锁（flock /tmp/cloud-claude/locks/sync-{id}.lock），本端只能拿 sshfs 只读视图。
+根本原因：双向热同步同时写两端会冲突，Phase 32 D-17 引入 flock 互斥保证一时刻只一端做 hot 写。secondary 客户端用 sshfs 看到 primary 写入的内容（read-only 视角）。
 复现方式：开两个终端同时跑 cloud-claude → 第二个 stderr 出现 SESSION_SYNC_LOCKED 提示。
-修复路径：无需操作；如果需要独占同步，先关闭 primary 端 cloud-claude 进程，secondary 会在 1 秒内拿到锁升级为双向同步。
+修复路径：无需操作；如果需要独占同步，先关闭 primary 端 cloud-claude 进程，secondary 会在 1 秒内拿到锁升级为双向热同步。
 关联文档：Phase 32 D-17/D-18/D-19 sync_lock`)
 
 	registerExplanation(SESSION_BUFFER_OVERFLOW, `触发场景：网络断开期间 BufferedStdin 4KB ringBuf 已满，再输入会丢弃最早的字符。

@@ -1,8 +1,11 @@
 package cloudclaude
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -14,7 +17,7 @@ const mergerfsOptions = "category.create=ff,func.readdir=cor:4,cache.attr=30,cac
 
 // mountMerge 在 connA 上执行 sudo mergerfs 把 branches 合并挂载到 target。
 //
-// 默认 branches: ["/workspace-hot=RW", "/workspace-cold=NC,RO"]，target=/workspace。
+// 默认 branches: ["/workspace-hot=RW", "/workspace-cold=RO"]，target=/workspace。
 // 支持 CONTEXT D-26 的 CLOUD_CLAUDE_MERGERFS_BRANCHES 扩展点（由调用方解析后传入）。
 //
 // cleanup：sudo fusermount -uz <target>。
@@ -27,21 +30,66 @@ func mountMerge(connA *ssh.Client, branches []string, target string) (cleanup fu
 	}
 
 	// 远端 mkdir 目标（容器内已存在则 mkdir -p 自动 no-op）
-	mkdirCmd := fmt.Sprintf("sudo mkdir -p %s", shellQuote(target))
+	mkdirCmd := fmt.Sprintf(
+		"mkdir -p %s 2>/dev/null || (sudo mkdir -p %s && sudo chown $(id -u):$(id -g) %s)",
+		shellQuote(target), shellQuote(target), shellQuote(target),
+	)
 	if err := sshRun(connA, mkdirCmd); err != nil {
 		return nil, newMergeErr(errcodes.MOUNT_MERGERFS_FAILED, "mkdir 失败: "+err.Error())
 	}
 
-	// 拼接 mergerfs 命令（branches 用 ":" 分隔）
+	// 拼接 mergerfs 命令（branches 用 ":" 分隔）。
+	// 注意：mergerfs 是长驻 FUSE 进程，不能像普通命令那样用 sshRun(session.Run)
+	// 跑完即回收；否则 SSH session 结束时 FUSE 进程也会被带死。这里仿照 mountSSHFS
+	// 的模式：单独起一个长期 session 持有 mergerfs，cleanup 时再显式 fusermount。
+	// 另外 mergerfs 必须以当前 workspace 用户运行，不能 sudo 变成 root：
+	// cold 分支是 workspace 用户挂起的 sshfs mount，root 访问会触发
+	// std::filesystem status(Permission denied)。
 	branchesStr := strings.Join(branches, ":")
-	mountCmd := fmt.Sprintf("sudo mergerfs -o %s %s %s",
+	mountCmd := fmt.Sprintf("mergerfs -o %s %s %s",
 		mergerfsOptions, branchesStr, shellQuote(target))
-	if err := sshRun(connA, mountCmd); err != nil {
+
+	session, err := connA.NewSession()
+	if err != nil {
+		return nil, newMergeErr(errcodes.MOUNT_MERGERFS_FAILED, "创建 mergerfs session 失败: "+err.Error())
+	}
+	stderr, err := session.StderrPipe()
+	if err != nil {
+		session.Close()
+		return nil, newMergeErr(errcodes.MOUNT_MERGERFS_FAILED, "获取 mergerfs stderr 失败: "+err.Error())
+	}
+
+	var stderrBuf bytes.Buffer
+	go func() {
+		_, _ = io.Copy(&stderrBuf, stderr)
+	}()
+
+	if err := session.Start(mountCmd); err != nil {
+		session.Close()
+		return nil, newMergeErr(errcodes.MOUNT_MERGERFS_FAILED, "启动 mergerfs 失败: "+err.Error())
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- session.Wait()
+	}()
+
+	check := func() error {
+		return sshRun(connA, fmt.Sprintf("mountpoint -q %s", shellQuote(target)))
+	}
+	if err := waitForMount(target, check, 200*time.Millisecond, 10*time.Second); err != nil {
+		_ = session.Close()
+		<-done
+		if stderrText := strings.TrimSpace(stderrBuf.String()); stderrText != "" {
+			return nil, newMergeErr(errcodes.MOUNT_MERGERFS_FAILED, stderrText)
+		}
 		return nil, newMergeErr(errcodes.MOUNT_MERGERFS_FAILED, err.Error())
 	}
 
 	cleanup = func() {
-		_ = sshRun(connA, fmt.Sprintf("sudo fusermount -uz %s 2>/dev/null || true", shellQuote(target)))
+		_ = sshRun(connA, fmt.Sprintf("fusermount -uz %s 2>/dev/null || sudo fusermount -uz %s 2>/dev/null || true", shellQuote(target), shellQuote(target)))
+		_ = session.Close()
+		<-done
 	}
 	return cleanup, nil
 }

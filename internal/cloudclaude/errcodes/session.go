@@ -38,7 +38,7 @@ func init() {
 	MustRegister(Entry{
 		Code:       SESSION_SYNC_LOCKED,
 		Severity:   SeverityWarn,
-		Message:    "账号 %s 已有另一端在执行 Mutagen sync，本端只读 sshfs 视图",
+		Message:    "账号 %s 已有另一端在执行热同步，本端只读 sshfs 视图",
 		NextAction: "无需操作；如需独占同步，请先关闭另一端 cloud-claude",
 	})
 	MustRegister(Entry{

@@ -269,7 +269,7 @@ func Test_Downgrade_BannerEachStep(t *testing.T) {
 }
 
 func Test_Downgrade_CapabilityFromAuthResp(t *testing.T) {
-	t.Run("SupportsMutagen=false forces SSHFSOnly", func(t *testing.T) {
+	t.Run("SupportsMutagen=false no longer affects auto mode", func(t *testing.T) {
 		var buf bytes.Buffer
 		cfg := MountConfig{
 			Mode:             ModeAuto,
@@ -287,11 +287,11 @@ func Test_Downgrade_CapabilityFromAuthResp(t *testing.T) {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		cleanup()
-		if mode != ModeSSHFSOnly {
-			t.Errorf("mode=%s, want sshfs-only", mode)
+		if mode != ModeFull {
+			t.Errorf("mode=%s, want full", mode)
 		}
-		if !strings.Contains(buf.String(), "MOUNT_AUTO_DOWNGRADED") {
-			t.Error("missing capability downgrade banner")
+		if strings.Contains(buf.String(), "MOUNT_AUTO_DOWNGRADED") {
+			t.Error("SupportsMutagen should no longer trigger capability downgrade")
 		}
 	})
 
