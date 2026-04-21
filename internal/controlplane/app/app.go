@@ -93,12 +93,15 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 
 	var dispatcher dispatcherIface
 	var agentHealth cphttp.AgentHealthChecker
+	var agentRunner cphttp.HostActionRunner // Phase 33: admin DELETE claude-accounts handler 用
 
 	embeddedMode := os.Getenv("HOST_AGENT_MODE") == "embedded"
 	if embeddedMode {
 		logger.Info("host-agent mode: embedded (in-process worker)")
 		worker := runtimetasks.NewWorker(repo, network.NewProvider(logger))
-		dispatcher = runtimetasks.NewEmbeddedDispatcher(worker)
+		embeddedDisp := runtimetasks.NewEmbeddedDispatcher(worker)
+		dispatcher = embeddedDisp
+		agentRunner = embeddedDisp // EmbeddedDispatcher 实现 RunHostAction 适配器
 	} else {
 		socketPath := agentapi.DefaultSocketPath
 		if p := os.Getenv("HOST_AGENT_SOCKET"); p != "" {
@@ -107,6 +110,7 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		agentClient := agentapi.NewClient(socketPath)
 		dispatcher = runtimetasks.NewDispatcher(agentClient)
 		agentHealth = agentClient
+		agentRunner = agentClient
 	}
 
 	runtimeService := runtime.NewService(repo, dispatcher, runtime.DefaultImageLockPath)
@@ -146,9 +150,11 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		AdminUsers:     repo,
 		AdminEgressIPs: repo,
 		AdminBindings:  repo,
-		AdminHosts:     repo,
-		AdminEvents:    repo,
-		EventRecorder:  repo,
+		AdminHosts:          repo,
+		AdminClaudeAccounts: repo, // Phase 33: 复用 Repository.BeginTx 满足 AdminClaudeAccountStore
+		AgentClient:         agentRunner,
+		AdminEvents:         repo,
+		EventRecorder:       repo,
 		EntryStore:     repo,
 		UserHosts:      repo,
 		SSHKeys:        repo,

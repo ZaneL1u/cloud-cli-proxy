@@ -135,7 +135,7 @@ func TestAdminClaudeAccountsDelete_StrictSuccess_DBDeletedAndAuditEventEmitted(t
 	events := &stubEventRecorder{}
 
 	origRun := runHostAction
-	runHostAction = func(ctx context.Context, client *agentapi.Client, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
+	runHostAction = func(ctx context.Context, client HostActionRunner, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
 		if req.Action != agentapi.ActionVolumeRemove {
 			t.Fatalf("expected ActionVolumeRemove, got %q", req.Action)
 		}
@@ -168,7 +168,7 @@ func TestAdminClaudeAccountsDelete_StrictHostAgentFailure_RollbackAnd409WithChin
 	events := &stubEventRecorder{}
 
 	origRun := runHostAction
-	runHostAction = func(ctx context.Context, client *agentapi.Client, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
+	runHostAction = func(ctx context.Context, client HostActionRunner, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
 		return agentapi.HostActionResponse{}, errors.New("volume_in_use: stuck on container_xyz")
 	}
 	t.Cleanup(func() { runHostAction = origRun })
@@ -209,7 +209,7 @@ func TestAdminClaudeAccountsDelete_ForceTrue_DBDeletedEvenWhenRmFails(t *testing
 
 	origRun := runHostAction
 	var capturedLabels map[string]string
-	runHostAction = func(ctx context.Context, client *agentapi.Client, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
+	runHostAction = func(ctx context.Context, client HostActionRunner, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
 		capturedLabels = req.Labels
 		return agentapi.HostActionResponse{}, errors.New("daemon connection refused")
 	}
@@ -261,7 +261,7 @@ func TestAdminClaudeAccountsDelete_NoVolumeName_SkipsHostAgentCall(t *testing.T)
 	events := &stubEventRecorder{}
 	called := false
 	origRun := runHostAction
-	runHostAction = func(ctx context.Context, client *agentapi.Client, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
+	runHostAction = func(ctx context.Context, client HostActionRunner, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
 		called = true
 		return agentapi.HostActionResponse{}, nil
 	}
@@ -284,7 +284,7 @@ func TestAdminClaudeAccountsDelete_StrictUsesTenSecondTimeout(t *testing.T) {
 	tx := &stubTx{scanResults: []any{"acct-1", "claude-state-acct-1"}, execAffected: 1}
 	store := &stubAdminClaudeAccountStore{tx: tx}
 	origRun := runHostAction
-	runHostAction = func(ctx context.Context, client *agentapi.Client, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
+	runHostAction = func(ctx context.Context, client HostActionRunner, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
 		return agentapi.HostActionResponse{}, nil
 	}
 	t.Cleanup(func() { runHostAction = origRun })
@@ -310,7 +310,7 @@ func TestAdminClaudeAccountsDelete_ForceUsesThirtySecondTimeout(t *testing.T) {
 	tx := &stubTx{scanResults: []any{"acct-1", "claude-state-acct-1"}, execAffected: 1}
 	store := &stubAdminClaudeAccountStore{tx: tx}
 	origRun := runHostAction
-	runHostAction = func(ctx context.Context, client *agentapi.Client, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
+	runHostAction = func(ctx context.Context, client HostActionRunner, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
 		return agentapi.HostActionResponse{}, nil
 	}
 	t.Cleanup(func() { runHostAction = origRun })

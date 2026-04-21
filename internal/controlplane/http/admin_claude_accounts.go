@@ -18,19 +18,27 @@ type AdminClaudeAccountStore interface {
 	BeginTx(ctx context.Context) (pgx.Tx, error)
 }
 
+// HostActionRunner 抽象 host-agent 调用，让 handler 在 embedded（in-process worker）和
+// 远端 host-agent 两种部署模式下都能工作。
+//   - 远端模式：*agentapi.Client.RunHostAction 直接满足
+//   - embedded 模式：用 EmbeddedHostActionRunner 适配 EmbeddedDispatcher.Dispatch（语义等价）
+type HostActionRunner interface {
+	RunHostAction(ctx context.Context, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error)
+}
+
 // runHostAction 包级 var 便于测试注入 mock（沿用 syncContainerPassword 模式 admin_hosts.go）。
-var runHostAction = func(ctx context.Context, client *agentapi.Client, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
+var runHostAction = func(ctx context.Context, client HostActionRunner, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
 	return client.RunHostAction(ctx, req)
 }
 
 type AdminClaudeAccountsHandler struct {
 	logger      *slog.Logger
 	store       AdminClaudeAccountStore
-	agentClient *agentapi.Client
+	agentClient HostActionRunner
 	events      EventRecorder
 }
 
-func NewAdminClaudeAccountsHandler(logger *slog.Logger, store AdminClaudeAccountStore, agentClient *agentapi.Client, events EventRecorder) *AdminClaudeAccountsHandler {
+func NewAdminClaudeAccountsHandler(logger *slog.Logger, store AdminClaudeAccountStore, agentClient HostActionRunner, events EventRecorder) *AdminClaudeAccountsHandler {
 	return &AdminClaudeAccountsHandler{logger: logger, store: store, agentClient: agentClient, events: events}
 }
 

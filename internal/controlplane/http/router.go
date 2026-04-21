@@ -46,7 +46,7 @@ type Dependencies struct {
 	AdminBindings   AdminBindingStore
 	AdminHosts          AdminHostStore
 	AdminClaudeAccounts AdminClaudeAccountStore // Phase 33 D-17
-	AgentClient         *agentapi.Client        // Phase 33 D-17
+	AgentClient         HostActionRunner        // Phase 33 D-17 — interface 兼容 embedded + 远端两种模式
 	AdminEvents         AdminEventStore
 	EventRecorder   EventRecorder
 	EntryStore      EntryStore
