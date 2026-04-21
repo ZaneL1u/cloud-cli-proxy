@@ -183,6 +183,17 @@ func (m *IgnoreMatcher) IsIgnoredRel(rel string, isDir bool) bool {
 	return ignored
 }
 
+// isHardcodedSkipDir 是热同步/体积统计共用的目录白名单。
+// 这些目录通常是依赖缓存或构建产物，不应进入热同步，也应在本地扫描时直接 SkipDir。
+func isHardcodedSkipDir(name string) bool {
+	switch name {
+	case "node_modules", "target", "dist", ".venv", "__pycache__",
+		".next", "build", ".cache", ".git":
+		return true
+	}
+	return false
+}
+
 // compileIgnoreRule 把一行 gitignore pattern 编译成 ignoreRule。
 // 返回 ok=false 表示该行是空、注释或无法编译，调用方应跳过。
 func compileIgnoreRule(raw string) (ignoreRule, bool) {

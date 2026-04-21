@@ -2,9 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -13,21 +10,22 @@ import (
 
 // newSyncCmd 构造 cloud-claude sync 父命令树。
 //
-// Phase 31 Plan 03 仅注册 sync conflicts 子命令（CONTEXT D-28 — 最小可行版本）；
-// sync resolve / sync resume 等 wrapper 由 v3.1 落地（OOS-A2 不暴露 5 种冲突模式）。
+// 自研 hot sync 当前只暴露 conflicts 查询：
+// 读取 ~/.cloud-claude/last-session.json 的 conflict_count，提示用户最近一次会话
+// 是否出现自动 resolved 的双向冲突。逐文件清单暂未持久化。
 func newSyncCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "sync",
-		Short:         "Mutagen 同步管理（v3.0 三层文件映射）",
-		Long:          "查看本地 Mutagen 客户端管理的 cloud-claude 同步会话与冲突文件清单。\n注：当前仅实现 sync conflicts 子命令；sync resolve / sync resume 留 v3.1。",
+		Short:         "热同步相关工具",
+		Long:          "查看 cloud-claude 自研热同步的最近一次冲突计数等状态。\n当前仅实现 sync conflicts 子命令；逐文件冲突清单留后续版本补齐。",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
 
 	conflictsCmd := &cobra.Command{
 		Use:           "conflicts",
-		Short:         "查看当前 Mutagen 同步会话的冲突文件清单",
-		Long:          "调用本地 Mutagen 客户端 sync list --long 渲染所有 cloud-claude 创建的 sync session 的冲突文件（path / alpha / beta / mtime）。",
+		Short:         "查看最近一次热同步冲突计数",
+		Long:          "读取 ~/.cloud-claude/last-session.json 中的 conflict_count。\n当前自研热同步会在运行时实时提示冲突，但尚未持久化逐文件清单。",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE:          runSyncConflicts,
@@ -36,35 +34,18 @@ func newSyncCmd() *cobra.Command {
 	return cmd
 }
 
-// runSyncConflicts 执行 ~/.cloud-claude/bin/mutagen sync list --long 并把结果直接打到
-// stdout / stderr。本地命令出错时返回中文错误，由 cobra runE 错误处理流程 stderr 打印。
-//
-// 行为约束：
-//   - 不发起 SSH 连接（本子命令只查本地 mutagen daemon 状态，不需要联网）
-//   - ExtractMutagenBinary 幂等保证 ~/.cloud-claude/bin/mutagen 存在
-//   - MUTAGEN_DATA_DIRECTORY 环境变量隔离与主流程一致（CONTEXT D-05）
+// runSyncConflicts 仅读取本地上次会话快照，不发起 SSH 连接。
+// 当前实现不再依赖 Mutagen daemon，也不维护逐文件冲突清单。
 func runSyncConflicts(cmd *cobra.Command, args []string) error {
-	home, err := os.UserHomeDir()
+	snap, err := cloudclaude.LoadLastSession()
 	if err != nil {
-		return fmt.Errorf("无法获取用户主目录: %w", err)
+		return fmt.Errorf("无法读取最近一次会话快照: %w", err)
 	}
-
-	binPath := filepath.Join(home, ".cloud-claude", "bin", "mutagen")
-	if err := cloudclaude.ExtractMutagenBinary(binPath); err != nil {
-		return fmt.Errorf("无法准备 Mutagen 二进制: %w", err)
+	if snap.ConflictCount <= 0 {
+		fmt.Println("最近一次会话未记录热同步冲突。")
+		return nil
 	}
-
-	env := append(os.Environ(),
-		"MUTAGEN_DATA_DIRECTORY="+filepath.Join(home, ".cloud-claude", "mutagen"),
-	)
-
-	// sync list --long 输出含每个 session 的冲突详细信息（path / alpha / beta / mtime）
-	c := exec.Command(binPath, "sync", "list", "--long")
-	c.Env = env
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	if err := c.Run(); err != nil {
-		return fmt.Errorf("查询 Mutagen 冲突清单失败: %w", err)
-	}
+	fmt.Printf("最近一次会话记录到 %d 个热同步冲突。\n", snap.ConflictCount)
+	fmt.Println("当前版本仅持久化冲突计数；逐文件冲突会在运行 cloud-claude 时实时提示。")
 	return nil
 }

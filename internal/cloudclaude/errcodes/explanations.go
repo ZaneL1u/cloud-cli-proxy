@@ -111,9 +111,9 @@ func init() {
 修复路径：观察 stderr 提示的下游错误码（[CODE] 后面的部分）针对修复；运行 cloud-claude doctor mount 看完整健康度；如要锁定模式可用 --mount-mode flag 强制。
 关联文档：Phase 31 RESEARCH §6 / Phase 31 PITFALLS M13（禁止静默降级）`)
 
-	registerExplanation(MOUNT_FORCE_MODE_FAILED, `触发场景：用户通过 --mount-mode={full,mutagen-only,sshfs-only} 强制指定模式，但该模式启动失败。强制模式下 cloud-claude 不会自动降级。
-根本原因：用户显式指定模式意味着接受失败即报错的语义（M13 防御静默降级）。常见触发为 mutagen-only 模式下 daemon 不可用、sshfs-only 模式下 fuse 不可用。
-复现方式：cloud-claude --mount-mode=mutagen-only 但本机 mutagen daemon 起不来 → SeverityFatal 阻断。
+registerExplanation(MOUNT_FORCE_MODE_FAILED, `触发场景：用户通过 --mount-mode={full,hot-only,sshfs-only} 强制指定模式，但该模式启动失败。强制模式下 cloud-claude 不会自动降级。
+根本原因：用户显式指定模式意味着接受失败即报错的语义（M13 防御静默降级）。常见触发为 hot-only 模式下热同步初始化失败、sshfs-only 模式下 fuse 不可用。
+复现方式：cloud-claude --mount-mode=hot-only 但远端同路径目录不可写 → SeverityFatal 阻断。
 修复路径：移除 --mount-mode flag 让自动降级生效，或针对错误信息中的具体下游 code 修复；需要锁定模式时建议先运行 cloud-claude doctor mount 看可用层。
 关联文档：Phase 31 PLAN <errcode_registry> / Phase 31 PITFALLS M13`)
 

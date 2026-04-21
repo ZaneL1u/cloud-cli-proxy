@@ -15,15 +15,15 @@ func TestDowngradeBannerRendersChain(t *testing.T) {
 		IntendedMode:       "full",
 		ActualMode:         "sshfs-only",
 		DowngradeChain: []DowngradeStep{
-			{From: "full", To: "mutagen-only", ReasonCode: "MOUNT_MUTAGEN_VERSION_SKEW", ReasonMessage: "version skew"},
-			{From: "mutagen-only", To: "sshfs-only", ReasonCode: "MOUNT_AUTO_DOWNGRADED", ReasonMessage: "daemon died"},
+			{From: "full", To: "hot-only", ReasonCode: "MOUNT_MERGERFS_FAILED", ReasonMessage: "merge failed"},
+			{From: "hot-only", To: "sshfs-only", ReasonCode: "MOUNT_AUTO_DOWNGRADED", ReasonMessage: "hot sync failed"},
 		},
 	}
 	out := renderDowngradeBanner(banner)
 	for _, want := range []string{
-		"[降级] full → mutagen-only",
-		"[降级] mutagen-only → sshfs-only",
-		"MOUNT_MUTAGEN_VERSION_SKEW",
+		"[降级] full → hot-only",
+		"[降级] hot-only → sshfs-only",
+		"MOUNT_MERGERFS_FAILED",
 		"MOUNT_AUTO_DOWNGRADED",
 		"意图=full",
 		"实际=sshfs-only",

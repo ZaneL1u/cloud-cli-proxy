@@ -179,7 +179,7 @@ func Test_BannerColors(t *testing.T) {
 	t.Run("contains banner text + mode", func(t *testing.T) {
 		var buf bytes.Buffer
 		printBanner(&buf, ModeMutagenOnly, true)
-		if !strings.Contains(buf.String(), "✓ 文件映射就绪 [mutagen-only]") {
+		if !strings.Contains(buf.String(), "✓ 文件映射就绪 [hot-only]") {
 			t.Errorf("banner missing mode tag: %q", buf.String())
 		}
 	})
@@ -316,7 +316,7 @@ func Test_Downgrade_CapabilityFromAuthResp(t *testing.T) {
 		}
 		cleanup()
 		if mode != ModeMutagenOnly {
-			t.Errorf("mode=%s, want mutagen-only", mode)
+			t.Errorf("mode=%s, want hot-only", mode)
 		}
 	})
 }
@@ -326,6 +326,7 @@ func Test_ParseMode(t *testing.T) {
 		"":             ModeAuto,
 		"auto":         ModeAuto,
 		"full":         ModeFull,
+		"hot-only":     ModeMutagenOnly,
 		"mutagen-only": ModeMutagenOnly,
 		"sshfs-only":   ModeSSHFSOnly,
 	}

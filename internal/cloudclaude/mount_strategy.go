@@ -19,6 +19,7 @@ import (
 // 状态机契约：
 //   - 入参允许 Auto / Full / MutagenOnly / SSHFSOnly
 //   - 返回时永远是 Full / MutagenOnly / SSHFSOnly / Failed 之一（Auto 仅作为入参意图）
+//   - 注意：ModeMutagenOnly 仅保留内部枚举兼容，用户可见字面值统一为 hot-only
 type Mode int
 
 const (
@@ -37,7 +38,7 @@ func (m Mode) String() string {
 	case ModeFull:
 		return "full"
 	case ModeMutagenOnly:
-		return "mutagen-only"
+		return "hot-only"
 	case ModeSSHFSOnly:
 		return "sshfs-only"
 	case ModeFailed:
@@ -55,12 +56,12 @@ func ParseMode(s string) (Mode, error) {
 		return ModeAuto, nil
 	case "full":
 		return ModeFull, nil
-	case "mutagen-only":
+	case "hot-only", "mutagen-only":
 		return ModeMutagenOnly, nil
 	case "sshfs-only":
 		return ModeSSHFSOnly, nil
 	default:
-		return ModeFailed, fmt.Errorf("非法 mount-mode 值: %q（应为 auto|full|mutagen-only|sshfs-only）", s)
+		return ModeFailed, fmt.Errorf("非法 mount-mode 值: %q（应为 auto|full|hot-only|sshfs-only；兼容 legacy: mutagen-only）", s)
 	}
 }
 
@@ -95,14 +96,6 @@ type MountConfig struct {
 	// 时（ErrSyncLocked）置 true；session.go::runClaudeWithSession 据此把
 	// last-session.json 的 ClientRole 写为 "secondary"（默认 "primary"）。
 	IsSecondaryClient bool
-
-	// Mutagen beta URL 需要的 SSH 连接参数，从 ConnectAndRunClaudeV3 的
-	// SSHConfig 透传过来。sshfs-only 模式下这些字段不使用（sshfs 走现有的
-	// connA/connB channel，不需要另起 ssh 子进程）。
-	SSHUser     string
-	SSHHost     string
-	SSHPort     int
-	SSHPassword string
 
 	// 测试 hook：仅用于单测注入；生产路径 nil 时走真实实现。
 	overrideCaseInsensitive *bool
@@ -287,7 +280,7 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 
 // tryMode 按 mode 调度子层：
 //   - Full = mutagen + sshfs + merge（任一失败即失败）
-//   - MutagenOnly = mutagen 单层
+//   - MutagenOnly = hot-only 单层
 //   - SSHFSOnly = sshfs 单层（v2.0 路径）
 //
 // 测试通过 cfg.hooks 注入 mock；生产走 tryModeReal。
@@ -457,7 +450,7 @@ func printProgress(w io.Writer, mode Mode) {
 		fmt.Fprintf(w, "(2/3) 跳过 sshfs（模式: %s）\n", mode.String())
 		fmt.Fprintf(w, "(3/3) 跳过 mergerfs（模式: %s）\n", mode.String())
 	case ModeSSHFSOnly:
-		fmt.Fprintf(w, "(1/3) 跳过 Mutagen（模式: %s）\n", mode.String())
+		fmt.Fprintf(w, "(1/3) 跳过热同步（模式: %s）\n", mode.String())
 		fmt.Fprintln(w, "(2/3) 启动冷兜底…")
 		fmt.Fprintf(w, "(3/3) 跳过 mergerfs（模式: %s）\n", mode.String())
 	}

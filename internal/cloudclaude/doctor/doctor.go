@@ -225,8 +225,6 @@ func RunDoctor(ctx context.Context, opts Options) (*Report, error) {
 	// 6) mount 维度
 	if want("mount") {
 		ensureRemote()
-		report.Checks = append(report.Checks, runWithTimeout(ctx, "mount", "mutagen_version_match", timeout,
-			func(c context.Context) Check { return checkMutagenVersionMatch(c, remoteRunner) }))
 		report.Checks = append(report.Checks, runWithTimeout(ctx, "mount", "mergerfs_branches", timeout,
 			func(c context.Context) Check { return checkMergerfsBranches(c, remoteRunner) }))
 		report.Checks = append(report.Checks, runWithTimeout(ctx, "mount", "sshfs_mountpoint", timeout,
@@ -241,7 +239,6 @@ func RunDoctor(ctx context.Context, opts Options) (*Report, error) {
 		report.Checks = append(report.Checks, checkLocalDisk(ctx))
 		report.Checks = append(report.Checks, runWithTimeout(ctx, "disk", "container_disk", timeout,
 			func(c context.Context) Check { return checkContainerDisk(c, remoteRunner) }))
-		report.Checks = append(report.Checks, checkMutagenDataSize(ctx))
 	}
 
 	// 8) 聚合 Summary

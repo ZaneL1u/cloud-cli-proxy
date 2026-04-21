@@ -16,9 +16,9 @@ func Test_WriteLastSession_Schema(t *testing.T) {
 
 	snap := LastSessionSnapshot{
 		IntendedMode: "auto",
-		ActualMode:   "mutagen-only",
+		ActualMode:   "hot-only",
 		DowngradeChain: []DowngradeStep{
-			{From: "full", To: "mutagen-only", ReasonCode: "MOUNT_MERGERFS_FAILED", ReasonMessage: "mergerfs 失败"},
+			{From: "full", To: "hot-only", ReasonCode: "MOUNT_MERGERFS_FAILED", ReasonMessage: "mergerfs 失败"},
 		},
 		ConflictCount:       3,
 		ClaudeAccountID:     "acc_xyz",
@@ -44,7 +44,7 @@ func Test_WriteLastSession_Schema(t *testing.T) {
 	if v, _ := got["schema_version"].(float64); v != 1 {
 		t.Errorf("schema_version = %v, want 1", got["schema_version"])
 	}
-	if got["actual_mode"] != "mutagen-only" {
+	if got["actual_mode"] != "hot-only" {
 		t.Errorf("actual_mode = %v", got["actual_mode"])
 	}
 	if got["intended_mode"] != "auto" {
@@ -68,7 +68,7 @@ func Test_WriteLastSession_Schema(t *testing.T) {
 	if !ok {
 		t.Fatal("downgrade_chain[0] 不是 object")
 	}
-	if step["from"] != "full" || step["to"] != "mutagen-only" {
+	if step["from"] != "full" || step["to"] != "hot-only" {
 		t.Errorf("downgrade_chain[0] from/to 异常: %v", step)
 	}
 	if step["reason_code"] != "MOUNT_MERGERFS_FAILED" {

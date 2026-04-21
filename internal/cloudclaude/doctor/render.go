@@ -85,7 +85,7 @@ func renderDowngradeBanner(banner *DowngradeBanner) string {
 		fmt.Fprintf(&b, "  角色: %s\n", banner.ClientRole)
 	}
 	if banner.ConflictCount > 0 {
-		fmt.Fprintf(&b, "  Mutagen 冲突: %d 个\n", banner.ConflictCount)
+		fmt.Fprintf(&b, "  热同步冲突: %d 个\n", banner.ConflictCount)
 	}
 	if banner.ReconnectCount > 0 {
 		fmt.Fprintf(&b, "  重连次数: %d\n", banner.ReconnectCount)

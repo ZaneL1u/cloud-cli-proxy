@@ -178,7 +178,7 @@ func TestIntegration_F2B_KillMutagenAgent_DowngradesIn2s(t *testing.T) {
 	}
 	if !strings.Contains(stderr, string(errcodes.MOUNT_AUTO_DOWNGRADED)) &&
 		!strings.Contains(stderr, "[sshfs-only]") &&
-		!strings.Contains(stderr, "[mutagen-only]") {
+		!strings.Contains(stderr, "[hot-only]") {
 		t.Errorf("期望降级 banner，stderr: %s", stderr)
 	}
 }
