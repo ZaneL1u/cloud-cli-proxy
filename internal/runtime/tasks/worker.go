@@ -34,6 +34,7 @@ type WorkerRepo interface {
 	UpdateHostStatus(ctx context.Context, hostID string, status string) error
 	GetEgressIPByHost(ctx context.Context, hostID string) (repository.EgressIP, error)
 	RecordEvent(ctx context.Context, params repository.RecordEventParams) (repository.Event, error)
+	UpsertClaudeAccountPersistentVolumeName(ctx context.Context, accountID, volumeName string) error // Phase 33 D-06
 }
 
 type Worker struct {
@@ -58,12 +59,17 @@ func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest
 		err = w.rebuildHost(ctx, request)
 	case agentapi.ActionPrepareHost:
 		err = w.validateAndPrepare(ctx, request.HostID)
+	case agentapi.ActionVolumeRemove:
+		err = w.removeVolumes(ctx, request)
 	default:
 		err = fmt.Errorf("unsupported host action: %s", request.Action)
 	}
 
 	if err != nil {
 		errorCode := "host_action_failed"
+		if strings.HasPrefix(err.Error(), "volume_in_use:") {
+			errorCode = "volume_in_use"
+		}
 		var sshErr *SSHNotReadyError
 		var netErr *network.NetworkError
 		if errors.As(err, &sshErr) {
@@ -205,6 +211,60 @@ func (w *Worker) createHost(ctx context.Context, request agentapi.HostActionRequ
 	} else if exists {
 		if err := w.runDocker(ctx, "rm", "-f", containerName); err != nil {
 			return err
+		}
+	}
+
+	// Phase 33 D-04/D-05/D-06：仅当 ClaudeAccountID 非空时自动补 claude-state volume + mount + upsert persistent_volume_name。
+	// 空 ClaudeAccountID 走 D-07 fallback：跳过，不报错（v2.0 旧 host 重建路径）。
+	if request.ClaudeAccountID != "" {
+		volumeName, err := BuildClaudeStateVolumeName(request.ClaudeAccountID)
+		if err != nil {
+			return err
+		}
+		labels := map[string]string{
+			claudeAccountLabelKey: request.ClaudeAccountID,
+			claudeManagedLabelKey: claudeManagedLabelVal,
+		}
+		if err := ensureDockerVolume(ctx, volumeName, labels); err != nil {
+			_, _ = w.repo.RecordEvent(ctx, repository.RecordEventParams{
+				HostID:  &request.HostID,
+				Level:   "error",
+				Type:    "claude_account.volume_create_failed",
+				Message: err.Error(),
+				Metadata: map[string]any{
+					"account_id":  request.ClaudeAccountID,
+					"volume_name": volumeName,
+				},
+			})
+			return fmt.Errorf("ensureDockerVolume: %w", err)
+		}
+
+		already := false
+		for _, vm := range request.Volumes {
+			if vm.Name == volumeName {
+				already = true
+				break
+			}
+		}
+		if !already {
+			request.Volumes = append(request.Volumes, agentapi.VolumeMount{
+				Name:   volumeName,
+				Target: claudeStateMountTarget,
+				Labels: labels,
+			})
+		}
+
+		if err := w.repo.UpsertClaudeAccountPersistentVolumeName(ctx, request.ClaudeAccountID, volumeName); err != nil {
+			_, _ = w.repo.RecordEvent(ctx, repository.RecordEventParams{
+				HostID:  &request.HostID,
+				Level:   "warn",
+				Type:    "claude_account.volume_name_persist_failed",
+				Message: err.Error(),
+				Metadata: map[string]any{
+					"account_id":  request.ClaudeAccountID,
+					"volume_name": volumeName,
+				},
+			})
 		}
 	}
 
@@ -864,4 +924,104 @@ func summarizeError(err error) string {
 	}
 
 	return message
+}
+
+const (
+	claudeStateVolumePrefix = "claude-state-"
+	claudeStateMountTarget  = "/var/lib/claude-persist"
+	claudeAccountLabelKey   = "com.cloud-cli-proxy.account_id"
+	claudeManagedLabelKey   = "com.cloud-cli-proxy.managed"
+	claudeManagedLabelVal   = "true"
+)
+
+// BuildClaudeStateVolumeName 返回 D-01 规范的 volume 名 `claude-state-{id}`（保留 UUID 原格式含连字符）。空 id 返回错误。
+func BuildClaudeStateVolumeName(claudeAccountID string) (string, error) {
+	if claudeAccountID == "" {
+		return "", fmt.Errorf("BuildClaudeStateVolumeName: claude_account_id is required")
+	}
+	return claudeStateVolumePrefix + claudeAccountID, nil
+}
+
+// dockerVolumeRunner 抽象 docker volume 子命令的实际执行；包级 var 便于单元测试注入 mock。
+// 与 var execInContainer = ... 模式一致。
+var dockerVolumeRunner = func(ctx context.Context, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "docker", append([]string{"volume"}, args...)...)
+	return cmd.CombinedOutput()
+}
+
+// ensureDockerVolume 幂等创建 named volume（D-04）：
+//   - inspect 成功：视为已存在，返回 nil
+//   - inspect 失败：执行 create --label k=v --label k=v <name>
+//
+// 暴露为包级 var 以便测试注入 mock。
+var ensureDockerVolume = realEnsureDockerVolume
+
+func realEnsureDockerVolume(ctx context.Context, name string, labels map[string]string) error {
+	if name == "" {
+		return fmt.Errorf("ensureDockerVolume: empty name")
+	}
+	if _, err := dockerVolumeRunner(ctx, "inspect", name); err == nil {
+		return nil
+	}
+	args := []string{"create"}
+	for k, v := range labels {
+		args = append(args, "--label", fmt.Sprintf("%s=%s", k, v))
+	}
+	args = append(args, name)
+	out, err := dockerVolumeRunner(ctx, args...)
+	if err != nil {
+		return fmt.Errorf("docker volume create %s: %w (%s)", name, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// removeDockerVolume 幂等删除（D-15）：
+//   - "no such volume" 视为成功（幂等）
+//   - "volume is in use" 包装为 volume_in_use: 前缀错误（供 Execute 错误码映射）
+//   - force=true 追加 -f 标志
+var removeDockerVolume = realRemoveDockerVolume
+
+func realRemoveDockerVolume(ctx context.Context, name string, force bool) error {
+	if name == "" {
+		return fmt.Errorf("removeDockerVolume: empty name")
+	}
+	args := []string{"rm"}
+	if force {
+		args = append(args, "-f")
+	}
+	args = append(args, name)
+	out, err := dockerVolumeRunner(ctx, args...)
+	if err == nil {
+		return nil
+	}
+	msg := strings.TrimSpace(string(out))
+	low := strings.ToLower(msg)
+	if strings.Contains(low, "no such volume") {
+		return nil
+	}
+	if strings.Contains(low, "volume is in use") {
+		return fmt.Errorf("volume_in_use: %s", msg)
+	}
+	return fmt.Errorf("docker volume rm %s: %w (%s)", name, err, msg)
+}
+
+// removeVolumes 处理 ActionVolumeRemove：遍历 request.Volumes 调 removeDockerVolume，
+// 任一失败立即写 audit event 并 return（D-14 + D-21 metadata 不写凭据）。
+func (w *Worker) removeVolumes(ctx context.Context, request agentapi.HostActionRequest) error {
+	force := request.Labels["force"] == "true"
+	for _, vm := range request.Volumes {
+		if err := removeDockerVolume(ctx, vm.Name, force); err != nil {
+			_, _ = w.repo.RecordEvent(ctx, repository.RecordEventParams{
+				Level:   "error",
+				Type:    "claude_account.volume_rm_failed",
+				Message: err.Error(),
+				Metadata: map[string]any{
+					"volume_name": vm.Name,
+					"force":       force,
+				},
+			})
+			return err
+		}
+	}
+	return nil
 }

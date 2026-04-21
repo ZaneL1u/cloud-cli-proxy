@@ -85,6 +85,10 @@ func (r *fakeWorkerRepo) RecordEvent(_ context.Context, params repository.Record
 	return repository.Event{}, nil
 }
 
+func (r *fakeWorkerRepo) UpsertClaudeAccountPersistentVolumeName(_ context.Context, _, _ string) error {
+	return nil
+}
+
 // setupInjectTest 装配 fake 容器、fake repo、代理公钥与 execInContainer 注入点，
 // 返回 worker + 容器 + repo，供测试断言。
 func setupInjectTest(t *testing.T, proxyPub string) (*Worker, *fakeContainer, *fakeWorkerRepo) {
