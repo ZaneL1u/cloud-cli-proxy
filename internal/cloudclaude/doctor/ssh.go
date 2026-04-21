@@ -39,7 +39,9 @@ func checkSSHDKeepaliveDrift(ctx context.Context, runner RemoteRunner) Check {
 	baseline := "clientaliveinterval=15 clientalivecountmax=8"
 	if interval != 15 || count != 8 {
 		got := fmt.Sprintf("clientaliveinterval=%d clientalivecountmax=%d", interval, count)
-		return newWarn("ssh", "sshd_keepalive_drift", errcodes.SSH_SSHD_KEEPALIVE_DRIFT, got)
+		c := newWarn("ssh", "sshd_keepalive_drift", errcodes.SSH_SSHD_KEEPALIVE_DRIFT, got)
+		c.Details = map[string]any{"interval": interval, "count": count, "baseline": "15/8"}
+		return c
 	}
 	return newPass("ssh", "sshd_keepalive_drift", baseline)
 }
@@ -72,7 +74,10 @@ func checkKnownHosts(ctx context.Context, khPath string, authHostPort string) Ch
 		if strings.Contains(err.Error(), "no such file") || strings.Contains(err.Error(), "not exist") {
 			return newSkip("ssh", "known_hosts", "~/.ssh/known_hosts 不存在，跳过（首次连接时自动创建）")
 		}
-		return newWarn("ssh", "known_hosts", errcodes.SSH_KNOWN_HOSTS_CONFLICT, authHostPort)
+		// Plan 03 Task 3.3：fix.go 依赖 Details["host_port"] 跑 ssh-keygen -R
+		c := newWarn("ssh", "known_hosts", errcodes.SSH_KNOWN_HOSTS_CONFLICT, authHostPort)
+		c.Details = map[string]any{"host_port": authHostPort}
+		return c
 	}
 	return newPass("ssh", "known_hosts", fmt.Sprintf("known_hosts 已加载（含 %s 条目将由后续连接校验）", authHostPort))
 }

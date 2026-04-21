@@ -116,7 +116,16 @@ func checkFUSEResidual(ctx context.Context) Check {
 	for _, m := range matches {
 		points = append(points, m[1])
 	}
-	return newWarn("mount", "fuse_residual", errcodes.SYSTEM_FUSE_RESIDUAL_MOUNT, len(points), strings.Join(points, ","))
+	// Plan 03 Task 3.3：fix.go 依赖 Details["mountpoints"] 列表做批量 fusermount -u
+	entry, _ := errcodes.Lookup(errcodes.SYSTEM_FUSE_RESIDUAL_MOUNT)
+	return Check{
+		Domain: "mount", Name: "fuse_residual",
+		Status:     StatusWarn,
+		Code:       errcodes.SYSTEM_FUSE_RESIDUAL_MOUNT,
+		Message:    fmt.Sprintf(entry.Message, len(points), strings.Join(points, ",")),
+		NextAction: entry.NextAction,
+		Details:    map[string]any{"mountpoints": points},
+	}
 }
 
 // checkAppArmorFusermount3 本地 5-Gate 检测（RESEARCH §8.3）。
