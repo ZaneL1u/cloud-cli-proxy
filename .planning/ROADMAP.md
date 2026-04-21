@@ -88,7 +88,7 @@
   - [x] `.planning/phases/32-ssh-tmux/plans/03-sync-lock-integration/PLAN.md` — 账号级 flock 单例锁 + ssh.go 注入 + secondary 标志 + 6 个 TestIntegration_Phase32_* + C3/C7 回归（Wave 3）
   - [ ] `.planning/phases/32-ssh-tmux/plans/04-mount-strategy-sync-lock-invoke/PLAN.md` — gap_closure #2 闭合 SC11 / REQ-F5-D：MountWorkspace 真实 invoke mountCfg.SyncSessionLock + ErrSyncLocked 降级 ModeSSHFSOnly + DowngradeChain 追加 sync_locked（Wave 1 of gap batch）
   - [ ] `.planning/phases/32-ssh-tmux/plans/05-bufferedstdin-reconnect-wiring/PLAN.md` — gap_closure #1 闭合 SC5 / REQ-F3-B：Reconnector + BufferedStdin 单例提升到 runClaudePTYWithReconnect 外层通过 reconnector.StateAddr() 共享 atomic.Int32 + onReconnected 回调 bs.Flush() + WR-03/WR-04 co-fix（Wave 1 of gap batch）
-- [ ] **Phase 33: Claude Code 状态持久化（CLI + 镜像 + admin GC）** — entrypoint symlink `/var/lib/claude-persist`、Worker `docker volume create` 幂等、admin DELETE 事务联动 `volume rm` (2/2 plans complete, awaiting phase-level verification)
+- [x] **Phase 33: Claude Code 状态持久化（CLI + 镜像 + admin GC）** — entrypoint symlink `/var/lib/claude-persist`、Worker `docker volume create` 幂等、admin DELETE 事务联动 `volume rm` (2/2 plans complete, awaiting phase-level verification) (completed 2026-04-21)
   Plans:
   - [x] `.planning/phases/33-claude-code-cli-admin-gc/33-01-image-worker-agentapi-PLAN.md` — 镜像 entrypoint `prepare_persistent_state` + Worker `createHost` 自动补 `claude-state-<id>` volume + agentapi `ActionVolumeRemove` + 仓储 `UpsertClaudeAccountPersistentVolumeName` + 单测 D-25 第 1-4+7 项（Wave 1，Complete 2026-04-21）
   - [x] `.planning/phases/33-claude-code-cli-admin-gc/33-02-admin-delete-host-detail-uat-PLAN.md` — admin `DELETE /v1/admin/claude-accounts/{id}` 强一致+force 两条路径 + admin host detail 追加 `persistent_volume_name` + 仓储 `BeginTx`/`GetHostWithClaudeAccount`/`Lock+DeleteClaudeAccountTx` + 单测 D-25 第 5-6 项 + UAT D-26 + 运维手册（Wave 2，depends_on Plan 01）— **Complete 2026-04-21: 6 个 task 全 ship + UAT APPROVED + 3 post-fix patches (3e2ba6b/27ab2d7/c09a4d0) 闭合 Plan 01 D-04 dispatcher 缺口与真实部署 wiring**
@@ -124,7 +124,7 @@
 | 30. 控制面数据模型 + Entry API | v3.0 | 2/2 | Complete    | 2026-04-18 |
 | 31. CLI 三层文件映射重构 | v3.0 | 3/3 | Complete   | 2026-04-19 |
 | 32. SSH 会话可靠性 + tmux + 多端 | v3.0 | 0/0 | Complete    | 2026-04-20 |
-| 33. Claude Code 状态持久化 | v3.0 | 2/2 | Awaiting Phase Verification | — |
+| 33. Claude Code 状态持久化 | v3.0 | 2/2 | Complete    | 2026-04-21 |
 | 34. cloud-claude doctor v3 + 错误码统一 | v3.0 | 0/3 | Pending | — |
 | 35. E2E 稳定化 + 性能验收 | v3.0 | 0/2 | Pending | — |
 
