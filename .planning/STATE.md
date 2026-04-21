@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 远端开发体验升级
-status: verifying
-stopped_at: Completed 34-03-doctor-fix-integration-PLAN.md
-last_updated: "2026-04-21T11:12:03.604Z"
-last_activity: 2026-04-21
+status: ready_to_plan
+stopped_at: Phase 34 complete, ready to discuss Phase 35
+last_updated: "2026-04-21T12:00:00.000Z"
+last_activity: 2026-04-21 -- Phase 34 cloud-claude-doctor-v3 complete (8/8 SC, 7 REQ IDs satisfied)
 progress:
   total_phases: 8
   completed_phases: 7
-  total_plans: 25
-  completed_plans: 25
+  total_plans: 28
+  completed_plans: 28
   percent: 100
 ---
 
@@ -18,22 +18,22 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-17)
+See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** 给每个用户提供一台开箱即用的 SSH 云主机，并且严格保证其所有出网流量都走受控的指定出口 IP
-**Current focus:** Phase 34 — cloud-claude-doctor-v3
+**Current focus:** Phase 35 — E2E 稳定化 + 性能验收（BASE-01/02/03 三条性能基线 + macOS APFS + Ubuntu AppArmor 真机回归）
 
 ## Current Position
 
 Milestone: v3.0 远端开发体验升级
 Phase: 35
 Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-21
+Status: Ready to discuss / plan
+Last activity: 2026-04-21 -- Phase 34 cloud-claude-doctor-v3 complete
 
-Progress: [████████████████████] 100%（Phase 33 plans 全 ship；等 phase-level verification 后 mark complete）
+Progress: [███████████████████░] 87%（7/8 phases complete；Phase 35 未开始，无 CONTEXT.md）
 
-下一步：orchestrator 触发 verify_phase_goal（Phase 33 Goal: OAuth credentials 与 Claude Code 缓存跨容器重建持久化 — 通过 admin DELETE 事务联动 volume rm 防止 orphan）；通过后 ROADMAP Phase 33 mark complete。
+下一步：`/gsd-discuss-phase 35 --auto` 进入 Phase 35 上下文收集（auto-chain 已开启），或 `/gsd-progress` 查看更新后的 ROADMAP。Phase 35 承担 BASE-01/02/03 三条性能基线真机验收，外加 macOS APFS + Ubuntu 25.04 AppArmor 双真机矩阵。
 
 ## Accumulated Context
 
@@ -101,6 +101,6 @@ None — 等待 REQUIREMENTS.md 与 ROADMAP.md 产出后进入 phase 执行。
 
 ## Session Continuity
 
-Last session: 2026-04-21T10:55:21.678Z
-Stopped at: Completed 34-03-doctor-fix-integration-PLAN.md
+Last session: 2026-04-21
+Stopped at: Phase 34 complete — ready to discuss Phase 35 (E2E 稳定化 + 性能验收)
 Resume file: None
