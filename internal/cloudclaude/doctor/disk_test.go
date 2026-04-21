@@ -104,14 +104,4 @@ func TestParseDuHumanToMB(t *testing.T) {
 	}
 }
 
-func TestCheckMutagenDataSize_Missing_Skip(t *testing.T) {
-	origHome := userHomeDir
-	userHomeDir = func() (string, error) { return t.TempDir(), nil }
-	t.Cleanup(func() { userHomeDir = origHome })
-	c := checkMutagenDataSize(context.Background())
-	if c.Status != StatusSkip {
-		t.Errorf("目录不存在应 Skip，实际 %s", c.Status)
-	}
-}
-
 var _ = fmt.Sprintf

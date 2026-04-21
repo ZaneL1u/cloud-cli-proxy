@@ -121,9 +121,6 @@ func TestEntryAuth_Ready_ViaHostShortID_V3Image(t *testing.T) {
 	if resp["image_version"] != "v3.0.0" {
 		t.Errorf("image_version = %v, want v3.0.0", resp["image_version"])
 	}
-	if resp["supports_mutagen"] != true {
-		t.Errorf("supports_mutagen = %v, want true", resp["supports_mutagen"])
-	}
 	if resp["supports_mergerfs"] != true {
 		t.Errorf("supports_mergerfs = %v, want true", resp["supports_mergerfs"])
 	}
@@ -163,8 +160,8 @@ func TestEntryAuth_Ready_ViaUserShortID_V3Image(t *testing.T) {
 	if resp["image_version"] != "v3.0.0" {
 		t.Errorf("image_version = %v, want v3.0.0", resp["image_version"])
 	}
-	if resp["supports_mutagen"] != true || resp["supports_mergerfs"] != true {
-		t.Errorf("supports_* = %v/%v, want true/true", resp["supports_mutagen"], resp["supports_mergerfs"])
+	if resp["supports_mergerfs"] != true {
+		t.Errorf("supports_mergerfs = %v, want true", resp["supports_mergerfs"])
 	}
 	if resp["claude_account_id"] != "claude-acct-7" {
 		t.Errorf("claude_account_id = %v, want claude-acct-7", resp["claude_account_id"])
@@ -197,8 +194,8 @@ func TestEntryAuth_Ready_NoClaudeAccount_OmitsField(t *testing.T) {
 	if resp["image_version"] != "v2.0.0" {
 		t.Errorf("image_version = %v, want v2.0.0", resp["image_version"])
 	}
-	if resp["supports_mutagen"] != false || resp["supports_mergerfs"] != false {
-		t.Errorf("supports_* = %v/%v, want false/false for v2 image", resp["supports_mutagen"], resp["supports_mergerfs"])
+	if resp["supports_mergerfs"] != false {
+		t.Errorf("supports_mergerfs = %v, want false for v2 image", resp["supports_mergerfs"])
 	}
 }
 
@@ -240,7 +237,7 @@ func TestEntryAuth_NotReady_DoesNotForceExtensionFields(t *testing.T) {
 	if resp["status"] != "not_ready" {
 		t.Fatalf("status = %v, want not_ready", resp["status"])
 	}
-	for _, key := range []string{"image_version", "supports_mutagen", "supports_mergerfs", "claude_account_id"} {
+	for _, key := range []string{"image_version", "supports_mergerfs", "claude_account_id"} {
 		if _, ok := resp[key]; ok {
 			t.Errorf("not_ready response must not carry %q, got %v", key, resp[key])
 		}
@@ -265,7 +262,7 @@ func TestEntryAuth_InvalidCredentials_NoExtensions(t *testing.T) {
 	if rec.Code != nethttp.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
 	}
-	for _, key := range []string{"image_version", "supports_mutagen", "supports_mergerfs", "claude_account_id"} {
+	for _, key := range []string{"image_version", "supports_mergerfs", "claude_account_id"} {
 		if _, ok := resp[key]; ok {
 			t.Errorf("401 response must not expose %q", key)
 		}

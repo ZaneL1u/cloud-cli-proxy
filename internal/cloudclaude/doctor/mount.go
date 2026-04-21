@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/zanel1u/cloud-cli-proxy/internal/cloudclaude"
 	"github.com/zanel1u/cloud-cli-proxy/internal/cloudclaude/errcodes"
 )
 
@@ -23,28 +22,6 @@ var (
 		return string(out), err
 	}
 )
-
-// checkMutagenVersionMatch 远端 /etc/cloud-claude/mutagen.version 与 embed 版本比对（C4）。
-// 复刻 mount_mutagen.go:230-237 的 TrimPrefix+Contains 双保险模式。
-func checkMutagenVersionMatch(ctx context.Context, runner RemoteRunner) Check {
-	if runner == nil {
-		return newSkip("mount", "mutagen_version_match", "未能连接远端容器，跳过")
-	}
-	stdout, _, err := runner.RunScript("mutagen_version", "cat /etc/cloud-claude/mutagen.version 2>/dev/null")
-	if err != nil {
-		return newFail("mount", "mutagen_version_match", errcodes.MOUNT_MUTAGEN_VERSION_SKEW,
-			cloudclaude.MutagenBinaryVersion, "(读取失败: "+err.Error()+")")
-	}
-	remote := strings.TrimSpace(stdout)
-	local := cloudclaude.MutagenBinaryVersion
-	if remote == "" {
-		return newFail("mount", "mutagen_version_match", errcodes.MOUNT_MUTAGEN_VERSION_SKEW, local, "(远端文件不存在)")
-	}
-	if !strings.Contains(remote, strings.TrimPrefix(local, "v")) {
-		return newFail("mount", "mutagen_version_match", errcodes.MOUNT_MUTAGEN_VERSION_SKEW, local, remote)
-	}
-	return newPass("mount", "mutagen_version_match", fmt.Sprintf("客户端 %s ↔ 远端 %s", local, remote))
-}
 
 // checkMergerfsBranches 远端 getfattr + mount 参数 6 字面量断言（C2 / RESEARCH §8.1）。
 func checkMergerfsBranches(ctx context.Context, runner RemoteRunner) Check {

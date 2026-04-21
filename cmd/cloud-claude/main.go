@@ -88,7 +88,7 @@ func main() {
 	// runRoot 内会手动解析并从 args 中剥离，避免透传给远端 claude。
 	// 这里注册仅用于 --help 显示与 cobra Mark Hidden 等元数据。
 	rootCmd.PersistentFlags().String("mount-mode", "auto",
-		"文件映射模式: auto|full|hot-only|sshfs-only（兼容 legacy: mutagen-only）")
+		"文件映射模式: auto|full|hot-only|sshfs-only")
 
 	rootCmd.AddCommand(initCmd, envCmd, sshCmd, newSyncCmd(), newSessionsCmd(), newExplainCmd(), newDoctorCmd())
 
@@ -280,7 +280,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 
 	mode, err := cloudclaude.ParseMode(mountMode)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "错误: --mount-mode 必须是 auto / full / hot-only / sshfs-only 之一（兼容 legacy: mutagen-only）")
+		fmt.Fprintln(os.Stderr, "错误: --mount-mode 必须是 auto / full / hot-only / sshfs-only 之一")
 		os.Exit(exitConfigError)
 	}
 

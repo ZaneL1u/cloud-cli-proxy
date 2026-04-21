@@ -13,12 +13,12 @@ import (
 	"github.com/zanel1u/cloud-cli-proxy/internal/cloudclaude/errcodes"
 )
 
-// fakeMutagenErr / fakeMergeErr 模拟生产路径的 codedError sentinel。
-type fakeMutagenErr struct{ code errcodes.Code }
+// fakeHotSyncErr / fakeMergeErr 模拟生产路径的 codedError sentinel。
+type fakeHotSyncErr struct{ code errcodes.Code }
 
-func (e *fakeMutagenErr) Error() string       { return string(e.code) }
-func (e *fakeMutagenErr) Code() errcodes.Code { return e.code }
-func (e *fakeMutagenErr) Reason() string      { return "fake mutagen failure" }
+func (e *fakeHotSyncErr) Error() string       { return string(e.code) }
+func (e *fakeHotSyncErr) Code() errcodes.Code { return e.code }
+func (e *fakeHotSyncErr) Reason() string      { return "fake hot sync failure" }
 
 type fakeMergeErr struct{ code errcodes.Code }
 
@@ -30,7 +30,7 @@ func (e *fakeMergeErr) Reason() string      { return "fake merge failure" }
 type stratCase struct {
 	name        string
 	intended    Mode
-	mutagenOK   bool
+	hotSyncOK   bool
 	sshfsOK     bool
 	mergeOK     bool
 	wantMode    Mode
@@ -40,11 +40,11 @@ type stratCase struct {
 
 func newHooks(c stratCase) *strategyHooks {
 	h := &strategyHooks{}
-	h.tryMutagen = func() (func(), MutagenSyncStatus, error) {
-		if !c.mutagenOK {
-			return nil, MutagenSyncStatus{}, &fakeMutagenErr{code: errcodes.MOUNT_MUTAGEN_DAEMON_UNAVAILABLE}
+	h.tryHotSync = func() (func(), HotSyncStatus, error) {
+		if !c.hotSyncOK {
+			return nil, HotSyncStatus{}, &fakeHotSyncErr{code: errcodes.MOUNT_HOT_SYNC_FAILED}
 		}
-		return func() {}, MutagenSyncStatus{}, nil
+		return func() {}, HotSyncStatus{}, nil
 	}
 	h.trySSHFS = func() (func(), error) {
 		if !c.sshfsOK {
@@ -64,56 +64,56 @@ func newHooks(c stratCase) *strategyHooks {
 func TestMountStrategy_DowngradeMatrix(t *testing.T) {
 	cases := []stratCase{
 		{
-			name:     "Auto/Mutagen-fail/SSHFS-ok/Merge-ok→MutagenOnly?no→ActuallySSHFSOnly",
-			intended: ModeAuto, mutagenOK: false, sshfsOK: true, mergeOK: true,
+			name:     "Auto/HotSync-fail/SSHFS-ok/Merge-ok→SSHFSOnly",
+			intended: ModeAuto, hotSyncOK: false, sshfsOK: true, mergeOK: true,
 			wantMode:    ModeSSHFSOnly,
 			wantBanners: []string{"MOUNT_AUTO_DOWNGRADED"},
 		},
 		{
-			name:     "Auto/Mutagen-ok/SSHFS-fail/Merge-ok→MutagenOnly",
-			intended: ModeAuto, mutagenOK: true, sshfsOK: false, mergeOK: true,
-			wantMode:    ModeMutagenOnly,
+			name:     "Auto/HotSync-ok/SSHFS-fail/Merge-ok→HotOnly",
+			intended: ModeAuto, hotSyncOK: true, sshfsOK: false, mergeOK: true,
+			wantMode:    ModeHotOnly,
 			wantBanners: []string{"MOUNT_AUTO_DOWNGRADED"},
 		},
 		{
-			name:     "Auto/Mutagen-ok/SSHFS-ok/Merge-fail→MutagenOnly",
-			intended: ModeAuto, mutagenOK: true, sshfsOK: true, mergeOK: false,
-			wantMode:    ModeMutagenOnly,
+			name:     "Auto/HotSync-ok/SSHFS-ok/Merge-fail→HotOnly",
+			intended: ModeAuto, hotSyncOK: true, sshfsOK: true, mergeOK: false,
+			wantMode:    ModeHotOnly,
 			wantBanners: []string{"MOUNT_AUTO_DOWNGRADED"},
 		},
 		{
 			name:     "Auto/all-ok→Full",
-			intended: ModeAuto, mutagenOK: true, sshfsOK: true, mergeOK: true,
+			intended: ModeAuto, hotSyncOK: true, sshfsOK: true, mergeOK: true,
 			wantMode: ModeFull,
 		},
 		{
 			name:     "Auto/all-fail→Failed",
-			intended: ModeAuto, mutagenOK: false, sshfsOK: false, mergeOK: false,
+			intended: ModeAuto, hotSyncOK: false, sshfsOK: false, mergeOK: false,
 			wantMode: ModeFailed, wantErr: true,
 		},
 		{
-			name:     "Full/Mutagen-fail→Failed",
-			intended: ModeFull, mutagenOK: false, sshfsOK: true, mergeOK: true,
+			name:     "Full/HotSync-fail→Failed",
+			intended: ModeFull, hotSyncOK: false, sshfsOK: true, mergeOK: true,
 			wantMode: ModeFailed, wantErr: true,
 		},
 		{
 			name:     "Full/SSHFS-fail→Failed",
-			intended: ModeFull, mutagenOK: true, sshfsOK: false, mergeOK: true,
+			intended: ModeFull, hotSyncOK: true, sshfsOK: false, mergeOK: true,
 			wantMode: ModeFailed, wantErr: true,
 		},
 		{
 			name:     "Full/Merge-fail→Failed",
-			intended: ModeFull, mutagenOK: true, sshfsOK: true, mergeOK: false,
+			intended: ModeFull, hotSyncOK: true, sshfsOK: true, mergeOK: false,
 			wantMode: ModeFailed, wantErr: true,
 		},
 		{
-			name:     "MutagenOnly/ok→MutagenOnly",
-			intended: ModeMutagenOnly, mutagenOK: true,
-			wantMode: ModeMutagenOnly,
+			name:     "HotOnly/ok→HotOnly",
+			intended: ModeHotOnly, hotSyncOK: true,
+			wantMode: ModeHotOnly,
 		},
 		{
-			name:     "MutagenOnly/fail→Failed",
-			intended: ModeMutagenOnly, mutagenOK: false,
+			name:     "HotOnly/fail→Failed",
+			intended: ModeHotOnly, hotSyncOK: false,
 			wantMode: ModeFailed, wantErr: true,
 		},
 		{
@@ -133,7 +133,6 @@ func TestMountStrategy_DowngradeMatrix(t *testing.T) {
 			var buf bytes.Buffer
 			cfg := MountConfig{
 				Mode:             c.intended,
-				SupportsMutagen:  true,
 				SupportsMergerfs: true,
 				NoColor:          true,
 				Logger:           &buf,
@@ -178,7 +177,7 @@ func Test_BannerColors(t *testing.T) {
 	})
 	t.Run("contains banner text + mode", func(t *testing.T) {
 		var buf bytes.Buffer
-		printBanner(&buf, ModeMutagenOnly, true)
+		printBanner(&buf, ModeHotOnly, true)
 		if !strings.Contains(buf.String(), "✓ 文件映射就绪 [hot-only]") {
 			t.Errorf("banner missing mode tag: %q", buf.String())
 		}
@@ -191,7 +190,6 @@ func Test_APFSCaseInsensitive_WritesLastSession(t *testing.T) {
 	apfs := true
 	cfg := MountConfig{
 		Mode:                    ModeSSHFSOnly,
-		SupportsMutagen:         true,
 		SupportsMergerfs:        true,
 		NoColor:                 true,
 		Logger:                  new(bytes.Buffer),
@@ -227,14 +225,13 @@ func Test_Downgrade_BannerEachStep(t *testing.T) {
 	var buf bytes.Buffer
 	cfg := MountConfig{
 		Mode:             ModeAuto,
-		SupportsMutagen:  true,
 		SupportsMergerfs: true,
 		NoColor:          true,
 		Logger:           &buf,
 		LastSessionPath:  filepath.Join(t.TempDir(), "last.json"),
 		hooks: &strategyHooks{
-			tryMutagen: func() (func(), MutagenSyncStatus, error) {
-				return nil, MutagenSyncStatus{}, &fakeMutagenErr{code: errcodes.MOUNT_MUTAGEN_DAEMON_UNAVAILABLE}
+			tryHotSync: func() (func(), HotSyncStatus, error) {
+				return nil, HotSyncStatus{}, &fakeHotSyncErr{code: errcodes.MOUNT_HOT_SYNC_FAILED}
 			},
 			trySSHFS: func() (func(), error) {
 				return func() {}, nil
@@ -269,44 +266,17 @@ func Test_Downgrade_BannerEachStep(t *testing.T) {
 }
 
 func Test_Downgrade_CapabilityFromAuthResp(t *testing.T) {
-	t.Run("SupportsMutagen=false no longer affects auto mode", func(t *testing.T) {
+	t.Run("SupportsMergerfs=false drops Auto to HotOnly", func(t *testing.T) {
 		var buf bytes.Buffer
 		cfg := MountConfig{
 			Mode:             ModeAuto,
-			SupportsMutagen:  false,
-			SupportsMergerfs: true,
-			NoColor:          true,
-			Logger:           &buf,
-			LastSessionPath:  filepath.Join(t.TempDir(), "last.json"),
-			hooks: &strategyHooks{
-				trySSHFS: func() (func(), error) { return func() {}, nil },
-			},
-		}
-		cleanup, mode, err := MountWorkspace(nil, nil, cfg)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		cleanup()
-		if mode != ModeFull {
-			t.Errorf("mode=%s, want full", mode)
-		}
-		if strings.Contains(buf.String(), "MOUNT_AUTO_DOWNGRADED") {
-			t.Error("SupportsMutagen should no longer trigger capability downgrade")
-		}
-	})
-
-	t.Run("SupportsMergerfs=false drops Auto to MutagenOnly", func(t *testing.T) {
-		var buf bytes.Buffer
-		cfg := MountConfig{
-			Mode:             ModeAuto,
-			SupportsMutagen:  true,
 			SupportsMergerfs: false,
 			NoColor:          true,
 			Logger:           &buf,
 			LastSessionPath:  filepath.Join(t.TempDir(), "last.json"),
 			hooks: &strategyHooks{
-				tryMutagen: func() (func(), MutagenSyncStatus, error) {
-					return func() {}, MutagenSyncStatus{}, nil
+				tryHotSync: func() (func(), HotSyncStatus, error) {
+					return func() {}, HotSyncStatus{}, nil
 				},
 			},
 		}
@@ -315,7 +285,7 @@ func Test_Downgrade_CapabilityFromAuthResp(t *testing.T) {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		cleanup()
-		if mode != ModeMutagenOnly {
+		if mode != ModeHotOnly {
 			t.Errorf("mode=%s, want hot-only", mode)
 		}
 	})
@@ -326,9 +296,8 @@ func Test_ParseMode(t *testing.T) {
 		"":             ModeAuto,
 		"auto":         ModeAuto,
 		"full":         ModeFull,
-		"hot-only":     ModeMutagenOnly,
-		"mutagen-only": ModeMutagenOnly,
-		"sshfs-only":   ModeSSHFSOnly,
+		"hot-only":   ModeHotOnly,
+		"sshfs-only": ModeSSHFSOnly,
 	}
 	for s, want := range cases {
 		got, err := ParseMode(s)
@@ -348,14 +317,13 @@ func Test_ForceMode_FailureUsesForceCode(t *testing.T) {
 	var buf bytes.Buffer
 	cfg := MountConfig{
 		Mode:             ModeFull,
-		SupportsMutagen:  true,
 		SupportsMergerfs: true,
 		NoColor:          true,
 		Logger:           &buf,
 		LastSessionPath:  filepath.Join(t.TempDir(), "last.json"),
 		hooks: &strategyHooks{
-			tryMutagen: func() (func(), MutagenSyncStatus, error) {
-				return nil, MutagenSyncStatus{}, &fakeMutagenErr{code: errcodes.MOUNT_MUTAGEN_VERSION_SKEW}
+			tryHotSync: func() (func(), HotSyncStatus, error) {
+				return nil, HotSyncStatus{}, &fakeHotSyncErr{code: errcodes.MOUNT_HOT_SYNC_FAILED}
 			},
 			trySSHFS: func() (func(), error) { return func() {}, nil },
 			tryMerge: func() (func(), error) { return func() {}, nil },
@@ -418,7 +386,6 @@ func TestMountWorkspace_SyncLocked(t *testing.T) {
 	var observedAccountID string
 	cfg := MountConfig{
 		Mode:             ModeFull,
-		SupportsMutagen:  true,
 		SupportsMergerfs: true,
 		ClaudeAccountID:  "test-acct-gap2",
 		NoColor:          true,
@@ -494,7 +461,6 @@ func TestMountWorkspace_SyncLockSuccess(t *testing.T) {
 
 	cfg := MountConfig{
 		Mode:             ModeFull,
-		SupportsMutagen:  true,
 		SupportsMergerfs: true,
 		ClaudeAccountID:  "test-acct-success",
 		NoColor:          true,
@@ -504,8 +470,8 @@ func TestMountWorkspace_SyncLockSuccess(t *testing.T) {
 			return func() { releaseCalled++ }, nil
 		},
 		hooks: &strategyHooks{
-			tryMutagen: func() (func(), MutagenSyncStatus, error) {
-				return func() {}, MutagenSyncStatus{}, nil
+			tryHotSync: func() (func(), HotSyncStatus, error) {
+				return func() {}, HotSyncStatus{}, nil
 			},
 			trySSHFS: func() (func(), error) { return func() {}, nil },
 			tryMerge: func() (func(), error) {
@@ -539,7 +505,6 @@ func TestMountWorkspace_SyncLockSuccess(t *testing.T) {
 func TestMountWorkspace_SyncLockOtherError(t *testing.T) {
 	cfg := MountConfig{
 		Mode:             ModeFull,
-		SupportsMutagen:  true,
 		SupportsMergerfs: true,
 		ClaudeAccountID:  "test-acct-err",
 		NoColor:          true,

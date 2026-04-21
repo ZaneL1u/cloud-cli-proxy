@@ -10,14 +10,13 @@ import (
 )
 
 // TestAuthResponse_V3Fields_RoundTrip 覆盖 Phase 30 Wave 2 D-03：
-// v3 服务器响应扩展 image_version / supports_mutagen / supports_mergerfs / claude_account_id，
+// v3 服务器响应扩展 image_version / supports_mergerfs / claude_account_id，
 // 客户端结构体必须能完整读取。
 func TestAuthResponse_V3Fields_RoundTrip(t *testing.T) {
 	payload := `{
 		"status": "ready",
 		"ssh_user": "u", "ssh_pass": "p", "ssh_host": "h", "ssh_port": 2222,
 		"image_version": "v3.0.0",
-		"supports_mutagen": true,
 		"supports_mergerfs": true,
 		"claude_account_id": "claude-acct-42"
 	}`
@@ -27,9 +26,6 @@ func TestAuthResponse_V3Fields_RoundTrip(t *testing.T) {
 	}
 	if resp.ImageVersion != "v3.0.0" {
 		t.Errorf("ImageVersion = %q, want v3.0.0", resp.ImageVersion)
-	}
-	if !resp.SupportsMutagen {
-		t.Errorf("SupportsMutagen = false, want true")
 	}
 	if !resp.SupportsMergerfs {
 		t.Errorf("SupportsMergerfs = false, want true")
@@ -47,7 +43,7 @@ func TestAuthResponse_MissingV3Fields_DefaultZero(t *testing.T) {
 	if err := json.Unmarshal([]byte(payload), &resp); err != nil {
 		t.Fatalf("unmarshal v2 payload: %v", err)
 	}
-	if resp.ImageVersion != "" || resp.SupportsMutagen || resp.SupportsMergerfs || resp.ClaudeAccountID != "" {
+	if resp.ImageVersion != "" || resp.SupportsMergerfs || resp.ClaudeAccountID != "" {
 		t.Errorf("v2 payload must leave v3 fields zero-valued, got: %+v", resp)
 	}
 	if resp.SSHHost != "h" || resp.SSHPort != 2222 || resp.SSHUser != "u" || resp.SSHPass != "p" {
@@ -65,7 +61,7 @@ func TestAuthResponse_MarshalOmitempty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	for _, key := range []string{`"image_version"`, `"supports_mutagen"`, `"supports_mergerfs"`, `"claude_account_id"`} {
+	for _, key := range []string{`"image_version"`, `"supports_mergerfs"`, `"claude_account_id"`} {
 		if strings.Contains(string(buf), key) {
 			t.Errorf("empty value must be omitted for %s, got: %s", key, buf)
 		}
@@ -80,7 +76,7 @@ func TestAuthenticate_V3Gateway_PreservesExtensions(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{
 			"status":"ready","ssh_user":"u","ssh_pass":"p","ssh_host":"h","ssh_port":2222,
-			"image_version":"v3.0.0","supports_mutagen":true,"supports_mergerfs":true,
+			"image_version":"v3.0.0","supports_mergerfs":true,
 			"claude_account_id":"claude-acct-42"
 		}`))
 	}))
@@ -94,7 +90,7 @@ func TestAuthenticate_V3Gateway_PreservesExtensions(t *testing.T) {
 	if resp.Status != "ready" {
 		t.Fatalf("status = %q", resp.Status)
 	}
-	if resp.ImageVersion != "v3.0.0" || !resp.SupportsMutagen || !resp.SupportsMergerfs || resp.ClaudeAccountID != "claude-acct-42" {
+	if resp.ImageVersion != "v3.0.0" || !resp.SupportsMergerfs || resp.ClaudeAccountID != "claude-acct-42" {
 		t.Errorf("extensions lost after round-trip: %+v", resp)
 	}
 }
@@ -117,7 +113,7 @@ func TestAuthenticate_V2Gateway_NoExtensionsRequired(t *testing.T) {
 	if resp.Status != "ready" || resp.SSHHost != "h" || resp.SSHPort != 2222 {
 		t.Fatalf("v2 ready payload lost: %+v", resp)
 	}
-	if resp.ImageVersion != "" || resp.SupportsMutagen || resp.SupportsMergerfs || resp.ClaudeAccountID != "" {
+	if resp.ImageVersion != "" || resp.SupportsMergerfs || resp.ClaudeAccountID != "" {
 		t.Errorf("v3 fields must be zero-valued on v2 gateway, got: %+v", resp)
 	}
 }

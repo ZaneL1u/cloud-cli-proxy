@@ -15,9 +15,8 @@ import (
 )
 
 const (
-	diskWarnMB     = 500
-	diskFailMB     = 100
-	mutagenBloatMB = 1024
+	diskWarnMB = 500
+	diskFailMB = 100
 )
 
 // 包级 var 注入点。
@@ -76,31 +75,6 @@ func checkContainerDisk(ctx context.Context, runner RemoteRunner) Check {
 		return newWarn("disk", "container_disk", errcodes.DISK_CONTAINER_LOW, avail)
 	}
 	return newPass("disk", "container_disk", fmt.Sprintf("远端 /workspace 可用 %dMB", avail))
-}
-
-// checkMutagenDataSize — DISK_MUTAGEN_DATA_BLOAT （本地 du）。
-func checkMutagenDataSize(ctx context.Context) Check {
-	home, err := userHomeDir()
-	if err != nil {
-		return newSkip("disk", "mutagen_data_size", "无法定位 home 目录，跳过")
-	}
-	target := filepath.Join(home, ".cloud-claude", "mutagen")
-	if _, err := os.Stat(target); err != nil {
-		return newSkip("disk", "mutagen_data_size", "Mutagen 数据目录不存在（尚未使用）")
-	}
-	out, err := duLocal(target)
-	if err != nil {
-		return newSkip("disk", "mutagen_data_size", "du 失败: "+err.Error())
-	}
-	sizeStr := strings.Fields(strings.TrimSpace(out))
-	if len(sizeStr) == 0 {
-		return newSkip("disk", "mutagen_data_size", "无法解析 du 输出")
-	}
-	mb := parseDuHumanToMB(sizeStr[0])
-	if mb > mutagenBloatMB {
-		return newWarn("disk", "mutagen_data_size", errcodes.DISK_MUTAGEN_DATA_BLOAT, sizeStr[0])
-	}
-	return newPass("disk", "mutagen_data_size", fmt.Sprintf("Mutagen 数据目录 %s（<1GB）", sizeStr[0]))
 }
 
 // parseDuHumanToMB 解析 du -sh 输出：`12K` / `3.2M` / `1.5G` → MB 近似值；解析失败返回 0。

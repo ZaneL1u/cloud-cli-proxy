@@ -1,8 +1,0 @@
-# mutagen_bin/<plat>/mutagen 是 go:embed 资源，按二进制处理避免 EOL 转换。
-# 团队当前未启用 git-lfs；4 平台二进制 ~49MB 裸提交可接受（cloud-claude 终态 ~80MB）。
-# 如未来切换到 LFS，取消下方四行注释并运行 git lfs install + git lfs migrate。
-*  binary
-# darwin_amd64/mutagen filter=lfs diff=lfs merge=lfs -text
-# darwin_arm64/mutagen filter=lfs diff=lfs merge=lfs -text
-# linux_amd64/mutagen filter=lfs diff=lfs merge=lfs -text
-# linux_arm64/mutagen filter=lfs diff=lfs merge=lfs -text

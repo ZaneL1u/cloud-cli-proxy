@@ -10,7 +10,5 @@ factory_reset_mode: wipe-/workspace
 # v3.0 baseline — Phase 29 追加
 image_version: v3.0.0
 mergerfs_version: 2.41.1
-mutagen_agent_version: v0.18.1
 tmux_version_min: "3.4"
-supports_mutagen: true
 supports_mergerfs: true

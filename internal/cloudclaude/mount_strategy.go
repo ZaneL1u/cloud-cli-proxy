@@ -17,15 +17,14 @@ import (
 // Mode 是 cloud-claude --mount-mode flag 的四档枚举（CONTEXT D-14）。
 //
 // 状态机契约：
-//   - 入参允许 Auto / Full / MutagenOnly / SSHFSOnly
-//   - 返回时永远是 Full / MutagenOnly / SSHFSOnly / Failed 之一（Auto 仅作为入参意图）
-//   - 注意：ModeMutagenOnly 仅保留内部枚举兼容，用户可见字面值统一为 hot-only
+//   - 入参允许 Auto / Full / HotOnly / SSHFSOnly
+//   - 返回时永远是 Full / HotOnly / SSHFSOnly / Failed 之一（Auto 仅作为入参意图）
 type Mode int
 
 const (
 	ModeAuto Mode = iota
 	ModeFull
-	ModeMutagenOnly
+	ModeHotOnly
 	ModeSSHFSOnly
 	ModeFailed
 )
@@ -37,7 +36,7 @@ func (m Mode) String() string {
 		return "auto"
 	case ModeFull:
 		return "full"
-	case ModeMutagenOnly:
+	case ModeHotOnly:
 		return "hot-only"
 	case ModeSSHFSOnly:
 		return "sshfs-only"
@@ -56,12 +55,12 @@ func ParseMode(s string) (Mode, error) {
 		return ModeAuto, nil
 	case "full":
 		return ModeFull, nil
-	case "hot-only", "mutagen-only":
-		return ModeMutagenOnly, nil
+	case "hot-only":
+		return ModeHotOnly, nil
 	case "sshfs-only":
 		return ModeSSHFSOnly, nil
 	default:
-		return ModeFailed, fmt.Errorf("非法 mount-mode 值: %q（应为 auto|full|hot-only|sshfs-only；兼容 legacy: mutagen-only）", s)
+		return ModeFailed, fmt.Errorf("非法 mount-mode 值: %q（应为 auto|full|hot-only|sshfs-only）", s)
 	}
 }
 
@@ -69,7 +68,7 @@ func ParseMode(s string) (Mode, error) {
 //
 // 字段来源：
 //   - Mode / NoColor / KeepAlive*：cobra flag / 环境变量
-//   - ClaudeAccountID / ImageVersion / SupportsMutagen / SupportsMergerfs：Phase 30 AuthResponse
+//   - ClaudeAccountID / ImageVersion / SupportsMergerfs：Phase 30 AuthResponse
 //   - Cwd / LastSessionPath / Logger：runtime 注入
 //   - SyncSessionLock：Phase 32 多端冲突保护（本阶段默认 noop）
 type MountConfig struct {
@@ -78,7 +77,6 @@ type MountConfig struct {
 	KeepAliveCountMax int
 	ClaudeAccountID   string
 	ImageVersion      string
-	SupportsMutagen   bool
 	SupportsMergerfs  bool
 	Cwd               string
 	NoColor           bool
@@ -104,11 +102,8 @@ type MountConfig struct {
 
 // strategyHooks 让 mount_strategy_test.go 注入三层 mount 的 mock 实现，
 // 不依赖真实 ssh / mutagen / mergerfs。
-//
-// Plan 03 把 tryMutagen 第二返回值从 int 升级为 MutagenSyncStatus，
-// 让 mount_strategy 同时拿到 ConflictCount 与 LastError。
 type strategyHooks struct {
-	tryMutagen func() (cleanup func(), status MutagenSyncStatus, err error)
+	tryHotSync func() (cleanup func(), status HotSyncStatus, err error)
 	trySSHFS   func() (cleanup func(), err error)
 	tryMerge   func() (cleanup func(), err error)
 }
@@ -117,7 +112,7 @@ type strategyHooks struct {
 //
 // 调度逻辑（CONTEXT D-15，经自研 hot sync 替换 Mutagen 后）：
 //  1. APFS 检测 → 写入 snapshot.APFSCaseInsensitive
-//  2. 能力降级（SupportsMergerfs=false 且 Mode=Auto/Full → 降级 MutagenOnly；
+//  2. 能力降级（SupportsMergerfs=false 且 Mode=Auto/Full → 降级 HotOnly；
 //     该档语义现为 hot-only，保留 flag 兼容但不再依赖外部 Mutagen）
 //  3. 按 Mode 决定 try 顺序：
 //     - Auto: [Full, MutagenOnly, SSHFSOnly]，每档失败 stderr 输出 MOUNT_AUTO_DOWNGRADED 后转下一档
@@ -157,9 +152,9 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 	// 2) 能力降级（CONTEXT D-29）
 	intended := cfg.Mode
 	if !cfg.SupportsMergerfs && (intended == ModeAuto || intended == ModeFull) {
-		applyDowngrade(cfg.Logger, &snapshot, intended, ModeMutagenOnly,
+		applyDowngrade(cfg.Logger, &snapshot, intended, ModeHotOnly,
 			errcodes.MOUNT_MERGERFS_FAILED, "remote 不支持 mergerfs")
-		intended = ModeMutagenOnly
+		intended = ModeHotOnly
 	}
 
 	// [Phase 32 Gap #2 / REQ-F5-D] 账号级 Mutagen 单例锁 invoke。
@@ -206,11 +201,11 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 	var tryOrder []Mode
 	switch intended {
 	case ModeAuto:
-		tryOrder = []Mode{ModeFull, ModeMutagenOnly, ModeSSHFSOnly}
+		tryOrder = []Mode{ModeFull, ModeHotOnly, ModeSSHFSOnly}
 	case ModeFull:
 		tryOrder = []Mode{ModeFull}
-	case ModeMutagenOnly:
-		tryOrder = []Mode{ModeMutagenOnly}
+	case ModeHotOnly:
+		tryOrder = []Mode{ModeHotOnly}
 	case ModeSSHFSOnly:
 		tryOrder = []Mode{ModeSSHFSOnly}
 	default:
@@ -222,14 +217,14 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 		// 三段式进度：先决策再打印（CONTEXT D-18 强约束 — 不出现「打了又改主意」）
 		printProgress(cfg.Logger, mode)
 
-		modeCleanup, mutagenStatus, mErr := tryMode(connA, connB, mode, cfg)
+		modeCleanup, hotStatus, mErr := tryMode(connA, connB, mode, cfg)
 		if mErr == nil {
 			snapshot.ActualMode = mode.String()
-			snapshot.ConflictCount = mutagenStatus.ConflictCount
+			snapshot.ConflictCount = hotStatus.ConflictCount
 
 			printBanner(cfg.Logger, mode, cfg.NoColor)
-			if mutagenStatus.ConflictCount > 0 {
-				fmt.Fprintf(cfg.Logger, "⚠ 有 %d 个文件同步冲突，运行 cloud-claude sync conflicts 查看\n", mutagenStatus.ConflictCount)
+			if hotStatus.ConflictCount > 0 {
+				fmt.Fprintf(cfg.Logger, "⚠ 有 %d 个文件同步冲突，运行 cloud-claude sync conflicts 查看\n", hotStatus.ConflictCount)
 			}
 
 			writeLastSessionWarn(cfg.LastSessionPath, snapshot, cfg.Logger)
@@ -280,18 +275,18 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 
 // tryMode 按 mode 调度子层：
 //   - Full = mutagen + sshfs + merge（任一失败即失败）
-//   - MutagenOnly = hot-only 单层
+//   - HotOnly = hot-only 单层
 //   - SSHFSOnly = sshfs 单层（v2.0 路径）
 //
 // 测试通过 cfg.hooks 注入 mock；生产走 tryModeReal。
-func tryMode(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup func(), status MutagenSyncStatus, err error) {
+func tryMode(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup func(), status HotSyncStatus, err error) {
 	if cfg.hooks != nil {
 		return tryModeWithHooks(mode, cfg.hooks)
 	}
 	return tryModeReal(connA, connB, mode, cfg)
 }
 
-func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), status MutagenSyncStatus, err error) {
+func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), status HotSyncStatus, err error) {
 	var cleanups []func()
 	finalCleanup := func() {
 		for i := len(cleanups) - 1; i >= 0; i-- {
@@ -301,11 +296,11 @@ func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), status Mutag
 
 	switch mode {
 	case ModeFull:
-		if h.tryMutagen != nil {
-			cl, st, e := h.tryMutagen()
+		if h.tryHotSync != nil {
+			cl, st, e := h.tryHotSync()
 			if e != nil {
 				finalCleanup()
-				return nil, MutagenSyncStatus{}, e
+				return nil, HotSyncStatus{}, e
 			}
 			status = st
 			if cl != nil {
@@ -316,7 +311,7 @@ func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), status Mutag
 			cl, e := h.trySSHFS()
 			if e != nil {
 				finalCleanup()
-				return nil, MutagenSyncStatus{}, e
+				return nil, HotSyncStatus{}, e
 			}
 			if cl != nil {
 				cleanups = append(cleanups, cl)
@@ -326,61 +321,61 @@ func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), status Mutag
 			cl, e := h.tryMerge()
 			if e != nil {
 				finalCleanup()
-				return nil, MutagenSyncStatus{}, e
+				return nil, HotSyncStatus{}, e
 			}
 			if cl != nil {
 				cleanups = append(cleanups, cl)
 			}
 		}
 		return finalCleanup, status, nil
-	case ModeMutagenOnly:
-		if h.tryMutagen != nil {
-			cl, st, e := h.tryMutagen()
+	case ModeHotOnly:
+		if h.tryHotSync != nil {
+			cl, st, e := h.tryHotSync()
 			if e != nil {
-				return nil, MutagenSyncStatus{}, e
+				return nil, HotSyncStatus{}, e
 			}
 			if cl == nil {
 				cl = func() {}
 			}
 			return cl, st, nil
 		}
-		return func() {}, MutagenSyncStatus{}, errors.New("mock tryMutagen 未注入")
+		return func() {}, HotSyncStatus{}, errors.New("mock tryHotSync 未注入")
 	case ModeSSHFSOnly:
 		if h.trySSHFS != nil {
 			cl, e := h.trySSHFS()
 			if e != nil {
-				return nil, MutagenSyncStatus{}, e
+				return nil, HotSyncStatus{}, e
 			}
 			if cl == nil {
 				cl = func() {}
 			}
-			return cl, MutagenSyncStatus{}, nil
+			return cl, HotSyncStatus{}, nil
 		}
-		return func() {}, MutagenSyncStatus{}, errors.New("mock trySSHFS 未注入")
+		return func() {}, HotSyncStatus{}, errors.New("mock trySSHFS 未注入")
 	}
-	return func() {}, MutagenSyncStatus{}, fmt.Errorf("未知 mode: %v", mode)
+	return func() {}, HotSyncStatus{}, fmt.Errorf("未知 mode: %v", mode)
 }
 
 // tryModeReal 是生产路径：调用真实 mountSSHFS / 热同步 / mountMerge。
 // 说明：
-//   - ModeMutagenOnly 保留 CLI flag 兼容，但内部语义已变为 hot-only
+//   - ModeHotOnly 对应 CLI 的 hot-only（兼容 legacy mutagen-only）
 //   - Full = hidden hot sync + hidden sshfs cold + mergerfs -> cfg.Cwd
 //   - SSHFSOnly 保持 v2.0 行为：直接把本地 cwd 挂到同路径
-func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup func(), status MutagenSyncStatus, err error) {
+func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup func(), status HotSyncStatus, err error) {
 	// SSHFSOnly：v2.0 路径，已稳定
 	if mode == ModeSSHFSOnly {
 		cl, e := mountSSHFS(connA, cfg.Cwd, cfg.Cwd)
 		if e != nil {
-			return nil, MutagenSyncStatus{}, e
+			return nil, HotSyncStatus{}, e
 		}
 		// 启动 watcher（v2.0 行为不变；watcher 在 Plan 03 / Phase 32 进一步包装 ctx）
-		return cl, MutagenSyncStatus{}, nil
+		return cl, HotSyncStatus{}, nil
 	}
 
 	ignorePatterns := LoadMountIgnorePatterns(cfg.Cwd)
 
-	// MutagenOnly 现在的语义是 hot-only：不启冷层、不做合并，直接把热同步目标设为 cfg.Cwd。
-	if mode == ModeMutagenOnly {
+	// HotOnly：不启冷层、不做合并，直接把热同步目标设为 cfg.Cwd。
+	if mode == ModeHotOnly {
 		return StartHotSync(connA, connB, HotSyncConfig{
 			LocalDir:       cfg.Cwd,
 			RemoteDir:      cfg.Cwd,
@@ -401,13 +396,13 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup 
 		Logger:         cfg.Logger,
 	})
 	if hErr != nil {
-		return nil, MutagenSyncStatus{}, hErr
+		return nil, HotSyncStatus{}, hErr
 	}
 
 	sCleanup, sErr := mountSSHFS(connA, cfg.Cwd, coldRoot)
 	if sErr != nil {
 		hCleanup()
-		return nil, MutagenSyncStatus{}, sErr
+		return nil, HotSyncStatus{}, sErr
 	}
 
 	cleanupStaleFUSE(connA, cfg.Cwd)
@@ -416,7 +411,7 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup 
 	if mergeErr != nil {
 		sCleanup()
 		hCleanup()
-		return nil, MutagenSyncStatus{}, mergeErr
+		return nil, HotSyncStatus{}, mergeErr
 	}
 
 	// 启动 sshfs_watcher：cold 抖动 → 从用户可见路径中摘除 cold branch。
@@ -445,7 +440,7 @@ func printProgress(w io.Writer, mode Mode) {
 		fmt.Fprintln(w, "(1/3) 热同步源码中…")
 		fmt.Fprintln(w, "(2/3) 启动冷兜底…")
 		fmt.Fprintln(w, "(3/3) 合并视图…")
-	case ModeMutagenOnly:
+	case ModeHotOnly:
 		fmt.Fprintln(w, "(1/3) 热同步源码中…")
 		fmt.Fprintf(w, "(2/3) 跳过 sshfs（模式: %s）\n", mode.String())
 		fmt.Fprintf(w, "(3/3) 跳过 mergerfs（模式: %s）\n", mode.String())

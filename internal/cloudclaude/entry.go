@@ -25,11 +25,10 @@ type AuthResponse struct {
 	SSHHost string `json:"ssh_host,omitempty"`
 	SSHPort int    `json:"ssh_port,omitempty"`
 
-	// Phase 30 D-03/D-06/D-07/D-08：v3 gateway 在 ready 响应追加的增量能力字段。
+	// Phase 30 D-03/D-06/D-08：v3 gateway 在 ready 响应追加的增量能力字段。
 	// omitempty 是契约：旧 gateway 缺省这些字段时不会变成「明确的 false/空串」，
 	// 客户端 SSH 四元组校验依旧以 SSHHost/SSHPort/SSHUser 为唯一真值。
 	ImageVersion     string `json:"image_version,omitempty"`
-	SupportsMutagen  bool   `json:"supports_mutagen,omitempty"`
 	SupportsMergerfs bool   `json:"supports_mergerfs,omitempty"`
 	// ClaudeAccountID 由控制面按 D-05 的两阶段规则解析；未命中则省略字段。
 	ClaudeAccountID string `json:"claude_account_id,omitempty"`

@@ -26,7 +26,7 @@ type EntryStore interface {
 }
 
 // v3CapBaseline 是 Phase 30 受管镜像的 v3 基线 tag：当 image_version 与它字符串相等时
-// supports_mutagen / supports_mergerfs 同时为 true（D-07）。本阶段不引入多 tag 对照表。
+// supports_mergerfs 为 true（D-07）。本阶段不引入多 tag 对照表。
 const v3CapBaseline = "v3.0.0"
 
 // deriveEntryCapabilities 按 D-06/D-07 从 template_image_ref 推导 Entry API 能力字段。
@@ -34,15 +34,15 @@ const v3CapBaseline = "v3.0.0"
 //  1. 整体 trim 空白；
 //  2. 取最后一个 ":" 之后的 tag；若不存在 ":"，整串视为 tag；
 //  3. 再对 tag trim 空白（兼容异常配置）；
-//  4. supports_mutagen = supports_mergerfs = (tag == v3CapBaseline)。
-func deriveEntryCapabilities(templateImageRef string) (imageVersion string, supportsMutagen, supportsMergerfs bool) {
+//  4. supports_mergerfs = (tag == v3CapBaseline)。
+func deriveEntryCapabilities(templateImageRef string) (imageVersion string, supportsMergerfs bool) {
 	tag := strings.TrimSpace(templateImageRef)
 	if idx := strings.LastIndex(tag, ":"); idx != -1 {
 		tag = tag[idx+1:]
 	}
 	tag = strings.TrimSpace(tag)
 	supports := tag == v3CapBaseline
-	return tag, supports, supports
+	return tag, supports
 }
 
 type EntryHandler struct {
@@ -200,7 +200,7 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 
 		// Phase 30 D-06/D-07：仅依据 template_image_ref 推导能力字段，
 		// 不访问 host-agent / Docker registry（D-04 维持 Phase 29 结论）。
-		imageVersion, supportsMutagen, supportsMergerfs := deriveEntryCapabilities(templateImageRef)
+		imageVersion, supportsMergerfs := deriveEntryCapabilities(templateImageRef)
 
 		resp := map[string]any{
 			"ssh_user":          hostShortID,
@@ -209,7 +209,6 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 			"ssh_port":          2222,
 			"status":            "ready",
 			"image_version":     imageVersion,
-			"supports_mutagen":  supportsMutagen,
 			"supports_mergerfs": supportsMergerfs,
 		}
 

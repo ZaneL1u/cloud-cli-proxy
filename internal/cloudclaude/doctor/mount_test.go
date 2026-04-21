@@ -8,32 +8,6 @@ import (
 	"testing"
 )
 
-func TestCheckMutagenVersionMatch_NilRunner_Skip(t *testing.T) {
-	c := checkMutagenVersionMatch(context.Background(), nil)
-	if c.Status != StatusSkip {
-		t.Errorf("应 Skip，实际 %s", c.Status)
-	}
-}
-
-func TestCheckMutagenVersionMatch_Match_Pass(t *testing.T) {
-	r := &fakeRunner{out: "0.18.1\n"}
-	c := checkMutagenVersionMatch(context.Background(), r)
-	if c.Status != StatusPass {
-		t.Errorf("应 Pass（TrimPrefix v 后 Contains），实际 %s", c.Status)
-	}
-}
-
-func TestCheckMutagenVersionMatch_Skew_Fail(t *testing.T) {
-	r := &fakeRunner{out: "0.99.99\n"}
-	c := checkMutagenVersionMatch(context.Background(), r)
-	if c.Status != StatusFail {
-		t.Errorf("应 Fail，实际 %s", c.Status)
-	}
-	if c.Code != "MOUNT_MUTAGEN_VERSION_SKEW" {
-		t.Errorf("Code 应为 MOUNT_MUTAGEN_VERSION_SKEW，实际 %q", c.Code)
-	}
-}
-
 // branchRunner 是 mount_test 专用的 RemoteRunner — 按 script 关键字返回不同 stdout。
 type branchRunner struct {
 	xattr, mount string

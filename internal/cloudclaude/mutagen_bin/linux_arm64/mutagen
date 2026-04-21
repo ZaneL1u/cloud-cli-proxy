@@ -1,3 +1,0 @@
-#!/bin/sh
-echo "PLACEHOLDER mutagen binary for linux_arm64 — run scripts/fetch-mutagen-bins.sh to install real v0.18.1" >&2
-exit 1

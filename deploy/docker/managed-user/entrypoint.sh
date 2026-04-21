@@ -91,21 +91,6 @@ prepare_persistent_state() {
   echo "[entrypoint] v3: persistent state ready (volume=/var/lib/claude-persist)"
 }
 
-prepare_mutagen_agent() {
-  local src=/opt/mutagen-agents.tar.gz
-  local dest=/usr/local/libexec/mutagen/agents
-  if [[ ! -f "$src" ]]; then
-    echo "[entrypoint] v3: FATAL missing $src" >&2
-    exit 1
-  fi
-  mkdir -p "$dest"
-  if [[ ! -f "$dest/.extracted" ]]; then
-    tar -xzf "$src" -C "$dest"
-    touch "$dest/.extracted"
-  fi
-  echo "[entrypoint] v3: mutagen agents ready at $dest"
-}
-
 prepare_mergerfs_check() {
   if ! command -v mergerfs >/dev/null 2>&1; then
     echo "[entrypoint] v3: FATAL mergerfs binary missing" >&2
@@ -277,7 +262,6 @@ su "${RUN_USER}" -c 'HOME=/workspace /usr/local/bin/launch-chromium.sh --version
 # ===== v3.0 stages (serialized fail-fast, D-09 order) =====
 prepare_v3_dirs
 prepare_persistent_state
-prepare_mutagen_agent
 prepare_mergerfs_check
 assert_tmux_version
 

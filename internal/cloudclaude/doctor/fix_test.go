@@ -45,43 +45,6 @@ func TestConfirmDestructive_NonTTY_False(t *testing.T) {
 	}
 }
 
-// -------- fixMutagenDaemonUnavailable --------
-
-func TestFixMutagenDaemon_Idempotent(t *testing.T) {
-	calls := []string{}
-	orig := execMutagenDaemon
-	execMutagenDaemon = func(ctx context.Context, action string) error {
-		calls = append(calls, action)
-		return nil
-	}
-	t.Cleanup(func() { execMutagenDaemon = orig })
-
-	applied, failed := fixMutagenDaemonUnavailable(context.Background(), Options{Yes: true}, Check{})
-	if len(applied) == 0 || len(failed) != 0 {
-		t.Errorf("首次修复应成功：applied=%v failed=%v", applied, failed)
-	}
-	applied2, failed2 := fixMutagenDaemonUnavailable(context.Background(), Options{Yes: true}, Check{})
-	if len(applied2) == 0 || len(failed2) != 0 {
-		t.Errorf("二次修复应仍成功：applied=%v failed=%v", applied2, failed2)
-	}
-	if len(calls) != 4 {
-		t.Errorf("2 次修复应调 4 次 daemon（stop+start+stop+start），实际 %v", calls)
-	}
-}
-
-func TestFixMutagenDaemon_IdempotentError_Tolerated(t *testing.T) {
-	orig := execMutagenDaemon
-	execMutagenDaemon = func(ctx context.Context, action string) error {
-		return fmt.Errorf("no daemon is running")
-	}
-	t.Cleanup(func() { execMutagenDaemon = orig })
-	applied, failed := fixMutagenDaemonUnavailable(context.Background(), Options{Yes: true}, Check{})
-	if len(failed) != 0 {
-		t.Errorf("'no daemon is running' 应视为成功（幂等），实际 failed=%v", failed)
-	}
-	_ = applied
-}
-
 // -------- fixFUSEResidualMount --------
 
 func TestFixFUSEResidualMount_Yes_UnmountsAll(t *testing.T) {
@@ -214,7 +177,7 @@ func TestFixDNSResolveFailed_NonTTY_Rejected(t *testing.T) {
 // -------- ApplyFixes 路由 --------
 
 func TestApplyFixes_NoFix_Noop(t *testing.T) {
-	checks := []Check{{Code: errcodes.MOUNT_MUTAGEN_DAEMON_UNAVAILABLE, Status: StatusFail}}
+	checks := []Check{{Code: errcodes.SYSTEM_FUSE_RESIDUAL_MOUNT, Status: StatusFail}}
 	out := ApplyFixes(context.Background(), Options{Fix: false}, checks)
 	if len(out[0].FixApplied) != 0 || len(out[0].FixFailed) != 0 {
 		t.Error("opts.Fix=false 应 noop")
@@ -223,30 +186,30 @@ func TestApplyFixes_NoFix_Noop(t *testing.T) {
 
 func TestApplyFixes_Fix_TriggersRegistry(t *testing.T) {
 	calls := 0
-	orig := execMutagenDaemon
-	execMutagenDaemon = func(ctx context.Context, action string) error { calls++; return nil }
-	t.Cleanup(func() { execMutagenDaemon = orig })
+	orig := execFusermountUnmount
+	execFusermountUnmount = func(ctx context.Context, mp string) error { calls++; return nil }
+	t.Cleanup(func() { execFusermountUnmount = orig })
 	checks := []Check{
-		{Code: errcodes.MOUNT_MUTAGEN_DAEMON_UNAVAILABLE, Status: StatusFail},
+		{Code: errcodes.SYSTEM_FUSE_RESIDUAL_MOUNT, Status: StatusFail, Details: map[string]any{"mountpoints": []string{"/tmp/test-fuse"}}},
 		{Code: errcodes.DISK_LOCAL_LOW, Status: StatusWarn}, // 不在 Registry，应跳过
 	}
 	out := ApplyFixes(context.Background(), Options{Fix: true, Yes: true}, checks)
 	if len(out[0].FixApplied) == 0 {
-		t.Error("Mutagen daemon Fixer 应触发")
+		t.Error("FUSE residual Fixer 应触发")
 	}
 	if len(out[1].FixApplied) != 0 {
 		t.Error("DISK_LOCAL_LOW 不在 Registry，不应触发")
 	}
-	if calls < 2 {
-		t.Errorf("应调 2 次（stop+start），实际 %d", calls)
+	if calls != 1 {
+		t.Errorf("应调 1 次 fusermount，实际 %d", calls)
 	}
 }
 
 func TestApplyFixes_StatusNotDowngraded(t *testing.T) {
-	orig := execMutagenDaemon
-	execMutagenDaemon = func(ctx context.Context, action string) error { return nil }
-	t.Cleanup(func() { execMutagenDaemon = orig })
-	checks := []Check{{Code: errcodes.MOUNT_MUTAGEN_DAEMON_UNAVAILABLE, Status: StatusFail}}
+	orig := execFusermountUnmount
+	execFusermountUnmount = func(ctx context.Context, mp string) error { return nil }
+	t.Cleanup(func() { execFusermountUnmount = orig })
+	checks := []Check{{Code: errcodes.SYSTEM_FUSE_RESIDUAL_MOUNT, Status: StatusFail, Details: map[string]any{"mountpoints": []string{"/tmp/test-fuse"}}}}
 	out := ApplyFixes(context.Background(), Options{Fix: true, Yes: true}, checks)
 	if out[0].Status != StatusFail {
 		t.Errorf("CONTEXT D-16：Status 不降级，应保留 fail，实际 %s", out[0].Status)

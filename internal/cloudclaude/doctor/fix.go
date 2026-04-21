@@ -1,11 +1,10 @@
-// Package doctor — Phase 34 Plan 03：doctor --fix 5 类自动修复 + FixerRegistry + confirmDestructive。
+// Package doctor — Phase 34 Plan 03：doctor --fix 自动修复 + FixerRegistry + confirmDestructive。
 //
-// 5 类修复（CONTEXT D-09 表）：
-//  1. MOUNT_MUTAGEN_DAEMON_UNAVAILABLE → mutagen daemon stop && mutagen daemon start（低危 / 免确认）
-//  2. SYSTEM_FUSE_RESIDUAL_MOUNT       → fusermount -u <path>（批量 y/N 确认）
-//  3. SSH_KNOWN_HOSTS_CONFLICT         → ssh-keygen -R <host:port>（低危 / 免确认）
-//  4. AUTH_TOKEN_EXPIRED / AUTH_OAUTH_REFRESH_FAILED → 重调 EntryClient.AuthenticateAndWait（低危 / 免确认）
-//  5. SYSTEM_DNS_RESOLVE_FAILED        → macOS dscacheutil / Linux resolvectl（sudo + y/N 确认）
+// 4 类修复（CONTEXT D-09 表，经移除 Mutagen 后）：
+//  1. SYSTEM_FUSE_RESIDUAL_MOUNT       → fusermount -u <path>（批量 y/N 确认）
+//  2. SSH_KNOWN_HOSTS_CONFLICT         → ssh-keygen -R <host:port>（低危 / 免确认）
+//  3. AUTH_TOKEN_EXPIRED / AUTH_OAUTH_REFRESH_FAILED → 重调 EntryClient.AuthenticateAndWait（低危 / 免确认）
+//  4. SYSTEM_DNS_RESOLVE_FAILED        → macOS dscacheutil / Linux resolvectl（sudo + y/N 确认）
 //
 // 跨 OS 分叉集中在 §4.2 (FUSE 解挂) + §4.5 (DNS flush) + §3.5 (Statfs)。
 package doctor
@@ -32,9 +31,8 @@ type Fixer func(ctx context.Context, opts Options, original Check) (applied []st
 // 本包初始化 (init()) populate，测试可通过 `originalRegistry := FixerRegistry; FixerRegistry = nil; defer ...` 隔离。
 var FixerRegistry = map[errcodes.Code]Fixer{}
 
-// 5 个包级 var mock 注入点（PATTERNS §2.9 / worker.go 样板）。
+// 4 个包级 var mock 注入点（PATTERNS §2.9 / worker.go 样板）。
 // 暴露为 package-level 变量以便单元测试注入 fake。
-var execMutagenDaemon = realExecMutagenDaemon
 var execFusermountUnmount = realExecFusermountUnmount
 var execSSHKeygenRemove = realExecSSHKeygenRemove
 var execEntryRefresh = realExecEntryRefresh
@@ -46,7 +44,6 @@ var isTerminalFD = func() bool {
 }
 
 func init() {
-	FixerRegistry[errcodes.MOUNT_MUTAGEN_DAEMON_UNAVAILABLE] = fixMutagenDaemonUnavailable
 	FixerRegistry[errcodes.SYSTEM_FUSE_RESIDUAL_MOUNT] = fixFUSEResidualMount
 	FixerRegistry[errcodes.SSH_KNOWN_HOSTS_CONFLICT] = fixSSHKnownHostsConflict
 	FixerRegistry[errcodes.AUTH_TOKEN_EXPIRED] = fixAuthTokenExpired
@@ -83,35 +80,7 @@ func confirmDestructive(opts Options, promptZH string) (bool, string) {
 }
 
 // ----------------------------------------------------------------------------
-// 1. MOUNT_MUTAGEN_DAEMON_UNAVAILABLE — mutagen daemon stop && start（低危 / 免确认）
-// ----------------------------------------------------------------------------
-
-func fixMutagenDaemonUnavailable(ctx context.Context, opts Options, _ Check) ([]string, []string) {
-	if err := execMutagenDaemon(ctx, "stop"); err != nil && !isMutagenDaemonIdempotent(err) {
-		return nil, []string{fmt.Sprintf("mutagen daemon stop 失败: %v", err)}
-	}
-	if err := execMutagenDaemon(ctx, "start"); err != nil && !isMutagenDaemonIdempotent(err) {
-		return nil, []string{fmt.Sprintf("mutagen daemon start 失败: %v", err)}
-	}
-	return []string{"mutagen daemon 已重启"}, nil
-}
-
-// isMutagenDaemonIdempotent — mount_mutagen.go:225-229 已实现同款容错（复刻其字面量）。
-func isMutagenDaemonIdempotent(err error) bool {
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "no daemon is running") ||
-		strings.Contains(msg, "daemon already started") ||
-		strings.Contains(msg, "already running")
-}
-
-func realExecMutagenDaemon(ctx context.Context, action string) error {
-	// 生产实现：调用系统 PATH 中的 mutagen 二进制；executor 可按项目约定切换为 embed 路径。
-	cmd := exec.CommandContext(ctx, "mutagen", "daemon", action)
-	return cmd.Run()
-}
-
-// ----------------------------------------------------------------------------
-// 2. SYSTEM_FUSE_RESIDUAL_MOUNT — fusermount -u <path>（批量 y/N 确认）
+// 1. SYSTEM_FUSE_RESIDUAL_MOUNT — fusermount -u <path>（批量 y/N 确认）
 // ----------------------------------------------------------------------------
 
 func fixFUSEResidualMount(ctx context.Context, opts Options, original Check) ([]string, []string) {

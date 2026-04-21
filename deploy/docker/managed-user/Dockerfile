@@ -93,29 +93,9 @@ RUN ARCH=$(dpkg --print-architecture) \
     && rm /tmp/mergerfs.deb \
     && mergerfs --version
 
-# Mutagen agent v0.18.1 — 仅保留 mutagen-agents.tar.gz，runtime 由 entrypoint 解压（D-05）
-ARG MUTAGEN_VERSION=v0.18.1
-ARG MUTAGEN_SHA256_AMD64=7735286c778cc438418209f24d03a64f3a0151c8065ef0fe079cfaf093af6f8f
-ARG MUTAGEN_SHA256_ARM64=bcba735aebf8cbc11da9b3742118a665599ac697fa06bc5751cac8dcd540db8a
-RUN ARCH=$(dpkg --print-architecture) \
-    && case "${ARCH}" in \
-         amd64) EXPECTED_SHA="${MUTAGEN_SHA256_AMD64}" ;; \
-         arm64) EXPECTED_SHA="${MUTAGEN_SHA256_ARM64}" ;; \
-         *) echo "unsupported arch: ${ARCH}" >&2; exit 1 ;; \
-       esac \
-    && curl -fsSL -o /tmp/mutagen.tar.gz \
-        "https://github.com/mutagen-io/mutagen/releases/download/${MUTAGEN_VERSION}/mutagen_linux_${ARCH}_${MUTAGEN_VERSION}.tar.gz" \
-    && echo "${EXPECTED_SHA}  /tmp/mutagen.tar.gz" | sha256sum -c - \
-    && mkdir -p /opt \
-    && tar -xzf /tmp/mutagen.tar.gz -C /tmp mutagen-agents.tar.gz \
-    && mv /tmp/mutagen-agents.tar.gz /opt/mutagen-agents.tar.gz \
-    && rm /tmp/mutagen.tar.gz \
-    && ls -l /opt/mutagen-agents.tar.gz
-
-# 版本元数据（C4 Mutagen 版本漂移防御 / Phase 30 Entry API 读取的旁路数据源）
+# 版本元数据（mergerfs / tmux 供控制面与诊断读取）
 RUN mkdir -p /etc/cloud-claude \
     && echo "${MERGERFS_VERSION}" > /etc/cloud-claude/mergerfs.version \
-    && echo "${MUTAGEN_VERSION}" > /etc/cloud-claude/mutagen.version \
     && echo "runtime-filled" > /etc/cloud-claude/tmux.version
 
 RUN locale-gen en_US.UTF-8
@@ -141,7 +121,7 @@ RUN mkdir -p /workspace/.ssh /var/run/sshd \
     && chown -R "${WORKSPACE_UID}:${WORKSPACE_GID}" /workspace \
     && chmod 0700 /workspace/.ssh
 
-# v3: 预建 mergerfs / mutagen / 持久化 volume 挂载点 + chown 到 workspace 用户。
+# v3: 预建 mergerfs / 持久化 volume 挂载点 + chown 到 workspace 用户。
 # C5 / M17 防御：named volume 首次挂载会继承镜像中目标路径的权限；
 # entrypoint 会在运行时再做一次 chown 作为二次保险（Plan 03 prepare_v3_dirs）。
 RUN mkdir -p \

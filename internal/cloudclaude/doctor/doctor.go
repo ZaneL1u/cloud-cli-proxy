@@ -314,7 +314,7 @@ func authRespClaudeAccountID(r *cloudclaude.AuthResponse) string {
 
 // authRespExpectedEgressIP — Plan 02 deviation：cloudclaude.AuthResponse 当前
 // 未导出 ExpectedEgressIP 字段（v3.0 entry.go 仅含 Status/SSH*/ImageVersion/
-// SupportsMutagen/SupportsMergerfs/ClaudeAccountID）。本实现恒返回 ""，让
+// SupportsMergerfs/ClaudeAccountID）。本实现恒返回 ""，让
 // checkEgressIPVisible 走 expectedIP=="" Pass 分支（不误报 drift）；entry 包补齐
 // 该字段的工作记入 v3.1 backlog。
 func authRespExpectedEgressIP(r *cloudclaude.AuthResponse) string {

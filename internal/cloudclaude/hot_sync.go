@@ -18,6 +18,12 @@ import (
 
 const defaultHotSyncInterval = 1 * time.Second
 
+// HotSyncStatus 是热同步层返回的扩展状态。
+// 当前仅导出 ConflictCount，供 banner / last-session.json 展示。
+type HotSyncStatus struct {
+	ConflictCount int
+}
+
 // HotSyncConfig 描述基于现有 SSH 隧道的热同步配置。
 // 它替代 Mutagen，不再额外启动任何 ssh/scp/daemon 进程。
 type HotSyncConfig struct {
@@ -78,12 +84,12 @@ type HotSyncEngine struct {
 
 // StartHotSync 基于现有 SSH 连接启动热同步。
 // connA 负责远端 mkdir / cleanup 等 shell 命令；connB 专供 SFTP 数据面。
-func StartHotSync(connA, connB *ssh.Client, cfg HotSyncConfig) (cleanup func(), status MutagenSyncStatus, err error) {
+func StartHotSync(connA, connB *ssh.Client, cfg HotSyncConfig) (cleanup func(), status HotSyncStatus, err error) {
 	if connA == nil || connB == nil {
-		return nil, MutagenSyncStatus{}, newHotSyncErr("hot sync 需要两条可用的 SSH 连接")
+		return nil, HotSyncStatus{}, newHotSyncErr("hot sync 需要两条可用的 SSH 连接")
 	}
 	if cfg.LocalDir == "" || cfg.RemoteDir == "" {
-		return nil, MutagenSyncStatus{}, newHotSyncErr("localDir / remoteDir 不能为空")
+		return nil, HotSyncStatus{}, newHotSyncErr("localDir / remoteDir 不能为空")
 	}
 	if cfg.Logger == nil {
 		cfg.Logger = os.Stderr
@@ -94,7 +100,7 @@ func StartHotSync(connA, connB *ssh.Client, cfg HotSyncConfig) (cleanup func(), 
 
 	client, err := sftp.NewClient(connB)
 	if err != nil {
-		return nil, MutagenSyncStatus{}, newHotSyncErr("创建 SFTP client 失败: " + err.Error())
+		return nil, HotSyncStatus{}, newHotSyncErr("创建 SFTP client 失败: " + err.Error())
 	}
 
 	engine := &HotSyncEngine{
@@ -114,12 +120,12 @@ func StartHotSync(connA, connB *ssh.Client, cfg HotSyncConfig) (cleanup func(), 
 
 	if err := engine.prepareRemoteRoot(); err != nil {
 		_ = client.Close()
-		return nil, MutagenSyncStatus{}, newHotSyncErr("创建远端 hot 目录失败: " + err.Error())
+		return nil, HotSyncStatus{}, newHotSyncErr("创建远端 hot 目录失败: " + err.Error())
 	}
 
 	if err := engine.initialSync(); err != nil {
 		_ = client.Close()
-		return nil, MutagenSyncStatus{}, err
+		return nil, HotSyncStatus{}, err
 	}
 
 	go engine.run()
@@ -133,7 +139,7 @@ func StartHotSync(connA, connB *ssh.Client, cfg HotSyncConfig) (cleanup func(), 
 		}
 		_ = engine.client.Close()
 	}
-	return cleanup, MutagenSyncStatus{}, nil
+	return cleanup, HotSyncStatus{}, nil
 }
 
 func (e *HotSyncEngine) initialSync() error {

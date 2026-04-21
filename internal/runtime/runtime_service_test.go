@@ -108,9 +108,7 @@ func writeImageLock(t *testing.T) string {
 		"factory_reset_mode: wipe-/workspace",
 		"image_version: v3.0.0-test",
 		"mergerfs_version: 2.41.1",
-		"mutagen_agent_version: v0.18.1",
 		"tmux_version_min: \"3.4\"",
-		"supports_mutagen: true",
 		"supports_mergerfs: true",
 	}, "\n"))
 	if err := os.WriteFile(p, body, 0o644); err != nil {
