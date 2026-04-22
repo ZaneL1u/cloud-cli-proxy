@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 远端开发体验升级
 status: executing
-stopped_at: Completed 35-04-ci-gates-PLAN.md (1/1 tasks, 1 file, 0 deviations)
-last_updated: "2026-04-22T11:15:14.454Z"
+stopped_at: "Plan 35-05 in_progress at T3 (checkpoint:human-verify, gate=blocking) — T1 b4b22cc + T2 5923288 done; awaiting 真机三项签字 (M5 APFS / BASE-03 2min / C6 Ubuntu 25.04)"
+last_updated: "2026-04-22T11:23:59.287Z"
 last_activity: 2026-04-22
 progress:
   total_phases: 8
@@ -105,6 +105,6 @@ None — 等待 REQUIREMENTS.md 与 ROADMAP.md 产出后进入 phase 执行。
 
 ## Session Continuity
 
-Last session: 2026-04-22T11:15:14.450Z
-Stopped at: Completed 35-04-ci-gates-PLAN.md (1/1 tasks, 1 file, 0 deviations)
+Last session: 2026-04-22T11:23:59.275Z
+Stopped at: Plan 35-05 in_progress at T3 (checkpoint:human-verify, gate=blocking) — T1 b4b22cc + T2 5923288 done; awaiting 真机三项签字 (M5 APFS / BASE-03 2min / C6 Ubuntu 25.04)
 Resume file: None
