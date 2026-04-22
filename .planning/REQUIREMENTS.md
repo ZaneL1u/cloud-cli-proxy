@@ -30,12 +30,12 @@
 
 - [ ] **REQ-F3-A**：客户端默认 `ServerAliveInterval=15s` / `ServerAliveCountMax=4`；服务端默认 `ClientAliveInterval=15s` / `ClientAliveCountMax=8`；二者均不允许配置低于 15 秒
 - [x] **REQ-F3-B**：网络中断期间用户键入字符在客户端本地缓冲并以"未确认"灰色样式显示，重连成功后按序提交（对标 Mosh 本地 echo）
-- [ ] **REQ-F3-C**：cloud-claude 自动重连失败时，prompt 必须显示具体失败原因 + 下一步操作（按 Enter 重试 / 运行 `cloud-claude doctor`）
-- [ ] **REQ-F3-D**：重连过程使用退避策略 `1s → 2s → 4s → 8s → 30s 上限`，复用本地缓存的 Entry API token，不重新弹出密码
+- [x] **REQ-F3-C**：cloud-claude 自动重连失败时，prompt 必须显示具体失败原因 + 下一步操作（按 Enter 重试 / 运行 `cloud-claude doctor`）
+- [x] **REQ-F3-D**：重连过程使用退避策略 `1s → 2s → 4s → 8s → 30s 上限`，复用本地缓存的 Entry API token，不重新弹出密码
 
 ### B2 · 会话恢复（tmux 默认包装，F4）
 
-- [ ] **REQ-F4-A**：容器内 SSH 会话默认用 tmux 包装（`exec tmux new-session -A -s claude`），网络中断后重连必须 attach 到同一会话且运行中的 Claude Code 进程不丢失
+- [x] **REQ-F4-A**：容器内 SSH 会话默认用 tmux 包装（`exec tmux new-session -A -s claude`），网络中断后重连必须 attach 到同一会话且运行中的 Claude Code 进程不丢失
 - [ ] **REQ-F4-B**：用户可通过 `cloud-claude sessions ls` / `cloud-claude sessions attach <name>` 管理多个并行会话
 - [ ] **REQ-F4-C**：当容器内 tmux 不可用时 cloud-claude 不得阻塞启动，但必须在 banner 明确提示 `[!] 容器内 tmux 不可用，会话恢复已禁用`
 
@@ -177,9 +177,9 @@
 | REQ-F2-C | Phase 31 | Complete | banner 彩色 mount 模式标签 |
 | REQ-F3-A | Phase 32 | Pending | KeepAlive 15s/4 与服务端 15s/8 基线（服务端 sshd_config 在 Phase 29 落地） |
 | REQ-F3-B | Phase 32 | Complete | 断网本地输入缓冲 + 灰色未确认样式 |
-| REQ-F3-C | Phase 32 | Pending | 重连失败 prompt 原因 + 下一步 |
-| REQ-F3-D | Phase 32 | Pending | 重连退避 + token 复用不弹密码 |
-| REQ-F4-A | Phase 32 | Pending | tmux 默认包装 + 重连不丢进程 |
+| REQ-F3-C | Phase 32 | Complete | 重连失败 prompt 原因 + 下一步 |
+| REQ-F3-D | Phase 32 | Complete | 重连退避 + token 复用不弹密码 |
+| REQ-F4-A | Phase 32 | Complete | tmux 默认包装 + 重连不丢进程 |
 | REQ-F4-B | Phase 32 | Pending | `cloud-claude sessions ls/attach` |
 | REQ-F4-C | Phase 32 | Pending | 容器内 tmux 不可用降级提示 |
 | REQ-F5-A | Phase 32 | Pending | 多端默认共享 attach |
@@ -199,7 +199,7 @@
 | REQ-F8-C | Phase 34 | Complete | `cloud-claude explain <code>` |
 | BASE-01 | Phase 35 | Pending | 元数据响应 1.5× 真机基准 |
 | BASE-02 | Phase 35 | Pending | 首连 ≤ 8s 真机基准 |
-| BASE-03 | Phase 35 | Pending | 弱网 30s 无感知 UAT |
+| BASE-03 | Phase 35 | Complete | 弱网 30s 无感知 UAT |
 | BASE-04 | Phase 29 | Pending | 镜像 ≤ 700MB CI gate（Phase 35 二次回归） |
 
 **Coverage:**

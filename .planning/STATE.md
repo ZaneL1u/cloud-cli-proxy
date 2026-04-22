@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 远端开发体验升级
 status: executing
-stopped_at: Completed 35-01-perf-benchmarks-PLAN.md (3/3 tasks, 5 files, 0 deviations 影响 plan 边界)
-last_updated: "2026-04-22T10:43:54.950Z"
+stopped_at: Completed 35-02-network-resilience-uat-PLAN.md (2/2 tasks, 3 files, 2 deviations - 验证侧 Rule 1)
+last_updated: "2026-04-22T10:57:43.379Z"
 last_activity: 2026-04-22
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 30
-  completed_plans: 26
-  percent: 87
+  completed_plans: 27
+  percent: 90
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 Milestone: v3.0 远端开发体验升级
 Phase: 35 (e2e) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-04-22
 
@@ -75,6 +75,7 @@ v3.0 关键方向已定：
 - [Phase 34-cloud-claude-doctor-v3]: [Phase 34-02]: cloud-claude doctor 五维度自检框架 (18 项 check / 51 单测) — network×3 / auth×3 / ssh×4 / mount×5 / disk×3；M13 (降级 banner 第一屏字面量) + M14 (warn/fail 必带「建议:」+「错误码:」) + SC#5 (JSON schema_version=1 锁死 + 退出码 0/1/2 brew 对齐) 三大锚点全 PASS；Rule 3 deviations: cloudclaude.LoadLastSession 自实现 (plan 引用了不存在的读端 API) + ColorEnabled/Colorize 保留 2-arg/3-arg 签名 (避免重构既有 mount_strategy/session 调用点); Rule 1: authRespExpectedEgressIP 恒返回 '' (entry.go AuthResponse 未导出该字段，v3.1 backlog)；commits 0ddeb10 / c5f6df5 / a945598 / 511753c / aefef3d / 7fb7124 / d77aa8a / 326cdb1 / 3a95373 / 231fe17 / a34e4ce
 - [Phase 34-cloud-claude-doctor-v3]: Plan 34-03 doctor-fix-integration: FixerRegistry 6 entry (5 类 + AUTH_OAUTH_REFRESH_FAILED 派生) + ApplyFixes 60s timeout + Status 不降级 (D-16); confirmDestructive 三级判定 (Yes/JSON/非TTY); 5 个 exec* 包级 var mock + isTerminalFD; integration_test build tag + cc-fixture 实际容器名 (非 plan 示例的 cloud-claude-fixture); ci-doctor-grep.sh 三段断言 (schema=1 + next_action + 错误码) + Makefile ci-gate target; JSON 模式守卫 [fix] 顶部行避免 stdout 污染 (SC#5 守恒); commits 78626e5/f4b7893/73e47ab/f38dfd8/8b63af1/dc4519d/5d4a0d8
 - [Phase 35-e2e]: [Phase 35-perf-benchmarks]: Plan 01 三脚本就位 — gen-bench-tree.sh (synthetic 10k mono-repo, 80/15/5 + .git/objects/pack 3 + node_modules 200 嵌套 + 5% NUL，T-35-01-01/02 路径黑名单 + df 1GB) + perf-benchmark.sh (hyperfine warmup=1 runs=10 三档 local/mergerfs/sshfs-only + jq P50/P99 + ratio 裁决 PASS(1.5x)/WARN(<=2x)/FAIL，sshfs-only 档 Discretion 落到 ro bind /mnt/cold) + cold-start-benchmark.sh (5×attempt × 200ms tmux capture-pane 探测 prompt × 15s 硬超时 + 三段式 stderr verbatim grep + JSON schema_version=1 双闸门 pass>=4 AND progress_matches_all)；产物 README 含 schema/命名/历史对比 jq 范例；commits b0fd3ba/c388ea7/5078513
+- [Phase 35-e2e]: Plan 02 双脚本就位 (35-02 / commits 1926981 / 3a2a2cd)：uat-network-resilience.sh (594 行) BASE-03 三场景 UAT — tc(netem loss 100%) → iptables(OUTPUT DROP) 两级 fallback + 双重 trap disrupt_stop EXIT/INT/TERM + 起始幂等清理 + 三大无感知锚点 (pgrep -f claude 5s 间隔存活循环 + tmux capture-pane diff==0 字符级一致 + token 完整回放) + 30s 场景 60s 内自动重连成功断言 + 2min 场景退避序列 1/2/4/8/30s ≥3 档命中 + REQ-F3-C 失败提示 grep '(按 Enter 重试|cloud-claude doctor)' + REQ-F4-A 进程存活；degradation-regression.sh (534 行) M13 三层静默降级回归 — pkill -9 mergerfs / fusermount3 -u /mnt/cold / pkill -9 mutagen-agent 三层 → docker exec cloud-claude doctor --json → jq -e select(.code==X) 命中期望 MOUNT_* (5 个码与 errcodes/mount.go 注册表交叉一致) + warn/fail check next_action 非空守恒 (M13 等价口径) + 错误码命名正则 ^[A-Z]+_[A-Z]+_[A-Z0-9]+(_[A-Z0-9]+)*$；T-35-02 威胁矩阵 6 条全落地：双重 trap (T-01) + CTR_NAME_REGEX 命令注入守卫 (T-02) + sudo -n 检测无 prompt (T-03) + --dry-run + --confirm-destructive 双闸门默认全闭 + 中文 opt-in 提示 (T-04) + sed 脱敏 token/key/secret + JSON 只数值不内容 (T-05) + .network-disrupt.log/.degradation-destruct.log 留痕 (T-06)；deviations 2 条均为验证侧 Rule 1 — dry-run+SKIP 路径 stderr 补 disrupt 命令预览 + PLAN acceptance 第 16 条 grep -oE 多文件应改 -hoE，脚本侧 5 个 MOUNT_* 全在注册表语义正确
 
 ### Pending Todos
 
@@ -102,6 +103,6 @@ None — 等待 REQUIREMENTS.md 与 ROADMAP.md 产出后进入 phase 执行。
 
 ## Session Continuity
 
-Last session: 2026-04-22T10:43:54.942Z
-Stopped at: Completed 35-01-perf-benchmarks-PLAN.md (3/3 tasks, 5 files, 0 deviations 影响 plan 边界)
+Last session: 2026-04-22T10:57:43.375Z
+Stopped at: Completed 35-02-network-resilience-uat-PLAN.md (2/2 tasks, 3 files, 2 deviations - 验证侧 Rule 1)
 Resume file: None
