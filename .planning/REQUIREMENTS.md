@@ -197,10 +197,10 @@
 | REQ-F8-A | Phase 34 | Complete | 错误码 `<DOMAIN>_<KIND>_<NUM>` 体系（横切：各 phase 落码时遵循） |
 | REQ-F8-B | Phase 34 | Complete | 错误三要素（横切：各 phase 落码时遵循） |
 | REQ-F8-C | Phase 34 | Complete | `cloud-claude explain <code>` |
-| BASE-01 | Phase 35 | Pending | 元数据响应 1.5× 真机基准 |
+| BASE-01 | Phase 35 | Complete | 元数据响应 1.5× 真机基准 |
 | BASE-02 | Phase 35 | Pending | 首连 ≤ 8s 真机基准 |
 | BASE-03 | Phase 35 | Complete | 弱网 30s 无感知 UAT |
-| BASE-04 | Phase 29 | Pending | 镜像 ≤ 700MB CI gate（Phase 35 二次回归） |
+| BASE-04 | Phase 29 | Complete | 镜像 ≤ 700MB CI gate（Phase 35 二次回归） |
 
 **Coverage:**
 - v3.0 requirements: 30 functional + 4 baselines = 34 total

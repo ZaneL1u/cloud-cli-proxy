@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 远端开发体验升级
 status: executing
-stopped_at: Completed 35-03-runbooks-PLAN.md (3/3 tasks, 5 files, 0 deviations)
-last_updated: "2026-04-22T11:10:49.481Z"
+stopped_at: Completed 35-04-ci-gates-PLAN.md (1/1 tasks, 1 file, 0 deviations)
+last_updated: "2026-04-22T11:15:14.454Z"
 last_activity: 2026-04-22
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 30
-  completed_plans: 28
-  percent: 93
+  completed_plans: 29
+  percent: 97
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 Milestone: v3.0 远端开发体验升级
 Phase: 35 (e2e) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-04-22
 
@@ -77,6 +77,7 @@ v3.0 关键方向已定：
 - [Phase 35-e2e]: [Phase 35-perf-benchmarks]: Plan 01 三脚本就位 — gen-bench-tree.sh (synthetic 10k mono-repo, 80/15/5 + .git/objects/pack 3 + node_modules 200 嵌套 + 5% NUL，T-35-01-01/02 路径黑名单 + df 1GB) + perf-benchmark.sh (hyperfine warmup=1 runs=10 三档 local/mergerfs/sshfs-only + jq P50/P99 + ratio 裁决 PASS(1.5x)/WARN(<=2x)/FAIL，sshfs-only 档 Discretion 落到 ro bind /mnt/cold) + cold-start-benchmark.sh (5×attempt × 200ms tmux capture-pane 探测 prompt × 15s 硬超时 + 三段式 stderr verbatim grep + JSON schema_version=1 双闸门 pass>=4 AND progress_matches_all)；产物 README 含 schema/命名/历史对比 jq 范例；commits b0fd3ba/c388ea7/5078513
 - [Phase 35-e2e]: Plan 02 双脚本就位 (35-02 / commits 1926981 / 3a2a2cd)：uat-network-resilience.sh (594 行) BASE-03 三场景 UAT — tc(netem loss 100%) → iptables(OUTPUT DROP) 两级 fallback + 双重 trap disrupt_stop EXIT/INT/TERM + 起始幂等清理 + 三大无感知锚点 (pgrep -f claude 5s 间隔存活循环 + tmux capture-pane diff==0 字符级一致 + token 完整回放) + 30s 场景 60s 内自动重连成功断言 + 2min 场景退避序列 1/2/4/8/30s ≥3 档命中 + REQ-F3-C 失败提示 grep '(按 Enter 重试|cloud-claude doctor)' + REQ-F4-A 进程存活；degradation-regression.sh (534 行) M13 三层静默降级回归 — pkill -9 mergerfs / fusermount3 -u /mnt/cold / pkill -9 mutagen-agent 三层 → docker exec cloud-claude doctor --json → jq -e select(.code==X) 命中期望 MOUNT_* (5 个码与 errcodes/mount.go 注册表交叉一致) + warn/fail check next_action 非空守恒 (M13 等价口径) + 错误码命名正则 ^[A-Z]+_[A-Z]+_[A-Z0-9]+(_[A-Z0-9]+)*$；T-35-02 威胁矩阵 6 条全落地：双重 trap (T-01) + CTR_NAME_REGEX 命令注入守卫 (T-02) + sudo -n 检测无 prompt (T-03) + --dry-run + --confirm-destructive 双闸门默认全闭 + 中文 opt-in 提示 (T-04) + sed 脱敏 token/key/secret + JSON 只数值不内容 (T-05) + .network-disrupt.log/.degradation-destruct.log 留痕 (T-06)；deviations 2 条均为验证侧 Rule 1 — dry-run+SKIP 路径 stderr 补 disrupt 命令预览 + PLAN acceptance 第 16 条 grep -oE 多文件应改 -hoE，脚本侧 5 个 MOUNT_* 全在注册表语义正确
 - [Phase 35-e2e]: Plan 03 runbooks: 5 章 docs/runbooks/v3-*.md 落地（升级指南 + AppArmor 部署 + doctor 5 维度排障 + 持久卷顶层导航 + 43 条错误码索引）；按 Pattern G 头部 + ≥5 ## 章节 + ### 快速诊断命令 小节统一风格；AppArmor 锁定 D-23 三条字面量与 host-preflight.sh::check_apparmor_fusermount3 L51-68 一字不差；错误码索引反向 diff (registry vs 手册) 输出空 — 注册表 43 条 Code 全在手册中；持久卷手册严守 PATTERNS Pattern J 仅作顶层导航，OAuth 持久化跳转 v3-claude-state-volumes.md 不复制
+- [Phase 35]: [Phase 35-04] ci.yml 追加 perf-benchmark (本地档 only, hyperfine+ripgrep+jq, --seed=42 --runs=10 --warmup=1) + image-size-regression (image.lock 解析 → docker build → verify-managed-image.sh → 700 * 1024 * 1024 字面量阈值) 两个 job；复用顶部 on/concurrency 不加 job 级 if:；零破坏 go-test/web-build；commit 998c32d
 
 ### Pending Todos
 
@@ -104,6 +105,6 @@ None — 等待 REQUIREMENTS.md 与 ROADMAP.md 产出后进入 phase 执行。
 
 ## Session Continuity
 
-Last session: 2026-04-22T11:10:49.471Z
-Stopped at: Completed 35-03-runbooks-PLAN.md (3/3 tasks, 5 files, 0 deviations)
+Last session: 2026-04-22T11:15:14.450Z
+Stopped at: Completed 35-04-ci-gates-PLAN.md (1/1 tasks, 1 file, 0 deviations)
 Resume file: None
