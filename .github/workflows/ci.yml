@@ -58,3 +58,68 @@ jobs:
 
       - name: Build web app
         run: pnpm build
+
+  perf-benchmark:
+    name: Performance Benchmark (synthetic 10k, local baseline)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install hyperfine + ripgrep + jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends hyperfine ripgrep jq
+
+      - name: Generate synthetic tree
+        run: bash scripts/gen-bench-tree.sh --count=10000 --output=/tmp/bench-tree --seed=42
+
+      - name: Run benchmark (CI baseline only)
+        run: bash scripts/perf-benchmark.sh --ci-mode --runs=10 --warmup=1
+
+      - name: Upload bench artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-bench-${{ github.sha }}
+          path: .planning/phases/35-e2e/benchmarks/
+          if-no-files-found: warn
+          retention-days: 30
+
+  image-size-regression:
+    name: Image Size Regression (BASE-04 ≤ 700MB)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read expected image name
+        id: read-image
+        run: |
+          IMAGE_NAME=$(awk -F': ' '$1 == "local_dev_image_name" { print $2 }' deploy/docker/managed-user/image.lock)
+          if [ -z "$IMAGE_NAME" ]; then
+            echo "failed to read local_dev_image_name from image.lock" >&2
+            exit 1
+          fi
+          echo "IMAGE_NAME=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Build managed-user image
+        run: |
+          docker build \
+            -t "${{ steps.read-image.outputs.IMAGE_NAME }}" \
+            -f deploy/docker/managed-user/Dockerfile \
+            .
+
+      - name: Run verify-managed-image.sh
+        run: bash scripts/verify-managed-image.sh
+
+      - name: Assert uncompressed size ≤ 700MB
+        run: |
+          size=$(docker image inspect "${{ steps.read-image.outputs.IMAGE_NAME }}" --format='{{.Size}}')
+          max=$((700 * 1024 * 1024))    # 700 MiB = 734003200 bytes
+          echo "image_size_bytes=$size (max=$max)"
+          if [ "$size" -gt "$max" ]; then
+            echo "FAIL: image size $size > $max (700MB)" >&2
+            exit 1
+          fi
+          echo "PASS: image size within BASE-04 budget"
