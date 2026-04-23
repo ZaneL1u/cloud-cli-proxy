@@ -27,6 +27,9 @@ type LastSessionSnapshot struct {
 	TmuxSession    string `json:"tmux_session,omitempty"`    // 实际 attach 的 tmux session 名（Plan 02 写）
 	ClientRole     string `json:"client_role,omitempty"`     // "primary" | "secondary"（Plan 03 写）
 	ReconnectCount int    `json:"reconnect_count,omitempty"` // Reconnector.ReconnectCount() 累计值
+
+	// [Phase 36 D-09] omitempty + schema_version=1 不变（向后兼容）
+	OversizedFiles []OversizedFile `json:"oversized_files,omitempty"`
 }
 
 // DowngradeStep 描述单次降级动作。
@@ -35,6 +38,13 @@ type DowngradeStep struct {
 	To            string `json:"to"`
 	ReasonCode    string `json:"reason_code"`
 	ReasonMessage string `json:"reason_message"`
+}
+
+// OversizedFile 描述热同步阶段因超过大小阈值而被跳过的单个文件。
+// 对应 REQUIREMENTS.md REQ-MOUNT-V31-03 / Phase 36 D-09。
+type OversizedFile struct {
+	Path      string `json:"path"`
+	SizeBytes int64  `json:"size_bytes"`
 }
 
 // WriteLastSession 把 snap 序列化为 JSON 后原子写入 path。
