@@ -117,6 +117,18 @@ registerExplanation(MOUNT_FORCE_MODE_FAILED, `触发场景：用户通过 --moun
 修复路径：移除 --mount-mode flag 让自动降级生效，或针对错误信息中的具体下游 code 修复；需要锁定模式时建议先运行 cloud-claude doctor mount 看可用层。
 关联文档：Phase 31 PLAN <errcode_registry> / Phase 31 PITFALLS M13`)
 
+	registerExplanation(MOUNT_REQUIRE_GIT_REPO, `触发场景：用户在非 git 仓库目录（例如 /tmp、下载目录、家目录下的临时文件夹）直接运行 cloud-claude，启动前的 git rev-parse --show-toplevel 检查返回非零，系统立即拒绝进入挂载流程。
+根本原因：cloud-claude 的热同步语义是“同步一个项目”，而不是“同步你当前目录里的所有东西”。如果允许在非仓库目录启动，最危险的情况是把整个家目录、下载目录或临时目录误当成工程同步到远端，既会显著拉长首次扫描时间，也可能把与当前任务无关的大量文件带进容器工作区，重演 Phase 31 讨论过的 cwd 误同步风险。git 仓库边界是当前版本最稳定、最可解释的项目边界信号。
+复现方式：执行 cd /tmp && cloud-claude，或 mkdir /tmp/demo && cd /tmp/demo && cloud-claude；由于目录内没有 .git 元数据，命令会直接输出对应错误码并以 exitConfigError 退出，不会继续发起 SSH、SFTP、sshfs 或 mergerfs 相关操作。
+修复路径：进入已有 git 仓库目录后重新运行 cloud-claude；如果当前目录本来就是一个新项目，请先执行 git init 建立仓库边界，再启动 cloud-claude；注意这是一道全局前置闸门，任何 --mount-mode 都不能绕过它，因为它保护的是“同步范围正确性”而不是某一种挂载实现细节。
+关联文档：.planning/REQUIREMENTS.md REQ-MOUNT-V31-01；.planning/milestones/v3.0-phases/31-cli/31-CONTEXT.md §D-11（目录级熔断）`)
+
+	registerExplanation(MOUNT_OVERSIZED_FILE_SKIPPED, `触发场景：热同步初始化扫描发现某个未被 ignore 规则命中的文件大小已经达到或超过 hot_sync_max_file_mb 阈值（默认 50MB），系统不会把它推入 hot 分支，而是让它继续留在 cold sshfs 分支中提供访问。
+根本原因：大文件通常不是需要高频双向实时同步的源码，而更像模型、视频、安装包、构建产物或导出的数据集。把这类文件纳入热同步会明显拖慢首次连接时间、增大本地与远端的传输负担，并放大同步冲突或重试成本。Phase 36 的设计目标不是“禁止读取大文件”，而是“避免为了一个大文件拖垮整个工作区的热同步体验”，因此选择跳过热同步、保留 cold sshfs 兜底这一更稳妥的策略。
+复现方式：在一个 git 仓库里放入 60MB 的 model.bin 或 archive.tar，确保它既不在 .gitignore 也不在默认二进制黑名单里，然后启动 cloud-claude。stderr 会出现一次性的跳过提示，last-session.json 中也会记录 oversized_files 列表；文件依然可读，只是不会进入 hot tree。
+修复路径：如果你确实希望它参与热同步，可以手动编辑 ~/.cloud-claude/config.yaml 调高 hot_sync_max_file_mb；如果它本就不需要同步，建议把路径加入 .gitignore 或 cloud-claude 的忽略列表，减少启动期提示噪音；如果只是偶尔读取，保持默认配置即可，因为 cold sshfs 仍会提供完整访问，且结合 page cache 后重复读取成本会明显下降。
+关联文档：.planning/REQUIREMENTS.md REQ-MOUNT-V31-02 / REQ-MOUNT-V31-03；.planning/milestones/v3.0-phases/31-cli/31-CONTEXT.md §D-11`)
+
 	// ────────────────────────────────────────────────────────────────────
 	// NET_OAUTH_* 域 + NET_RECONNECT_* + NET_TCP_KEEPALIVE_*（Phase 31/32）
 	// ────────────────────────────────────────────────────────────────────

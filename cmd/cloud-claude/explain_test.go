@@ -7,24 +7,38 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
-// buildOnceExplainBin 把 cloud-claude 编译到 /tmp/cloud-claude-explain-test，子测试共享；
-// 与 internal/cloudclaude/integration_test.go runCloudClaude 同 pattern。
+var (
+	explainBinOnce sync.Once
+	explainBinPath string
+	explainBinErr  error
+)
+
+// buildOnceExplainBin 在当前 go test 进程内只编译一次，避免复用跨测试进程的陈旧 /tmp 二进制。
 func buildOnceExplainBin(t *testing.T) string {
 	t.Helper()
-	bin := "/tmp/cloud-claude-explain-test"
-	if _, err := os.Stat(bin); err == nil {
-		return bin
+	explainBinOnce.Do(func() {
+		tmpDir, err := os.MkdirTemp("", "cloud-claude-explain-test-*")
+		if err != nil {
+			explainBinErr = err
+			return
+		}
+		explainBinPath = tmpDir + "/cloud-claude"
+		cmd := exec.Command("go", "build", "-o", explainBinPath, "./")
+		cmd.Dir = "."
+		if out, err := cmd.CombinedOutput(); err != nil {
+			explainBinErr = errors.New(err.Error() + "\n" + string(out))
+		}
+	})
+	if explainBinErr != nil {
+		t.Fatalf("编译 cloud-claude 失败: %v", explainBinErr)
 	}
-	cmd := exec.Command("go", "build", "-o", bin, "./")
-	cmd.Dir = "."
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("编译 cloud-claude 失败: %v\n%s", err, out)
-	}
-	return bin
+	return explainBinPath
 }
 
 func runExplainBin(t *testing.T, bin string, args ...string) (exitCode int, stdout, stderr string) {
@@ -89,5 +103,33 @@ func TestExplain_CaseSensitive_LowerCaseUnknown(t *testing.T) {
 	code, _, stderr := runExplainBin(t, bin, "explain", "mount_mutagen_version_skew")
 	if code != 4 {
 		t.Fatalf("lower-case 输入应 exit 4（禁止自动修正），实际 %d；stderr=%q", code, stderr)
+	}
+}
+
+func TestExplain_MountRequireGitRepo_Exit0_MinLen(t *testing.T) {
+	bin := buildOnceExplainBin(t)
+	code, stdout, stderr := runExplainBin(t, bin, "explain", "MOUNT_REQUIRE_GIT_REPO")
+	if code != 0 {
+		t.Fatalf("known code 应 exit 0，实际 %d；stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "MOUNT_REQUIRE_GIT_REPO") {
+		t.Errorf("stdout 未包含错误码字面量: %q", stdout)
+	}
+	if n := utf8.RuneCountInString(stdout); n < 200 {
+		t.Errorf("stdout 字符数 %d < 200（D-18 要求 ExtendedExplanations ≥200 中文字符）", n)
+	}
+}
+
+func TestExplain_MountOversizedFileSkipped_Exit0_MinLen(t *testing.T) {
+	bin := buildOnceExplainBin(t)
+	code, stdout, stderr := runExplainBin(t, bin, "explain", "MOUNT_OVERSIZED_FILE_SKIPPED")
+	if code != 0 {
+		t.Fatalf("known code 应 exit 0，实际 %d；stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "MOUNT_OVERSIZED_FILE_SKIPPED") {
+		t.Errorf("stdout 未包含错误码字面量: %q", stdout)
+	}
+	if n := utf8.RuneCountInString(stdout); n < 200 {
+		t.Errorf("stdout 字符数 %d < 200", n)
 	}
 }
