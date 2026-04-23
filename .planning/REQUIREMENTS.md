@@ -23,7 +23,8 @@
 
 ### A3 · sshfs FUSE page cache（F3）
 
-- [ ] **REQ-MOUNT-V31-04**：`mountSSHFS` 生成的 sshfs 命令默认追加 4 个缓存参数：`cache=yes,kernel_cache,auto_cache,cache_timeout=300`；同会话内对同一冷文件二次 `cat` 时本机 SFTP server 接收的 read 数 = 1（首次 read 后由 FUSE page cache 接管，无额外 RTT）
+- [x] **REQ-MOUNT-V31-04
+**：`mountSSHFS` 生成的 sshfs 命令默认追加 4 个缓存参数：`cache=yes,kernel_cache,auto_cache,cache_timeout=300`；同会话内对同一冷文件二次 `cat` 时本机 SFTP server 接收的 read 数 = 1（首次 read 后由 FUSE page cache 接管，无额外 RTT）
 
 ### A4 · doctor mount 扩展与错误码注册（F4）
 
