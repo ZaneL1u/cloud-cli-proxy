@@ -95,4 +95,18 @@ func init() {
 		Message:    "检测到 macOS APFS case-insensitive 文件系统，已强制启用 two-way-resolved 同步模式",
 		NextAction: "无需操作；如需 case-sensitive 行为请创建 case-sensitive APFS 卷",
 	})
+
+	MustRegister(Entry{
+		Code:       MOUNT_REQUIRE_GIT_REPO,
+		Severity:   SeverityError,
+		Message:    "当前目录 %s 不在 git 仓库内，cloud-claude 拒绝挂载以避免误同步整个家目录",
+		NextAction: "cd 到 git 仓库根目录后重试，或在当前目录运行 git init 后再启动 cloud-claude",
+	})
+
+	MustRegister(Entry{
+		Code:       MOUNT_OVERSIZED_FILE_SKIPPED,
+		Severity:   SeverityWarn,
+		Message:    "%s (%dMB) 超过 hot_sync_max_file_mb=%d 阈值，已跳过热同步，由 cold sshfs 兜底",
+		NextAction: "编辑 ~/.cloud-claude/config.yaml 调整 hot_sync_max_file_mb，或在 .gitignore 加入该路径",
+	})
 }
