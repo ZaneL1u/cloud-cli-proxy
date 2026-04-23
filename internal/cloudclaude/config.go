@@ -18,10 +18,11 @@ const (
 var DefaultProxyCommands = []string{"git"}
 
 type Config struct {
-	Gateway       string   `yaml:"gateway"`
-	ShortID       string   `yaml:"short_id"`
-	Password      string   `yaml:"password"`
-	ProxyCommands []string `yaml:"proxy_commands,omitempty"`
+	Gateway          string   `yaml:"gateway"`
+	ShortID          string   `yaml:"short_id"`
+	Password         string   `yaml:"password"`
+	ProxyCommands    []string `yaml:"proxy_commands,omitempty"`
+	HotSyncMaxFileMB int      `yaml:"hot_sync_max_file_mb,omitempty"`
 }
 
 // EffectiveProxyCommands 返回生效的代理命令列表。
@@ -30,6 +31,17 @@ func (c *Config) EffectiveProxyCommands() []string {
 		return c.ProxyCommands
 	}
 	return DefaultProxyCommands
+}
+
+const defaultHotSyncMaxFileMB = 50
+
+// EffectiveHotSyncMaxFileMB 返回有效的单文件热同步大小上限（MB）。
+// 零值或负值时返回默认值 50MB（D-04）。
+func (c *Config) EffectiveHotSyncMaxFileMB() int {
+	if c.HotSyncMaxFileMB <= 0 {
+		return defaultHotSyncMaxFileMB
+	}
+	return c.HotSyncMaxFileMB
 }
 
 func (c *Config) Validate() error {
