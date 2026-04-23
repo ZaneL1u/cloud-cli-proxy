@@ -295,6 +295,19 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// [Phase 36 D-01] 工作目录获取前移：原位于认证流程之后（旧 line 332），
+	// 现移至 LoadConfig 成功后、NewEntryClient 之前。确保 git 前置检测在任何 SSH
+	// 连接发起前完成，命中 REQ-MOUNT-V31-01 字面要求（修复 RESEARCH §L1 时序地雷）。
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "错误: 无法获取当前工作目录: "+err.Error())
+		os.Exit(exitInternalError)
+	}
+	if err := requireGitRepo(cwd); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(exitConfigError)
+	}
+
 	client := cloudclaude.NewEntryClient(cfg.Gateway)
 
 	fmt.Println("正在连接云主机...")
@@ -328,12 +341,6 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("\r正在映射工作目录并进入 Claude Code 会话...")
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "错误: 无法获取当前工作目录: "+err.Error())
-		os.Exit(exitInternalError)
-	}
 
 	sshCfg := cloudclaude.SSHConfig{
 		Host:     authResp.SSHHost,
