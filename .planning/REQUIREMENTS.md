@@ -14,7 +14,8 @@
 
 ### A1 · 非 git 仓库拒绝挂载（F1）
 
-- [ ] **REQ-MOUNT-V31-01**：`cloud-claude` 启动时若当前 cwd 不在 git 仓库内（`git rev-parse --show-toplevel` 失败），必须立即拒绝挂载、不发起任何 SSH 文件操作，并在 stderr 输出错误码 `MOUNT_REQUIRE_GIT_REPO` + 中文 next_action（建议 `cd` 到 git 仓库 / `git init` 当前目录）；退出码恒为 `exitConfigError`，不可走任何降级路径
+- [x] **REQ-MOUNT-V31-01
+**：`cloud-claude` 启动时若当前 cwd 不在 git 仓库内（`git rev-parse --show-toplevel` 失败），必须立即拒绝挂载、不发起任何 SSH 文件操作，并在 stderr 输出错误码 `MOUNT_REQUIRE_GIT_REPO` + 中文 next_action（建议 `cd` 到 git 仓库 / `git init` 当前目录）；退出码恒为 `exitConfigError`，不可走任何降级路径
 
 ### A2 · 单文件大小熔断（F2）
 

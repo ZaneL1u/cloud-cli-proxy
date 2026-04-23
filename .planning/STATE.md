@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: 映射语义补齐与懒加载
 status: executing
-stopped_at: Completed 36-03-PLAN.md
-last_updated: "2026-04-23T11:47:00.008Z"
+stopped_at: Completed 36-04-PLAN.md
+last_updated: "2026-04-23T11:53:10.804Z"
 last_activity: 2026-04-23
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 6
-  completed_plans: 4
-  percent: 67
+  completed_plans: 5
+  percent: 83
 ---
 
 # Project State
@@ -27,11 +27,11 @@ See: .planning/PROJECT.md (updated 2026-04-23 — v3.1 milestone started)
 
 Milestone: v3.1 映射语义补齐与懒加载 — 🟡 IN PROGRESS (roadmap ready)
 Phase: 36 (sshfs) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-04-23
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 83%
 
 下一步选项：
 
@@ -86,6 +86,7 @@ v3.0 关键方向已定：
 - [Phase 36-02]: Config.HotSyncMaxFileMB int yaml hot_sync_max_file_mb,omitempty + EffectiveHotSyncMaxFileMB() 默认 50MB（D-04 不在 Validate 强校验上限）；LastSessionSnapshot 末尾追加 OversizedFiles []OversizedFile omitempty + 新增 OversizedFile struct (Path string + SizeBytes int64) schema_version=1 不变；3 条序列化测试 PASS（Roundtrip/OmitemptyEmpty/OmitemptyNil），既有 Phase 32 D-27 测试零回归；Plan 03 可直接 cfg.EffectiveHotSyncMaxFileMB()*1024*1024 注入 HotSyncConfig.MaxFileBytes，并把扫描结果以 cwd 相对路径形式赋给 snapshot.OversizedFiles（T-36-02-02 Path 相对路径 mitigate 落在 Plan 03 写端）；commits a8c3cb5 (feat config) + cdeebb5 (test RED) + b1bdbdd (feat GREEN)
 - [Phase 36-05]: mount_sshfs.go::mountSSHFS sshfsCmd 字面量在 ConnectTimeout=10 之后追加 cache=yes,kernel_cache,auto_cache,cache_timeout=300（4 个 FUSE page cache 参数，顺序锁死，便于 Plan 06 doctor sshfs_cache_args check 字符串匹配）；新增 internal/cloudclaude/mount_sshfs_test.go 含 TestSSHFSCacheHitsKernelPageCache（fixture SSH+SFTP server + countingFileReader atomic counter + 真实 sshfs 进程挂载，sshfs/fusermount 缺失自动 Skip，本机 macOS PASS=SKIP 符合验收）；Rule 1 修订 PLAN 引用 pkg/sftp v1.13.10 实际 API：Handlers.FileLister→FileList，sftp.ReadWriteAt 不存在→拆 FileReader/FileWriter；commits b1d9208(feat) + bd467d0(test)
 - [Phase 36-03]: hot_sync 单文件熔断（D-05/D-06/D-07/L3）落地：HotSyncStatus 追加 OversizedFiles + HotSyncConfig 追加 MaxFileBytes int64 (零值不熔断) + HotSyncEngine 追加 maxFileBytes/oversized + 抽 applyOversizedFilter(localFiles, recordOversized bool) 私有方法 (initialSync 用 true 写 e.oversized, syncOnce 用 false 静默跳过, D-22 不刷屏)；StartHotSync 返回 HotSyncStatus{OversizedFiles: engine.oversized}；Phase 31 D-11 整目录级 SkipDir 完全保留与本 plan 单文件级互补；mount_strategy: MountConfig 追加 HotSyncMaxFileMB int + 包级 mountDefaultHotSyncMaxFileMB=50 + 私有 effectiveHotSyncMaxFileMB() accessor (Rule 2 兜底防止 main.go 未注入字段时静默关闭熔断)；tryModeReal 在 HotOnly/Full 双路径都注入 MaxFileBytes = effectiveHotSyncMaxFileMB() * 1024 * 1024；MountWorkspace 成功分支 snapshot.OversizedFiles = hotStatus.OversizedFiles (D-09) + D-08 一次性 stderr 提示 [!] 跳过大文件 N 个（>NMB），由 cold 兜底 (前 5 条 + ... 还有 N 个引导查 last-session.json)；3 条 TestHotSyncOversized_* 契约测试 PASS (60MB 未 ignore / ignore 命中 / 30MB 未超阈)；commits e554f68 (feat hot_sync) + 4268396 (test RED) + 22b4982 (feat GREEN mount_strategy)
+- [Phase 36-04] runRoot 中 git 检测固定在 LoadConfig 之后、NewEntryClient 之前；git 不可用与非 git 仓库共用 MOUNT_REQUIRE_GIT_REPO（D-03）；测试用 t.Setenv(PATH="") 而非包级 var 注入
 
 ### Pending Todos
 
@@ -116,8 +117,8 @@ v3.1 milestone 已启动；等待 ROADMAP.md 写入后进入 Phase 36 执行：
 
 ## Session Continuity
 
-Last session: 2026-04-23T11:47:00.005Z
-Stopped at: Completed 36-03-PLAN.md
+Last session: 2026-04-23T11:53:10.704Z
+Stopped at: Completed 36-04-PLAN.md
 Resume file: None
 
 ## Deferred Items
