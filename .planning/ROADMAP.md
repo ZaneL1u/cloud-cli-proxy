@@ -150,9 +150,9 @@ Plans:
 | 17-23. claude-shell 本地代理 | v1.3 | — | Paused | — |
 | 24-28. v2.0 cloud-claude 全部 | v2.0 | 7/7 | Complete | 2026-04-15 |
 | 29-35. v3.0 远端开发体验升级 | v3.0 | 30/30 | Complete | 2026-04-23 |
-| 36. 映射前置约束 + sshfs 内核缓存 | v3.1 | 4/6 | In Progress | — |
+| 36. 映射前置约束 + sshfs 内核缓存 | v3.1 | 6/6 | Complete | 2026-04-23 |
 | 37. 冷文件读触发晋升 + e2e UAT | v3.1 | 0/0 | Not started | — |
 
 ---
 
-*Last updated: 2026-04-23 — Phase 36 plan 04 completed (runRoot 时序修复 + git 仓库前置约束), v3.1 milestone in progress. v3.0 phase details see [Archive](milestones/v3.0-ROADMAP.md).*
+*Last updated: 2026-04-23 — Phase 36 完成（plan 01-06 全部 SUMMARY 落地：errcodes / schema / hot_sync 熔断 / runRoot 前置 / sshfs cache 参数 / doctor mount +5 项 check），v3.1 milestone Phase 37 待启动。v3.0 phase details see [Archive](milestones/v3.0-ROADMAP.md).*

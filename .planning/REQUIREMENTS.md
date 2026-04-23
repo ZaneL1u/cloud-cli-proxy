@@ -29,7 +29,8 @@
 
 ### A4 · doctor mount 扩展与错误码注册（F4）
 
-- [ ] **REQ-MOUNT-V31-05**：`cloud-claude doctor mount` 新增 5 项 check：`require_git_repo`（当前 cwd 是否 git 仓库）/ `oversized_files_count`（本次会话熔断文件数，从 last-session.json 读）/ `sshfs_cache_args`（确认 sshfs 命令含 4 个缓存参数）/ `git_proxy_enabled`（`proxy_commands` 是否含 `git`）/ `default_ignore_loaded`（默认二进制黑名单是否生效）；JSON schema_version 不变，新增 5 个 check 节点
+- [x] **REQ-MOUNT-V31-05
+**：`cloud-claude doctor mount` 新增 5 项 check：`require_git_repo`（当前 cwd 是否 git 仓库）/ `oversized_files_count`（本次会话熔断文件数，从 last-session.json 读）/ `sshfs_cache_args`（确认 sshfs 命令含 4 个缓存参数）/ `git_proxy_enabled`（`proxy_commands` 是否含 `git`）/ `default_ignore_loaded`（默认二进制黑名单是否生效）；JSON schema_version 不变，新增 5 个 check 节点
 - [x] **REQ-MOUNT-V31-06**：错误码注册表新增 `MOUNT_REQUIRE_GIT_REPO`（severity=error）/ `MOUNT_OVERSIZED_FILE_SKIPPED`（severity=warn），各附 ≥200 字 ExtendedExplanation；`cloud-claude explain MOUNT_REQUIRE_GIT_REPO` 与 `cloud-claude explain MOUNT_OVERSIZED_FILE_SKIPPED` 子进程测试通过
 
 ### B1 · 冷分支 inotify watcher（F5）
