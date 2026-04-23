@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/zanel1u/cloud-cli-proxy/internal/cloudclaude"
 	"github.com/zanel1u/cloud-cli-proxy/internal/cloudclaude/errcodes"
 )
 
@@ -144,4 +145,113 @@ func checkAppArmorFusermount3(ctx context.Context) Check {
 			"override 文件缺 `capability dac_override` 行")
 	}
 	return newPass("mount", "apparmor_fusermount3", "AppArmor fusermount3 override 就位")
+}
+
+// ── Phase 36 D-13 新增 5 项 mount check ─────────────────────────────────────
+
+// gitRevParseTopLevel 在 cwd 执行 git rev-parse --show-toplevel；
+// doctor 包不能 import cmd/cloud-claude（main package），故此处复制 4 行 exec 实现。
+func gitRevParseTopLevel(cwd string) error {
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	cmd.Dir = cwd
+	return cmd.Run()
+}
+
+// checkRequireGitRepo 检查 cwd 是否在 git 仓库内（REQ-MOUNT-V31-01 / D-13 / L2）。
+// doctor 命令约定在工程目录下运行，os.Getwd() 语义与 main.go 保持一致。
+func checkRequireGitRepo(ctx context.Context) Check {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return newSkip("mount", "require_git_repo", "无法获取 cwd: "+err.Error())
+	}
+	if err := gitRevParseTopLevel(cwd); err != nil {
+		return newFail("mount", "require_git_repo", errcodes.MOUNT_REQUIRE_GIT_REPO, cwd)
+	}
+	return newPass("mount", "require_git_repo", "当前目录位于 git 仓库内: "+cwd)
+}
+
+// checkOversizedFilesCount 读取 last-session.json::oversized_files，
+// 报告上次会话因超大文件被跳过的数量（D-13 / L8）。
+// 注意：MOUNT_OVERSIZED_FILE_SKIPPED Message 自带 %s/%dMB/%d 占位符，
+// 不能直接用 newWarn；参照 checkFUSEResidual 模式直接构造 Check{}。
+func checkOversizedFilesCount(ctx context.Context) Check {
+	snap, err := cloudclaude.LoadLastSession()
+	if err != nil || snap == nil {
+		return newSkip("mount", "oversized_files_count",
+			"last-session.json 不存在，跳过（STATE_LAST_SESSION_MISSING）")
+	}
+	n := len(snap.OversizedFiles)
+	if n == 0 {
+		return newPass("mount", "oversized_files_count", "上次会话无超大文件跳过记录")
+	}
+	top5 := make([]string, 0, 5)
+	for i, f := range snap.OversizedFiles {
+		if i >= 5 {
+			break
+		}
+		top5 = append(top5, fmt.Sprintf("%s (%dMB)", f.Path, f.SizeBytes/1024/1024))
+	}
+	entry, _ := errcodes.Lookup(errcodes.MOUNT_OVERSIZED_FILE_SKIPPED)
+	return Check{
+		Domain:     "mount",
+		Name:       "oversized_files_count",
+		Status:     StatusWarn,
+		Code:       errcodes.MOUNT_OVERSIZED_FILE_SKIPPED,
+		Message:    fmt.Sprintf("上次会话跳过了 %d 个超大文件，由 cold sshfs 兜底", n),
+		NextAction: entry.NextAction,
+		Details:    map[string]any{"oversized_count": n, "top5_files": top5},
+	}
+}
+
+// checkSSHFSCacheArgs 通过远端 mount 输出验证 sshfs 命令是否包含全部 4 个 cache 参数（D-13）。
+// 与 checkMergerfsBranches 精确镜像：remote runner + want 列表 + missing join。
+// Plan 36-05 在 mount_sshfs.go::sshfsCmd 字面量末尾追加的 4 个参数顺序与 want 列表一一对应。
+func checkSSHFSCacheArgs(ctx context.Context, runner RemoteRunner) Check {
+	if runner == nil {
+		return newSkip("mount", "sshfs_cache_args", "未能连接远端容器，跳过")
+	}
+	mountOut, _, _ := runner.RunScript("sshfs_mount", "mount | grep sshfs | head -1")
+	want := []string{"cache=yes", "kernel_cache", "auto_cache", "cache_timeout=300"}
+	var missing []string
+	for _, w := range want {
+		if !strings.Contains(mountOut, w) {
+			missing = append(missing, w)
+		}
+	}
+	if len(missing) > 0 {
+		return newFail("mount", "sshfs_cache_args", errcodes.MOUNT_SSHFS_FAILED,
+			"sshfs cache 参数缺少: "+strings.Join(missing, ", "))
+	}
+	return Check{
+		Domain:  "mount",
+		Name:    "sshfs_cache_args",
+		Status:  StatusPass,
+		Message: "sshfs cache 参数完整（cache=yes,kernel_cache,auto_cache,cache_timeout=300）",
+		Details: map[string]any{"mount": strings.TrimSpace(mountOut)},
+	}
+}
+
+// checkGitProxyEnabled 检查 proxy_commands 是否包含 git（D-13 / L6）。
+// config 未 init（LoadConfig 失败）时走 Skip，不影响其他 check。
+func checkGitProxyEnabled(ctx context.Context) Check {
+	cfg, err := cloudclaude.LoadConfig()
+	if err != nil {
+		return newSkip("mount", "git_proxy_enabled", "配置未 init，跳过: "+err.Error())
+	}
+	for _, p := range cfg.EffectiveProxyCommands() {
+		if p == "git" {
+			return newPass("mount", "git_proxy_enabled", "proxy_commands 包含 git")
+		}
+	}
+	return newWarn("mount", "git_proxy_enabled", errcodes.AUTH_CONFIG_MISSING,
+		"proxy_commands 未包含 git")
+}
+
+// checkDefaultIgnoreLoaded 检查默认二进制黑名单是否被 CLOUD_CLAUDE_NO_DEFAULT_IGNORE 禁用（D-13）。
+func checkDefaultIgnoreLoaded(ctx context.Context) Check {
+	if os.Getenv("CLOUD_CLAUDE_NO_DEFAULT_IGNORE") == "1" {
+		return newWarn("mount", "default_ignore_loaded", errcodes.AUTH_CONFIG_MISSING,
+			"CLOUD_CLAUDE_NO_DEFAULT_IGNORE=1，已禁用默认二进制黑名单")
+	}
+	return newPass("mount", "default_ignore_loaded", "默认二进制黑名单已加载")
 }

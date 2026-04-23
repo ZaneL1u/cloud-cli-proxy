@@ -231,6 +231,15 @@ func RunDoctor(ctx context.Context, opts Options) (*Report, error) {
 			func(c context.Context) Check { return checkSSHFSMountpoint(c, remoteRunner) }))
 		report.Checks = append(report.Checks, checkFUSEResidual(ctx))
 		report.Checks = append(report.Checks, checkAppArmorFusermount3(ctx))
+		// [Phase 36 D-13/D-14] +5 项 mount check → 总数从 v3.0 的 4 项提升到 9 项（SC#4）。
+		// 4 项本地 check（require_git_repo / oversized_files_count / git_proxy_enabled / default_ignore_loaded）
+		// 不需要 ensureRemote()；只有 sshfs_cache_args 走 runWithTimeout + remoteRunner。
+		report.Checks = append(report.Checks, checkRequireGitRepo(ctx))
+		report.Checks = append(report.Checks, checkOversizedFilesCount(ctx))
+		report.Checks = append(report.Checks, runWithTimeout(ctx, "mount", "sshfs_cache_args", timeout,
+			func(c context.Context) Check { return checkSSHFSCacheArgs(c, remoteRunner) }))
+		report.Checks = append(report.Checks, checkGitProxyEnabled(ctx))
+		report.Checks = append(report.Checks, checkDefaultIgnoreLoaded(ctx))
 	}
 
 	// 7) disk 维度
