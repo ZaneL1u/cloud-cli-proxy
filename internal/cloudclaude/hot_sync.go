@@ -19,9 +19,13 @@ import (
 const defaultHotSyncInterval = 1 * time.Second
 
 // HotSyncStatus 是热同步层返回的扩展状态。
-// 当前仅导出 ConflictCount，供 banner / last-session.json 展示。
+// 供 banner / last-session.json 展示。
 type HotSyncStatus struct {
 	ConflictCount int
+	// [Phase 36 D-07] initialSync 阶段填充：因 MaxFileBytes 熔断被跳过的单文件列表。
+	// Path 为 cwd 相对路径（T-36-02-02 mitigate）；mount_strategy 透传到
+	// snapshot.OversizedFiles 并按 D-08 在 stderr 一次性提示。
+	OversizedFiles []OversizedFile
 }
 
 // HotSyncConfig 描述基于现有 SSH 隧道的热同步配置。
@@ -33,6 +37,10 @@ type HotSyncConfig struct {
 	IgnorePatterns []string
 	Logger         io.Writer
 	Interval       time.Duration
+	// [Phase 36 D-05] 单文件热同步大小上限（bytes）。
+	// 零值表示不启用熔断；正值由 mount_strategy 注入
+	// cfg.EffectiveHotSyncMaxFileMB() * 1024 * 1024。
+	MaxFileBytes int64
 }
 
 // syncFileState 是本地/远端单个文件的可比较快照。
@@ -80,6 +88,12 @@ type HotSyncEngine struct {
 	// last 是上一次成功同步后的统一状态快照。轮询时以它作为 base，
 	// 判断 local/remote 哪一侧发生了变化。
 	last map[string]syncFileState
+
+	// [Phase 36 D-05] 从 HotSyncConfig.MaxFileBytes 复制；零值不熔断。
+	maxFileBytes int64
+	// [Phase 36 D-06/D-07] initialSync 阶段填充；run() goroutine 只读，
+	// 通过 StartHotSync 返回值携带给 mount_strategy。
+	oversized []OversizedFile
 }
 
 // StartHotSync 基于现有 SSH 连接启动热同步。
@@ -104,18 +118,19 @@ func StartHotSync(connA, connB *ssh.Client, cfg HotSyncConfig) (cleanup func(), 
 	}
 
 	engine := &HotSyncEngine{
-		connA:     connA,
-		connB:     connB,
-		client:    client,
-		localDir:  cfg.LocalDir,
-		remoteDir: cfg.RemoteDir,
-		logger:    cfg.Logger,
-		interval:  cfg.Interval,
-		matcher:   NewIgnoreMatcher(cfg.LocalDir, cfg.IgnorePatterns),
-		resetRemote: cfg.ResetRemote,
-		stopCh:    make(chan struct{}),
-		doneCh:    make(chan struct{}),
-		last:      make(map[string]syncFileState),
+		connA:        connA,
+		connB:        connB,
+		client:       client,
+		localDir:     cfg.LocalDir,
+		remoteDir:    cfg.RemoteDir,
+		logger:       cfg.Logger,
+		interval:     cfg.Interval,
+		matcher:      NewIgnoreMatcher(cfg.LocalDir, cfg.IgnorePatterns),
+		resetRemote:  cfg.ResetRemote,
+		stopCh:       make(chan struct{}),
+		doneCh:       make(chan struct{}),
+		last:         make(map[string]syncFileState),
+		maxFileBytes: cfg.MaxFileBytes,
 	}
 
 	if err := engine.prepareRemoteRoot(); err != nil {
@@ -139,7 +154,9 @@ func StartHotSync(connA, connB *ssh.Client, cfg HotSyncConfig) (cleanup func(), 
 		}
 		_ = engine.client.Close()
 	}
-	return cleanup, HotSyncStatus{}, nil
+	return cleanup, HotSyncStatus{
+		OversizedFiles: engine.oversized,
+	}, nil
 }
 
 func (e *HotSyncEngine) initialSync() error {
@@ -147,6 +164,12 @@ func (e *HotSyncEngine) initialSync() error {
 	if err != nil {
 		return newHotSyncErr("扫描本地目录失败: " + err.Error())
 	}
+
+	// [Phase 36 D-06] 单文件大小熔断（第二层）。
+	// 注意：scanLocalSyncFiles 内部的 IgnoreMatcher 已经第一层过滤掉 ignore 命中文件；
+	// Phase 31 D-11 整目录级 SkipDir（在 scanLocalSyncFiles 内部）保持不动，
+	// 与本处单文件级熔断互补，executor 不得删除或合并。
+	e.applyOversizedFilter(localFiles, true)
 
 	// 隐藏 staging 路径允许重置；直接映射到 cfg.Cwd 的 hot-only 路径则必须保守，
 	// 不能清空用户可见目录。
@@ -221,6 +244,10 @@ func (e *HotSyncEngine) syncOnce(logConflicts bool) error {
 	if err != nil {
 		return fmt.Errorf("扫描本地目录失败: %w", err)
 	}
+	// [Phase 36 L3] syncOnce 也跳过大文件，防止用户中途新增大文件被推到 hot。
+	// 仅静默跳过，不更新 e.oversized：初始扫描列表已写入 last-session.json，
+	// 轮询阶段不刷屏（D-22）。
+	e.applyOversizedFilter(localFiles, false)
 	remoteFiles, err := scanRemoteSyncFiles(e.client, e.remoteDir, e.matcher)
 	if err != nil {
 		return fmt.Errorf("扫描远端目录失败: %w", err)
@@ -383,6 +410,26 @@ func (e *HotSyncEngine) deleteLocal(rel string) error {
 		return fmt.Errorf("删除本地文件 %s 失败: %w", rel, err)
 	}
 	return nil
+}
+
+// applyOversizedFilter 对 scanLocalSyncFiles 返回的 map 做单文件大小熔断。
+//
+// recordOversized=true 时把命中文件追加到 e.oversized（initialSync 路径）；
+// recordOversized=false 时仅静默 delete（syncOnce 路径，避免刷屏）。
+//
+// MaxFileBytes <= 0 时整段为 no-op，等价于 Phase 36 之前行为（不熔断）。
+func (e *HotSyncEngine) applyOversizedFilter(localFiles map[string]syncFileState, recordOversized bool) {
+	if e.maxFileBytes <= 0 {
+		return
+	}
+	for rel, state := range localFiles {
+		if state.Size >= e.maxFileBytes {
+			if recordOversized {
+				e.oversized = append(e.oversized, OversizedFile{Path: rel, SizeBytes: state.Size})
+			}
+			delete(localFiles, rel)
+		}
+	}
 }
 
 func scanLocalSyncFiles(root string, matcher *IgnoreMatcher) (map[string]syncFileState, error) {
