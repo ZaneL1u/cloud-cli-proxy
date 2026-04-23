@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 远端开发体验升级
 status: milestone_complete
-stopped_at: "Plan 35-05 in_progress at T3 (checkpoint:human-verify, gate=blocking) — T1 b4b22cc + T2 5923288 done; awaiting 真机三项签字 (M5 APFS / BASE-03 2min / C6 Ubuntu 25.04)"
-last_updated: "2026-04-22T11:23:59.287Z"
-last_activity: 2026-04-22
+stopped_at: "Phase 35 完成（5/5 plans）；v3.0 milestone 8/8 phases 全部完成；3 项真机签字延后到 ship 前补完，跟踪在 .planning/phases/35-e2e/35-HUMAN-UAT.md"
+last_updated: "2026-04-23T07:08:19Z"
+last_activity: 2026-04-23
 progress:
   total_phases: 8
   completed_phases: 8
   total_plans: 30
-  completed_plans: 29
+  completed_plans: 30
   percent: 100
 ---
 
