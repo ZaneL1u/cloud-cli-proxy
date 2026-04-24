@@ -354,6 +354,11 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		KeepAliveInterval: 15 * time.Second,
 		KeepAliveCountMax: 4,
 		NoColor:           os.Getenv("NO_COLOR") != "",
+		// WR-02 修复：把 ~/.cloud-claude/config.yaml 中 hot_sync_max_file_mb 透传到
+		// MountConfig，否则 Config.EffectiveHotSyncMaxFileMB() 在生产路径永远不被调用，
+		// 用户写的 hot_sync_max_file_mb 不生效，与 MOUNT_OVERSIZED_FILE_SKIPPED 长说明
+		// 「编辑 ~/.cloud-claude/config.yaml 调高 hot_sync_max_file_mb」承诺直接矛盾。
+		HotSyncMaxFileMB: cfg.EffectiveHotSyncMaxFileMB(),
 	}
 
 	// [Phase 32 D-29] 注入 cobra flag 透传 + 本机 hostname。
