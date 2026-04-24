@@ -197,3 +197,14 @@ func TestLastSession_OversizedFiles_OmitemptyNil(t *testing.T) {
 		t.Error("nil OversizedFiles 应被 omitempty 省略")
 	}
 }
+
+// Phase 37 D-12: 三个 promotion 字段 omitempty 验证。
+func TestLastSession_PromotionFields_Omitempty(t *testing.T) {
+	snap := LastSessionSnapshot{SchemaVersion: 1}
+	data, _ := json.Marshal(snap)
+	for _, key := range []string{"promotion_count", "promotion_bytes", "promotion_failed_count"} {
+		if strings.Contains(string(data), key) {
+			t.Errorf("空字段 %s 应被 omitempty 隐藏，但 JSON 中出现了: %s", key, data)
+		}
+	}
+}

@@ -30,6 +30,11 @@ type LastSessionSnapshot struct {
 
 	// [Phase 36 D-09] omitempty + schema_version=1 不变（向后兼容）
 	OversizedFiles []OversizedFile `json:"oversized_files,omitempty"`
+
+	// [Phase 37 D-12] promotion 统计（omitempty + schema_version=1 不变）
+	PromotionCount       int   `json:"promotion_count,omitempty"`
+	PromotionBytes       int64 `json:"promotion_bytes,omitempty"`
+	PromotionFailedCount int   `json:"promotion_failed_count,omitempty"`
 }
 
 // DowngradeStep 描述单次降级动作。
