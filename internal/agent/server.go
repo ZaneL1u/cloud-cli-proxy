@@ -79,6 +79,31 @@ func (s *Server) Serve(ctx context.Context) error {
 	})
 
 	mux.HandleFunc("POST /v1/host-actions", func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				s.logger.Error("host-agent handler panic recovered",
+					"task_id", r.Context().Value("task_id"),
+					"panic", rec,
+				)
+				// 尝试从已解码的 request 中恢复 TaskID；如果解码失败则使用空值
+				var request agentapi.HostActionRequest
+				_ = json.NewDecoder(r.Body).Decode(&request)
+
+				fallback := agentapi.TaskStatusUpdate{
+					TaskID:       request.TaskID,
+					Status:       "failed",
+					ErrorCode:    "panic_recovered",
+					ErrorMessage: fmt.Sprintf("handler panic: %v", rec),
+				}
+				_ = s.worker.UpdateTaskStatus(r.Context(), fallback)
+				writeJSON(w, http.StatusInternalServerError, agentapi.HostActionResponse{
+					TaskID: request.TaskID,
+					Action: request.Action,
+					Update: fallback,
+				})
+			}
+		}()
+
 		var request agentapi.HostActionRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
