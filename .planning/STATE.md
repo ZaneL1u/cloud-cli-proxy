@@ -2,15 +2,13 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: 映射语义补齐与懒加载
-status: executing
-stopped_at: Completed 37-03-PLAN.md
-last_updated: "2026-04-24T05:15:00.000Z"
-last_activity: 2026-04-24
+status: unknown
+last_updated: "2026-04-24T05:34:22.364Z"
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
