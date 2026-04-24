@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -237,7 +240,7 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 		// 三段式进度：先决策再打印（CONTEXT D-18 强约束 — 不出现「打了又改主意」）
 		printProgress(cfg.Logger, mode)
 
-		modeCleanup, hotStatus, mErr := tryMode(connA, connB, mode, cfg)
+		modeCleanup, hotStatus, mErr := tryMode(connA, connB, mode, cfg, &snapshot)
 		if mErr == nil {
 			snapshot.ActualMode = mode.String()
 			snapshot.ConflictCount = hotStatus.ConflictCount
@@ -329,11 +332,11 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 //   - SSHFSOnly = sshfs 单层（v2.0 路径）
 //
 // 测试通过 cfg.hooks 注入 mock；生产走 tryModeReal。
-func tryMode(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup func(), status HotSyncStatus, err error) {
+func tryMode(connA, connB *ssh.Client, mode Mode, cfg MountConfig, snapshot *LastSessionSnapshot) (cleanup func(), status HotSyncStatus, err error) {
 	if cfg.hooks != nil {
 		return tryModeWithHooks(mode, cfg.hooks)
 	}
-	return tryModeReal(connA, connB, mode, cfg)
+	return tryModeReal(connA, connB, mode, cfg, snapshot)
 }
 
 func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), status HotSyncStatus, err error) {
@@ -411,7 +414,28 @@ func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), status HotSy
 //   - ModeHotOnly 对应 CLI 的 hot-only（兼容 legacy mutagen-only）
 //   - Full = hidden hot sync + hidden sshfs cold + mergerfs -> cfg.Cwd
 //   - SSHFSOnly 保持 v2.0 行为：直接把本地 cwd 挂到同路径
-func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup func(), status HotSyncStatus, err error) {
+//
+// snapshot 可为 nil（测试路径 hooks 时不传）；非 nil 时 Full 路径会在返回前把
+// ColdPromoter 统计刷入 snapshot.PromotionCount/PromotionBytes/PromotionFailedCount，
+// 确保 MountWorkspace 在 writeLastSessionWarn 之前已拿到 promotion 数据。
+func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig, snapshot *LastSessionSnapshot) (cleanup func(), status HotSyncStatus, err error) {
+	// Phase 37: 计算 promoter PID 文件路径 + 清理上次 mount 残留进程
+	configDir, dirErr := ConfigDir()
+	var pidFile string
+	if dirErr != nil {
+		pidFile = "/tmp/cloud-claude-promoter.pid"
+	} else {
+		pidFile = filepath.Join(configDir, "cold-promoter.pid")
+	}
+	if data, readErr := os.ReadFile(pidFile); readErr == nil {
+		pidStr := strings.TrimSpace(string(data))
+		if pid, atoiErr := strconv.Atoi(pidStr); atoiErr == nil {
+			if proc, findErr := os.FindProcess(pid); findErr == nil {
+				_ = proc.Kill() // best-effort
+			}
+		}
+	}
+	os.Remove(pidFile)
 	// SSHFSOnly：v2.0 路径，已稳定
 	if mode == ModeSSHFSOnly {
 		cl, e := mountSSHFS(connA, cfg.Cwd, cfg.Cwd)
@@ -469,6 +493,17 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup 
 		return nil, HotSyncStatus{}, mergeErr
 	}
 
+	// Phase 37: ColdPromoter 集成（仅在 Full 模式 + 非 NO_PROMOTION 时启动）
+	noPromotion := os.Getenv("CLOUD_CLAUDE_NO_PROMOTION") == "1"
+	var promoter *ColdPromoter
+	var promoterCancel context.CancelFunc
+	if !noPromotion {
+		promoter = NewColdPromoter(connB, coldRoot, hotRoot, cfg.Logger, pidFile)
+		var promoterCtx context.Context
+		promoterCtx, promoterCancel = context.WithCancel(context.Background())
+		go promoter.Run(promoterCtx)
+	}
+
 	// 启动 sshfs_watcher：cold 抖动 → 从用户可见路径中摘除 cold branch。
 	ctx, cancel := context.WithCancel(context.Background())
 	watcher := NewSSHFSWatcher(connA, coldRoot, cfg.Logger, func() error {
@@ -477,6 +512,12 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup 
 	go watcher.Run(ctx)
 
 	cleanup = func() {
+		if promoterCancel != nil {
+			promoterCancel()
+		}
+		if promoter != nil {
+			promoter.Wait()
+		}
 		cancel()
 		mergeCleanup()
 		sCleanup()
@@ -484,6 +525,16 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig) (cleanup 
 		_ = sshRun(connA, fmt.Sprintf("rm -rf %s 2>/dev/null || true", shellQuote(stageBase)))
 		rmdirChain(connA, cfg.Cwd)
 	}
+
+	// [Phase 37 D-12] 在返回前把 promotion 统计刷入 snapshot，
+	// 确保 MountWorkspace 的 writeLastSessionWarn 能写入 promotion 数据。
+	if snapshot != nil && promoter != nil {
+		count, bytes, failed := promoter.Stats()
+		snapshot.PromotionCount = count
+		snapshot.PromotionBytes = bytes
+		snapshot.PromotionFailedCount = failed
+	}
+
 	return cleanup, hStatus, nil
 }
 
