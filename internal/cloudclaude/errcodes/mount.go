@@ -127,4 +127,11 @@ func init() {
 		Message:    "CLOUD_CLAUDE_NO_DEFAULT_IGNORE=1，默认二进制黑名单已禁用，大文件可能进入热同步",
 		NextAction: "如非排查需要，请 unset CLOUD_CLAUDE_NO_DEFAULT_IGNORE 后重启 cloud-claude",
 	})
+
+	MustRegister(Entry{
+		Code:       MOUNT_PROMOTER_FAILED,
+		Severity:   SeverityWarn,
+		Message:    "cold-promoter 进程启动失败: %s，降级为无晋升模式（cold 分支仍可读）",
+		NextAction: "检查容器内 /proc/sys/fs/inotify/max_user_watches 限制，或设置 CLOUD_CLAUDE_NO_PROMOTION=1 显式关闭",
+	})
 }
