@@ -240,6 +240,11 @@ func RunDoctor(ctx context.Context, opts Options) (*Report, error) {
 			func(c context.Context) Check { return checkSSHFSCacheArgs(c, remoteRunner) }))
 		report.Checks = append(report.Checks, checkGitProxyEnabled(ctx))
 		report.Checks = append(report.Checks, checkDefaultIgnoreLoaded(ctx))
+		// Phase 37: 晋升可观测
+		report.Checks = append(report.Checks, checkPromoterAlive(ctx))
+		report.Checks = append(report.Checks, checkPromotionQueueDepth(ctx))
+		report.Checks = append(report.Checks, checkPromotionTotal(ctx))
+		report.Checks = append(report.Checks, checkPromotionFailedTotal(ctx))
 	}
 
 	// 7) disk 维度

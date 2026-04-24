@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -258,4 +259,66 @@ func checkDefaultIgnoreLoaded(ctx context.Context) Check {
 		return newWarn("mount", "default_ignore_loaded", errcodes.MOUNT_DEFAULT_IGNORE_DISABLED)
 	}
 	return newPass("mount", "default_ignore_loaded", "默认二进制黑名单已加载")
+}
+
+// ── Phase 37 晋升可观测：4 项 promotion check ────────────────────────────────
+
+// checkPromoterAlive 通过 PID file + kill -0 检测 cold-promoter 进程是否存活。
+func checkPromoterAlive(ctx context.Context) Check {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return newSkip("mount", "promoter_alive", "无法定位 home 目录: "+err.Error())
+	}
+	pidFile := filepath.Join(home, ".cloud-claude", "cold-promoter.pid")
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		return newSkip("mount", "promoter_alive", "PID file 不存在（watcher 未启动或 NO_PROMOTION=1）")
+	}
+	pidStr := strings.TrimSpace(string(data))
+	cmd := exec.Command("kill", "-0", pidStr)
+	if err := cmd.Run(); err != nil {
+		return newWarn("mount", "promoter_alive", errcodes.MOUNT_PROMOTER_FAILED)
+	}
+	return newPass("mount", "promoter_alive", "cold-promoter 进程存活（PID "+pidStr+"）")
+}
+
+// checkPromotionQueueDepth 通过 last-session.json 判断晋升引擎是否活跃。
+// Plan 02 写端在 cleanup 时落盘 promotion_count；若字段不存在，退化为 skip。
+func checkPromotionQueueDepth(ctx context.Context) Check {
+	snap, err := cloudclaude.LoadLastSession()
+	if err != nil || snap == nil {
+		return newSkip("mount", "promotion_queue_depth", "last-session.json 不存在")
+	}
+	if snap.PromotionCount > 0 {
+		return newPass("mount", "promotion_queue_depth",
+			fmt.Sprintf("promotion 活跃（累计 %d 次晋升）", snap.PromotionCount))
+	}
+	return newSkip("mount", "promotion_queue_depth", "无晋升活动记录")
+}
+
+// checkPromotionTotal 从 last-session.json 读取 promotion_count 展示累计晋升次数。
+func checkPromotionTotal(ctx context.Context) Check {
+	snap, err := cloudclaude.LoadLastSession()
+	if err != nil || snap == nil {
+		return newSkip("mount", "promotion_total", "last-session.json 不存在")
+	}
+	count := snap.PromotionCount
+	if count > 0 {
+		return newPass("mount", "promotion_total", fmt.Sprintf("累计晋升 %d 个文件", count))
+	}
+	return newSkip("mount", "promotion_total", "本次会话无晋升记录")
+}
+
+// checkPromotionFailedTotal 从 last-session.json 读取 promotion_failed_count，
+// 有失败时 warn（MOUNT_PROMOTER_FAILED），无失败或缺失时 pass/skip。
+func checkPromotionFailedTotal(ctx context.Context) Check {
+	snap, err := cloudclaude.LoadLastSession()
+	if err != nil || snap == nil {
+		return newSkip("mount", "promotion_failed_total", "last-session.json 不存在")
+	}
+	failed := snap.PromotionFailedCount
+	if failed > 0 {
+		return newWarn("mount", "promotion_failed_total", errcodes.MOUNT_PROMOTER_FAILED)
+	}
+	return newPass("mount", "promotion_failed_total", "所有晋升均成功（0 次失败）")
 }
