@@ -51,7 +51,34 @@ func NewWorker(repo WorkerRepo, provider network.Provider) *Worker {
 	return &Worker{repo: repo, provider: provider}
 }
 
-func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest) agentapi.TaskStatusUpdate {
+// testPanicTrigger 是包级测试钩子，供单元测试注入 panic。
+// 与 net/http 的 testHook 模式一致：默认恒返回 false，test 中临时替换。
+var testPanicTrigger = func(action agentapi.HostAction) bool { return false }
+
+func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest) (update agentapi.TaskStatusUpdate) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("worker panic recovered",
+				"task_id", request.TaskID,
+				"host_id", request.HostID,
+				"action", request.Action,
+				"panic", r,
+			)
+			_ = w.repo.UpdateHostStatus(ctx, request.HostID, "failed")
+			update = agentapi.TaskStatusUpdate{
+				TaskID:           request.TaskID,
+				Status:           taskStateFailed,
+				ErrorCode:        "panic_recovered",
+				ErrorMessage:     fmt.Sprintf("panic: %v", r),
+				LastErrorSummary: summarizeError(fmt.Errorf("panic: %v", r)),
+			}
+		}
+	}()
+
+	if testPanicTrigger(request.Action) {
+		panic("test panic")
+	}
+
 	var err error
 	switch request.Action {
 	case agentapi.ActionCreateHost:
