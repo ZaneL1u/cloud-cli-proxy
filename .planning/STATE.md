@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: 映射语义补齐与懒加载
 status: executing
-stopped_at: Completed 37-04-PLAN.md
-last_updated: "2026-04-24T04:12:50.000Z"
+stopped_at: Completed 37-01-PLAN.md
+last_updated: "2026-04-24T05:00:00.000Z"
 last_activity: 2026-04-24
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 11
-  completed_plans: 7
-  percent: 63
+  completed_plans: 8
+  percent: 72
 ---
 
 # Project State
@@ -21,17 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23 — v3.1 milestone started)
 
 **Core value:** 给每个用户提供一台开箱即用的 SSH 云主机，并且严格保证其所有出网流量都走受控的指定出口 IP
-**Current focus:** Phase 36 — sshfs
+**Current focus:** Phase 37 — cold promotion + e2e UAT
 
 ## Current Position
 
 Milestone: v3.1 映射语义补齐与懒加载 — 🟡 IN PROGRESS (roadmap ready)
 Phase: 37 (e2e-uat) — EXECUTING
-Plan: 4 of 5 (37-04 完成)
-Status: Phase 37 executing — plan 04 完成，剩余 01/02/03/05
+Plan: 1 of 5 (37-01 完成)
+Status: Phase 37 executing — plans 04, 01 完成，剩余 02/03/05
 Last activity: 2026-04-24
 
-Progress: [██████░░░] 63% (7/11 plans across phases 36-37)
+Progress: [████████░░] 72% (8/11 plans across phases 36-37)
 
 下一步选项：
 
@@ -162,4 +162,9 @@ Items acknowledged and deferred at v3.0 milestone close on 2026-04-23:
 
 - **37-04** (2026-04-24): 创建 docs/runbooks/v31-cold-promotion.md Pattern G 运维手册 — commit fc9d3ca
 - 覆盖原理图、启停、排障、协同、错误码反查 5 大方面，6 个章节，5 个错误码全部覆盖
-- 剩余计划：37-01 / 37-02 / 37-03 / 37-05
+- **37-01** (2026-04-24): 实现 ColdPromoter 核心引擎（inotify watcher + PromotionEngine）— commits dc0c86a / b9786af
+- ColdPromoter 完整实现：5s 去重窗口 + 1/2/4s 退避重试 + 熔断集合 + QueueDepth/Stats/Wait 可观测 API
+- 4 条核心单测全 PASS（含 -race）：dedup / retry-backoff / circuit-breaker / start-stop
+- 平台兼容：Linux（真实 inotify）/ macOS（stub）通过 build tag 分离
+- 新增 MOUNT_PROMOTER_FAILED 错误码（Warn 级 + >=200 字 ExtendedExplanation）
+- 剩余计划：37-02 / 37-03 / 37-05

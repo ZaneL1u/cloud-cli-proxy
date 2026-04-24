@@ -151,8 +151,8 @@ Plans:
 | 24-28. v2.0 cloud-claude 全部 | v2.0 | 7/7 | Complete | 2026-04-15 |
 | 29-35. v3.0 远端开发体验升级 | v3.0 | 30/30 | Complete | 2026-04-23 |
 | 36. 映射前置约束 + sshfs 内核缓存 | v3.1 | 6/6 | Complete | 2026-04-23 |
-| 37. 冷文件读触发晋升 + e2e UAT | 1/5 | In Progress|  | — |
+| 37. 冷文件读触发晋升 + e2e UAT | 2/5 | In Progress|  | — |
 
 ---
 
-*Last updated: 2026-04-23 — Phase 36 完成（plan 01-06 全部 SUMMARY 落地：errcodes / schema / hot_sync 熔断 / runRoot 前置 / sshfs cache 参数 / doctor mount +5 项 check），v3.1 milestone Phase 37 待启动。v3.0 phase details see [Archive](milestones/v3.0-ROADMAP.md).*
+*Last updated: 2026-04-24 — Phase 37-01 完成 (ColdPromoter 核心引擎: inotify watcher + PromotionEngine + 4 条单测 PASS + MOUNT_PROMOTER_FAILED 错误码); Phase 37-04 完成 (runbook); 剩余 37-02/03/05.*

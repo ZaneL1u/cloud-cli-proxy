@@ -35,13 +35,13 @@
 
 ### B1 · 冷分支 inotify watcher（F5）
 
-- [ ] **REQ-MOUNT-V31-07**：Full 模式 mount 就绪后，在容器内 cold 分支根目录长驻 `cold-promoter` 进程，使用 inotify（`IN_OPEN` / `IN_ACCESS`）监听冷文件读事件；启动失败必须 stderr 输出 `MOUNT_PROMOTER_FAILED` 但**不阻断**主路径（降级为"无晋升"模式，cold 仍可读）
+- [x] **REQ-MOUNT-V31-07**：Full 模式 mount 就绪后，在容器内 cold 分支根目录长驻 `cold-promoter` 进程，使用 inotify（`IN_OPEN` / `IN_ACCESS`）监听冷文件读事件；启动失败必须 stderr 输出 `MOUNT_PROMOTER_FAILED` 但**不阻断**主路径（降级为"无晋升"模式，cold 仍可读）
 - [ ] **REQ-MOUNT-V31-08**：watcher 进程在 mount cleanup（LIFO）时被回收：`mountStrategy.cleanup` 触发 → cancel watcher ctx → wait 进程退出 → fusermount → rmdirChain；异常退出场景（panic / SSH 断连）下次 mount 启动前必须能清理上一次残留进程（`pkill -f cold-promoter --pidfile`）
 
 ### B2 · 异步 SFTP 晋升 + 防抖熔断（F6）
 
-- [ ] **REQ-MOUNT-V31-09**：watcher 命中文件路径后异步入队（不阻塞 inotify 事件循环），由 `PromotionEngine` 在独立 goroutine 中复用 `connB` SFTP client 把文件从本机拉到 hot 分支；同一文件 5s 内重复入队**只触发 1 次实际拉取**（去重）
-- [ ] **REQ-MOUNT-V31-10**：单文件晋升失败按指数退避重试（1/2/4s），第 3 次仍失败时 stderr 输出 `[!] 晋升失败 <path>: <reason>` 并加入熔断列表，本次会话不再尝试该文件；500MB 文件晋升期间 cold 仍可读、不阻塞用户操作
+- [x] **REQ-MOUNT-V31-09**：watcher 命中文件路径后异步入队（不阻塞 inotify 事件循环），由 `PromotionEngine` 在独立 goroutine 中复用 `connB` SFTP client 把文件从本机拉到 hot 分支；同一文件 5s 内重复入队**只触发 1 次实际拉取**（去重）
+- [x] **REQ-MOUNT-V31-10**：单文件晋升失败按指数退避重试（1/2/4s），第 3 次仍失败时 stderr 输出 `[!] 晋升失败 <path>: <reason>` 并加入熔断列表，本次会话不再尝试该文件；500MB 文件晋升期间 cold 仍可读、不阻塞用户操作
 
 ### B3 · mergerfs 自然命中 hot + 关闭开关（F7）
 
@@ -84,10 +84,10 @@
 | REQ-MOUNT-V31-04 | 36 | pending |
 | REQ-MOUNT-V31-05 | 36 | pending |
 | REQ-MOUNT-V31-06 | 36 | completed |
-| REQ-MOUNT-V31-07 | 37 | pending |
+| REQ-MOUNT-V31-07 | 37 | Complete |
 | REQ-MOUNT-V31-08 | 37 | pending |
-| REQ-MOUNT-V31-09 | 37 | pending |
-| REQ-MOUNT-V31-10 | 37 | pending |
+| REQ-MOUNT-V31-09 | 37 | Complete |
+| REQ-MOUNT-V31-10 | 37 | Complete |
 | REQ-MOUNT-V31-11 | 37 | pending |
 | REQ-MOUNT-V31-12 | 37 | pending |
 | REQ-MOUNT-V31-13 | 37 | pending |
