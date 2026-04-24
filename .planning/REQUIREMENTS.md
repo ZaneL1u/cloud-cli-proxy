@@ -51,7 +51,7 @@
 
 ### B4 · doctor 晋升可观测 + runbook + e2e UAT（F8）
 
-- [ ] **REQ-MOUNT-V31-14**：`cloud-claude doctor mount` 新增 4 项晋升指标 check：`promoter_alive`（pgrep cold-promoter）/ `promotion_queue_depth`（PromotionEngine 内部队列深度）/ `promotion_total`（last-session.json 累计）/ `promotion_failed_total`（last-session.json 累计）；JSON 输出可被 `make ci-gate` grep 锁定
+- [x] **REQ-MOUNT-V31-14**：`cloud-claude doctor mount` 新增 4 项晋升指标 check：`promoter_alive`（pgrep cold-promoter）/ `promotion_queue_depth`（PromotionEngine 内部队列深度）/ `promotion_total`（last-session.json 累计）/ `promotion_failed_total`（last-session.json 累计）；JSON 输出可被 `make ci-gate` grep 锁定
 - [x] **REQ-MOUNT-V31-15**：新增运维手册 `docs/runbooks/v31-cold-promotion.md`，遵循 PATTERNS Pattern G（头部 + ≥5 章节 + 快速诊断命令小节），覆盖：原理图（cold sshfs → inotify → SFTP → hot → mergerfs）、`CLOUD_CLAUDE_NO_PROMOTION` 关闭场景、晋升失败排障、与 mergerfs / hot_sync 协同的边界、5 个相关错误码反查
 - [ ] **REQ-MOUNT-V31-16**：新增 e2e UAT 脚本 `tests/scripts/uat-v31-promotion.sh`：构造 fixture（10 个二进制 + 1 个 60MB + git 仓库 / 非 git 目录）→ 全场景断言（拒绝挂载 / 大文件熔断 / FUSE cache 命中 / 冷文件晋升）→ 输出 JSON 报告（schema_version=1）；脚本 `--dry-run` 默认安全，`--confirm-destructive` 触发实际操作；CI 接入 `make ci-gate`
 
@@ -91,7 +91,7 @@
 | REQ-MOUNT-V31-11 | 37 | pending |
 | REQ-MOUNT-V31-12 | 37 | Complete |
 | REQ-MOUNT-V31-13 | 37 | Complete |
-| REQ-MOUNT-V31-14 | 37 | pending |
+| REQ-MOUNT-V31-14 | 37 | Complete |
 | REQ-MOUNT-V31-15 | 37 | Complete |
 | REQ-MOUNT-V31-16 | 37 | pending |
 

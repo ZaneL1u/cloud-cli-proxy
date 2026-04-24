@@ -151,7 +151,7 @@ Plans:
 | 24-28. v2.0 cloud-claude 全部 | v2.0 | 7/7 | Complete | 2026-04-15 |
 | 29-35. v3.0 远端开发体验升级 | v3.0 | 30/30 | Complete | 2026-04-23 |
 | 36. 映射前置约束 + sshfs 内核缓存 | v3.1 | 6/6 | Complete | 2026-04-23 |
-| 37. 冷文件读触发晋升 + e2e UAT | 3/5 | In Progress|  | — |
+| 37. 冷文件读触发晋升 + e2e UAT | 4/5 | In Progress|  | — |
 
 ---
 
