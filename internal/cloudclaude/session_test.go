@@ -158,9 +158,9 @@ func TestBuildTmuxRemoteCmd_ContainsAllParts(t *testing.T) {
 	mustContain := []string{
 		"cd /workspace/proj",
 		"command -v tmux >/dev/null 2>&1",
-		"exec tmux new-session -A -d -s claude-abcdef12",
+		"exec tmux -u new-session -A -d -s claude-abcdef12",
 		"\\; attach-session -t claude-abcdef12",
-		"|| exec cd /workspace/proj && claude --foo",
+		"|| exec export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 && cd /workspace/proj && claude --foo",
 	}
 	for _, s := range mustContain {
 		if !strings.Contains(got, s) {

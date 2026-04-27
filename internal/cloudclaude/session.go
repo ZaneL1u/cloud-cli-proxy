@@ -185,18 +185,21 @@ func buildClaudeCmd(claudeArgs []string, hasProxy bool, remoteCwd string) string
 // buildTmuxRemoteCmd 构造 D-10 完整远程命令模板。所有参数已 shellescape。
 //
 //   cd <cwd_q> && command -v tmux >/dev/null 2>&1 \
-//     && exec tmux new-session -A -d -s <session_q> <wrap_q> \; attach-session -t <session_q> \
+//     && exec tmux -u new-session -A -d -s <session_q> <wrap_q> \; attach-session -t <session_q> \
 //     || exec <fallback>
 //
-// wrapCmd = "cd <cwd_q> && <claudeCmd>"（整体 shellescape 一次后塞给 tmux new-session）。
+// wrapCmd = "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 && cd <cwd_q> && <claudeCmd>"
+// （整体 shellescape 一次后塞给 tmux new-session）。
 // fallback = wrapCmd 字面值（不经过 tmux 直接 exec）。
+//
+// -u 强制 tmux 输出 UTF-8；wrapCmd 注入 locale 确保 Claude Code 渲染中文正常。
 func buildTmuxRemoteCmd(remoteCwd, sessionName, claudeCmd string) string {
 	cwdQ := shellescape.Quote(remoteCwd)
 	sessionQ := shellescape.Quote(sessionName)
-	wrapCmd := fmt.Sprintf("cd %s && %s", cwdQ, claudeCmd)
+	wrapCmd := fmt.Sprintf("export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 && cd %s && %s", cwdQ, claudeCmd)
 	wrapQ := shellescape.Quote(wrapCmd)
 	return fmt.Sprintf(
-		"cd %s && command -v tmux >/dev/null 2>&1 && exec tmux new-session -A -d -s %s %s \\; attach-session -t %s || exec %s",
+		"cd %s && command -v tmux >/dev/null 2>&1 && exec tmux -u new-session -A -d -s %s %s \\; attach-session -t %s || exec %s",
 		cwdQ, sessionQ, wrapQ, sessionQ, wrapCmd,
 	)
 }
@@ -898,6 +901,6 @@ func RunSessionsAttach(conn *ssh.Client, sessionName string, hasProxy bool, cwd 
 		fmt.Fprintln(os.Stderr, errcodes.Format(errcodes.SESSION_NOT_FOUND, sessionName))
 		return ExitConfigError, fmt.Errorf("session not found: %s", sessionName)
 	}
-	remoteCmd := fmt.Sprintf("exec tmux attach-session -t %s", sessQ)
+	remoteCmd := fmt.Sprintf("exec tmux -u attach-session -t %s", sessQ)
 	return runClaudePTYBare(conn, remoteCmd)
 }
