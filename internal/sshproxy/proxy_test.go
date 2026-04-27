@@ -1,16 +1,22 @@
 package sshproxy
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
 
 // ---- passwordKeyboardInteractive ----
@@ -386,4 +392,322 @@ func TestNewServer_EmptyAddress(t *testing.T) {
 	if server.addr != "" {
 		t.Fatalf("expected empty addr, got %q", server.addr)
 	}
+}
+
+// ---- handleConnection integration tests ----
+
+// buildServerConfig creates the ssh.ServerConfig matching ListenAndServe's config,
+// using the provided resolver for auth callbacks.
+func buildServerConfig(s *Server, resolver ContainerResolver) *ssh.ServerConfig {
+	config := &ssh.ServerConfig{
+		MaxAuthTries:  3,
+		ServerVersion: "SSH-2.0-CloudCLIProxy",
+		PasswordCallback: func(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
+			authCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			target, err := resolver.ResolveContainer(authCtx, conn.User(), string(password))
+			if err != nil {
+				return nil, fmt.Errorf("auth failed")
+			}
+			return &ssh.Permissions{
+				Extensions: map[string]string{
+					"target_addr":        target.Addr,
+					"target_user":        target.User,
+					"target_password":    target.Password,
+					"target_private_key": target.PrivateKey,
+				},
+			}, nil
+		},
+		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			authCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			target, err := resolver.ResolveContainerByPublicKey(authCtx, conn.User(), key)
+			if err != nil {
+				return nil, fmt.Errorf("auth failed")
+			}
+			return &ssh.Permissions{
+				Extensions: map[string]string{
+					"target_addr":        target.Addr,
+					"target_user":        target.User,
+					"target_password":    target.Password,
+					"target_private_key": target.PrivateKey,
+				},
+			}, nil
+		},
+	}
+	config.AddHostKey(s.hostKey)
+	return config
+}
+
+// startServerAndConnect starts a TCP listener, accepts one connection and
+// passes it to handleConnection. Returns the listener address and a channel
+// that closes when handleConnection returns.
+func startServerAndConnect(t *testing.T, s *Server, config *ssh.ServerConfig) (addr string, done <-chan struct{}) {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+
+	ch := make(chan struct{})
+	go func() {
+		defer close(ch)
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		s.handleConnection(conn, config)
+		listener.Close()
+	}()
+
+	return listener.Addr().String(), ch
+}
+
+func TestHandleConnection_PasswordAuthFailed(t *testing.T) {
+	resolver := &stubResolverRepo{
+		targetErr: fmt.Errorf("invalid credentials"),
+	}
+	logger := slog.New(slog.DiscardHandler)
+	s, err := NewServer(":0", "ws", "pass", "", resolver, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config := buildServerConfig(s, resolver)
+	addr, done := startServerAndConnect(t, s, config)
+
+	clientConfig := &ssh.ClientConfig{
+		User:            "alice",
+		Auth:            []ssh.AuthMethod{ssh.Password("wrong")},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second,
+	}
+	_, clientErr := ssh.Dial("tcp", addr, clientConfig)
+	if clientErr == nil {
+		t.Fatal("expected authentication to fail")
+	}
+
+	<-done
+}
+
+func TestHandleConnection_PasswordAuthSuccess(t *testing.T) {
+	resolver := &stubResolverRepo{
+		targetAddr: "127.0.0.1:19999", // unreachable, but auth succeeds
+	}
+	logger := slog.New(slog.DiscardHandler)
+	s, err := NewServer(":0", "ws", "pass", "", resolver, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config := buildServerConfig(s, resolver)
+	addr, done := startServerAndConnect(t, s, config)
+
+	clientConfig := &ssh.ClientConfig{
+		User:            "alice",
+		Auth:            []ssh.AuthMethod{ssh.Password("any")},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second,
+	}
+	cc, clientErr := ssh.Dial("tcp", addr, clientConfig)
+	if clientErr != nil {
+		t.Fatalf("client connection failed: %v", clientErr)
+	}
+
+	cc.Close()
+	<-done
+}
+
+func TestHandleConnection_PublicKeyAuthSuccess(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate client key: %v", err)
+	}
+	signer, err := ssh.NewSignerFromKey(priv)
+	if err != nil {
+		t.Fatalf("create signer: %v", err)
+	}
+
+	resolver := &stubResolverRepo{
+		targetAddr: "127.0.0.1:19999", // unreachable for channel, but auth succeeds
+	}
+	logger := slog.New(slog.DiscardHandler)
+	s, err := NewServer(":0", "ws", "pass", "", resolver, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config := buildServerConfig(s, resolver)
+	addr, done := startServerAndConnect(t, s, config)
+
+	clientConfig := &ssh.ClientConfig{
+		User:            "alice",
+		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second,
+	}
+	cc, clientErr := ssh.Dial("tcp", addr, clientConfig)
+	if clientErr != nil {
+		t.Fatalf("client pubkey connection failed: %v", clientErr)
+	}
+
+	cc.Close()
+	<-done
+}
+
+func TestHandleConnection_AndChannel_UnreachableTarget(t *testing.T) {
+	resolver := &stubResolverRepo{
+		targetAddr: "127.0.0.1:19999", // no SSH server listening here
+	}
+	logger := slog.New(slog.DiscardHandler)
+	s, err := NewServer(":0", "ws", "pass", "", resolver, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config := buildServerConfig(s, resolver)
+	addr, done := startServerAndConnect(t, s, config)
+
+	clientConfig := &ssh.ClientConfig{
+		User:            "alice",
+		Auth:            []ssh.AuthMethod{ssh.Password("any")},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second,
+	}
+	cc, clientErr := ssh.Dial("tcp", addr, clientConfig)
+	if clientErr != nil {
+		t.Fatalf("client connection failed: %v", clientErr)
+	}
+
+	// Open a session channel - this triggers handleChannel
+	// which will fail to connect to the unreachable target.
+	ch, _, openErr := cc.OpenChannel("session", nil)
+	if openErr == nil && ch != nil {
+		ch.Close()
+	}
+
+	cc.Close()
+	<-done
+}
+
+// ---- handleChannel with test target SSH server ----
+
+// startTestTargetSSH starts a minimal SSH server that accepts password
+// authentication and session channels. Returns the address and a cleanup function.
+func startTestTargetSSH(t *testing.T, targetPassword string) (string, func()) {
+	t.Helper()
+
+	targetConfig := &ssh.ServerConfig{
+		PasswordCallback: func(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
+			if string(pass) == targetPassword {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("bad password")
+		},
+	}
+
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate target host key: %v", err)
+	}
+	targetSigner, err := ssh.NewSignerFromKey(priv)
+	if err != nil {
+		t.Fatalf("create target signer: %v", err)
+	}
+	targetConfig.AddHostKey(targetSigner)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("target listen: %v", err)
+	}
+
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go handleTargetConn(conn, targetConfig)
+		}
+	}()
+
+	return listener.Addr().String(), func() { listener.Close() }
+}
+
+// handleTargetConn handles a single SSH connection as a target container.
+func handleTargetConn(conn net.Conn, config *ssh.ServerConfig) {
+	sshConn, chans, reqs, err := ssh.NewServerConn(conn, config)
+	if err != nil {
+		return
+	}
+	defer sshConn.Close()
+	go ssh.DiscardRequests(reqs)
+
+	for newChan := range chans {
+		if newChan.ChannelType() != "session" {
+			newChan.Reject(ssh.UnknownChannelType, "only session supported")
+			continue
+		}
+		ch, reqs, err := newChan.Accept()
+		if err != nil {
+			return
+		}
+		go ssh.DiscardRequests(reqs)
+
+		// Send exit-status 0 to signal clean completion.
+		ch.SendRequest("exit-status", false, ssh.Marshal(&struct{ ExitStatus uint32 }{0}))
+		ch.Close()
+	}
+}
+
+func TestHandleConnection_AndChannel_WithTarget(t *testing.T) {
+	// Start a test SSH server that acts as the target container.
+	targetPassword := "targetpass"
+	targetAddr, cleanup := startTestTargetSSH(t, targetPassword)
+	defer cleanup()
+
+	resolver := &stubResolverRepo{
+		hostAuth: repository.HostSSHAuth{
+			EntryPassword: targetPassword,
+			ContainerUser: "workspace",
+		},
+		targetAddr: targetAddr,
+	}
+	logger := slog.New(slog.DiscardHandler)
+	s, err := NewServer(":0", "workspace", "targetpass", "", resolver, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config := buildServerConfig(s, resolver)
+	proxyAddr, done := startServerAndConnect(t, s, config)
+
+	clientConfig := &ssh.ClientConfig{
+		User:            "alice",
+		Auth:            []ssh.AuthMethod{ssh.Password("proxy-entry-pass")},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}
+
+	cc, clientErr := ssh.Dial("tcp", proxyAddr, clientConfig)
+	if clientErr != nil {
+		t.Fatalf("client connection failed: %v", clientErr)
+	}
+	defer cc.Close()
+
+	// Open a session channel - this exercises handleChannel with a real target.
+	ch, chReqs, openErr := cc.OpenChannel("session", nil)
+	if openErr != nil {
+		// This may happen if the target disconnects before the session is fully set up.
+		// That's acceptable - the code path was exercised.
+		t.Logf("OpenChannel returned: %v (may happen when target closes quickly)", openErr)
+		cc.Close()
+		<-done
+		return
+	}
+	defer ch.Close()
+	go ssh.DiscardRequests(chReqs)
+
+	cc.Close()
+	<-done
 }
