@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -412,8 +415,27 @@ func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), status HotSy
 //   - Full = hidden hot sync + hidden sshfs cold + mergerfs -> cfg.Cwd
 //   - SSHFSOnly 保持 v2.0 行为：直接把本地 cwd 挂到同路径
 //
-// snapshot 可为 nil（测试路径 hooks 时不传）。
+// snapshot 可为 nil（测试路径 hooks 时不传）；非 nil 时 Full 路径会在返回前把
+// ColdPromoter 统计刷入 snapshot.PromotionCount/PromotionBytes/PromotionFailedCount，
+// 确保 MountWorkspace 在 writeLastSessionWarn 之前已拿到 promotion 数据。
 func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig, snapshot *LastSessionSnapshot) (cleanup func(), status HotSyncStatus, err error) {
+	// Phase 37: 计算 promoter PID 文件路径 + 清理上次 mount 残留进程
+	configDir, dirErr := ConfigDir()
+	var pidFile string
+	if dirErr != nil {
+		pidFile = "/tmp/cloud-claude-promoter.pid"
+	} else {
+		pidFile = filepath.Join(configDir, "cold-promoter.pid")
+	}
+	if data, readErr := os.ReadFile(pidFile); readErr == nil {
+		pidStr := strings.TrimSpace(string(data))
+		if pid, atoiErr := strconv.Atoi(pidStr); atoiErr == nil {
+			if proc, findErr := os.FindProcess(pid); findErr == nil {
+				_ = proc.Kill() // best-effort
+			}
+		}
+	}
+	os.Remove(pidFile)
 	// SSHFSOnly：v2.0 路径，已稳定
 	if mode == ModeSSHFSOnly {
 		cl, e := mountSSHFS(connA, cfg.Cwd, cfg.Cwd)
@@ -463,9 +485,7 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig, snapshot 
 	}
 
 	cleanupStaleFUSE(connA, cfg.Cwd)
-	// cold 分支设为 RW：容器内可直接修改 cold 文件，写回本地 cwd 后由
-	// HotSyncEngine 轮询同步到 hot，实现"写入即晋升"。
-	branches := []string{hotRoot + "=RW", coldRoot + "=RW"}
+	branches := []string{hotRoot + "=RW", coldRoot + "=RO"}
 	mergeCleanup, mergeErr := mountMerge(connA, branches, cfg.Cwd)
 	if mergeErr != nil {
 		sCleanup()
@@ -473,15 +493,15 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig, snapshot 
 		return nil, HotSyncStatus{}, mergeErr
 	}
 
-	// 启动远程 promoter：在容器内通过 inotifywait/find 监控 cold 目录，
-	// 将读取/修改过的文件拷贝到 hot，实现"读取即晋升"。
-	var promoterCleanup func()
-	if os.Getenv("CLOUD_CLAUDE_NO_PROMOTION") != "1" {
-		pc, pErr := startRemotePromoter(connA, coldRoot, hotRoot)
-		if pErr != nil && cfg.Logger != nil {
-			fmt.Fprintf(cfg.Logger, "[!] 远程 promoter 启动失败: %v（cold 分支仍可读写）\n", pErr)
-		}
-		promoterCleanup = pc
+	// Phase 37: ColdPromoter 集成（仅在 Full 模式 + Linux + 非 NO_PROMOTION 时启动）
+	noPromotion := os.Getenv("CLOUD_CLAUDE_NO_PROMOTION") == "1" || runtime.GOOS != "linux"
+	var promoter *ColdPromoter
+	var promoterCancel context.CancelFunc
+	if !noPromotion {
+		promoter = NewColdPromoter(connB, coldRoot, hotRoot, cfg.Logger, pidFile)
+		var promoterCtx context.Context
+		promoterCtx, promoterCancel = context.WithCancel(context.Background())
+		go promoter.Run(promoterCtx)
 	}
 
 	// 启动 sshfs_watcher：cold 抖动 → 从用户可见路径中摘除 cold branch。
@@ -492,78 +512,30 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig, snapshot 
 	go watcher.Run(ctx)
 
 	cleanup = func() {
+		if promoterCancel != nil {
+			promoterCancel()
+		}
+		if promoter != nil {
+			promoter.Wait()
+		}
 		cancel()
 		mergeCleanup()
-		if promoterCleanup != nil {
-			promoterCleanup()
-		}
 		sCleanup()
 		hCleanup()
 		_ = sshRun(connA, fmt.Sprintf("rm -rf %s 2>/dev/null || true", shellQuote(stageBase)))
 		rmdirChain(connA, cfg.Cwd)
 	}
 
+	// [Phase 37 D-12] 在返回前把 promotion 统计刷入 snapshot，
+	// 确保 MountWorkspace 的 writeLastSessionWarn 能写入 promotion 数据。
+	if snapshot != nil && promoter != nil {
+		count, bytes, failed := promoter.Stats()
+		snapshot.PromotionCount = count
+		snapshot.PromotionBytes = bytes
+		snapshot.PromotionFailedCount = failed
+	}
+
 	return cleanup, hStatus, nil
-}
-
-// startRemotePromoter 通过 SSH 在容器内启动一个 shell 脚本，监控 cold 目录的
-// 读取/修改事件，将命中文件拷贝到 hot 目录实现晋升。
-// 优先使用 inotifywait（能捕获读取事件），不可用时降级为 find 轮询（仅捕获修改）。
-//
-// 脚本通过 stdin 传入（/bin/sh -s），避免 shellQuote 全局包裹导致脚本变量
-// 无法展开的问题。coldRoot/hotRoot 两个外部值已通过 shellQuote 安全嵌入。
-func startRemotePromoter(connA *ssh.Client, coldRoot, hotRoot string) (func(), error) {
-	session, err := connA.NewSession()
-	if err != nil {
-		return nil, err
-	}
-
-	stdin, err := session.StdinPipe()
-	if err != nil {
-		session.Close()
-		return nil, err
-	}
-
-	// shellQuote 仅包裹外部注入的路径值，脚本内的 $1/$f/$COLD/$HOT
-	// 等 shell 变量不受影响。
-	script := "COLD=" + shellQuote(coldRoot) + "; HOT=" + shellQuote(hotRoot) + `
-promote() {
-    rel="${1#$COLD/}"
-    dst="$HOT/$rel"
-    mkdir -p "$(dirname "$dst")" 2>/dev/null && cp -a "$1" "$dst" 2>/dev/null
-}
-
-# 优先 inotifywait（能捕获读取）；失败后自动降级到 find 轮询
-if command -v inotifywait >/dev/null 2>&1; then
-    inotifywait -m -r -e access,close_write --format '%w%f' "$COLD" 2>/dev/null | while IFS= read -r f; do
-        promote "$f"
-    done
-fi
-
-# find 降级轮询（仅捕获修改，每 3s 一轮，作为 inotify 失败后的兜底）
-TS="/tmp/.cloud-claude-promoter-ts"
-touch "$TS"
-while true; do
-    find "$COLD" -type f -newer "$TS" 2>/dev/null | while IFS= read -r f; do
-        promote "$f"
-    done
-    touch "$TS"
-    sleep 3
-done` + "\n"
-
-	if err := session.Start("/bin/sh -s"); err != nil {
-		stdin.Close()
-		session.Close()
-		return nil, err
-	}
-
-	// 脚本写入 stdin 后立即关闭，通知 shell 可以开始执行。
-	go func() {
-		_, _ = io.WriteString(stdin, script)
-		_ = stdin.Close()
-	}()
-
-	return func() { session.Close() }, nil
 }
 
 // printProgress 按 finalMode 输出三段式中文进度（CONTEXT D-18）。
