@@ -128,7 +128,7 @@ func TestFixSSHKnownHostsConflict_NotFound_Idempotent(t *testing.T) {
 func TestFixAuthTokenExpired_Success(t *testing.T) {
 	origCfg := loadConfig
 	loadConfig = func() (*cloudclaude.Config, error) {
-		return &cloudclaude.Config{Gateway: "https://gw.example.com", ShortID: "x", Password: "y"}, nil
+		return &cloudclaude.Config{Gateway: "https://gw.example.com", Username: "x", Password: "y"}, nil
 	}
 	t.Cleanup(func() { loadConfig = origCfg })
 	orig := execEntryRefresh

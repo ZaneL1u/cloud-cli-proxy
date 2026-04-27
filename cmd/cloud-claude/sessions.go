@@ -82,7 +82,7 @@ func connectForSessions(ctx context.Context) (*ssh.Client, error) {
 		return nil, err
 	}
 	client := cloudclaude.NewEntryClient(cfg.Gateway)
-	authResp, err := client.AuthenticateAndWait(ctx, cfg.ShortID, cfg.Password, func(string) {})
+	authResp, err := client.AuthenticateAndWait(ctx, cfg.Username, cfg.Password, func(string) {})
 	if err != nil {
 		return nil, fmt.Errorf("认证失败: %w", err)
 	}

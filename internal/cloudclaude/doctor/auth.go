@@ -15,9 +15,9 @@ import (
 var loadConfig = cloudclaude.LoadConfig
 
 // entryAuthenticate 包级 var（mock Entry API）。签名与 EntryClient.AuthenticateAndWait 对齐但返回简化。
-var entryAuthenticate = func(ctx context.Context, gateway, shortID, password string) (*cloudclaude.AuthResponse, error) {
+var entryAuthenticate = func(ctx context.Context, gateway, username, password string) (*cloudclaude.AuthResponse, error) {
 	client := cloudclaude.NewEntryClient(gateway)
-	return client.AuthenticateAndWait(ctx, shortID, password, func(string) {})
+	return client.AuthenticateAndWait(ctx, username, password, func(string) {})
 }
 
 // checkConfigPresent — AUTH_CONFIG_MISSING (Fatal)：LoadConfig 失败即 fail。
@@ -36,7 +36,7 @@ func checkEntryTokenValid(ctx context.Context, cfg *cloudclaude.Config) (Check, 
 	if cfg == nil {
 		return newSkip("auth", "entry_token_valid", "未加载 config，跳过"), nil
 	}
-	resp, err := entryAuthenticate(ctx, cfg.Gateway, cfg.ShortID, cfg.Password)
+	resp, err := entryAuthenticate(ctx, cfg.Gateway, cfg.Username, cfg.Password)
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(msg, "401") || strings.Contains(msg, "认证失败") {

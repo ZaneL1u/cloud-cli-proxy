@@ -44,12 +44,12 @@ import (
 //
 // 字段来源（CONTEXT D-29）：
 //   - AccountID / KeepAlive* / LastSessionPath：mountCfg
-//   - ShortID / TakeOver / LocalHostname：cobra flag + os.Hostname() 注入
+//   - SessionID / TakeOver / LocalHostname：cobra flag + os.Hostname() 注入
 //   - TmuxAvailable：DetectTmux 探测结果
 //   - ReconnectEnabled：默认 true，测试可关
 type SessionConfig struct {
 	AccountID         string
-	ShortID           string
+	SessionID         string // 会话标识（--new-session 时由 GenerateShortSessionID 生成）
 	TakeOver          bool
 	TmuxAvailable     bool
 	KeepAliveInterval time.Duration
@@ -133,9 +133,9 @@ func buildTmuxSessionName(accountID, cwd string) string {
 	return sanitized
 }
 
-// buildShortIDSessionName 用于 --new-session（D-08）。
+// buildSessionIDName 用于 --new-session（D-08）。
 // 与默认 8-hex 命名空间正交（base64url 含 '-' / '_'）。
-func buildShortIDSessionName() string {
+func buildSessionIDName() string {
 	return "claude-" + GenerateShortSessionID()
 }
 
@@ -562,7 +562,7 @@ func writeLastSessionReconnectCount(path string, count int) {
 
 // runClaudeWithSession 是 Phase 32 的会话层主入口（D-28 / D-29）。
 //
-//   - 命名：默认 buildTmuxSessionName；--new-session 路径用 sessionCfg.ShortID
+//   - 命名：默认 buildTmuxSessionName；--new-session 路径用 sessionCfg.SessionID
 //   - take-over：D-11 序列（list-clients / display-message / sleep / detach -a）
 //   - banner：D-12 完整方案（list-clients + 文件注册表查 hostname）
 //   - last-session.json：写 TmuxSession + ClientRole=primary
@@ -572,8 +572,8 @@ func runClaudeWithSession(ctx context.Context, conn *ssh.Client, sshCfg SSHConfi
 	claudeArgs []string, sessionCfg SessionConfig, hasProxy bool,
 ) (int, error) {
 	sessionName := buildTmuxSessionName(sessionCfg.AccountID, sessionCfg.Cwd)
-	if sessionCfg.ShortID != "" {
-		sessionName = "claude-" + sessionCfg.ShortID
+	if sessionCfg.SessionID != "" {
+		sessionName = "claude-" + sessionCfg.SessionID
 		sessionName, _ = sanitizeSessionName(sessionName)
 	}
 

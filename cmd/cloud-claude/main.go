@@ -40,14 +40,14 @@ func main() {
 	initCmd := &cobra.Command{
 		Use:           "init",
 		Short:         "配置网关地址与用户凭证",
-		Long:          "交互式输入或通过环境变量/flag 配置网关地址、short_id 和密码，\n写入 ~/.cloud-claude/config.yaml。",
+		Long:          "交互式输入或通过环境变量/flag 配置网关地址、用户名和密码，\n写入 ~/.cloud-claude/config.yaml。",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE:          runInit,
 	}
 
 	initCmd.Flags().String("gateway", "", "网关地址（含 scheme，如 https://gw.example.com）")
-	initCmd.Flags().String("short-id", "", "用户或主机 short_id")
+	initCmd.Flags().String("username", "", "用户名")
 	initCmd.Flags().String("password", "", "登录密码（建议交互式输入）")
 
 	envCmd := &cobra.Command{
@@ -109,14 +109,14 @@ func main() {
 
 func runInit(cmd *cobra.Command, args []string) error {
 	gateway, _ := cmd.Flags().GetString("gateway")
-	shortID, _ := cmd.Flags().GetString("short-id")
+	username, _ := cmd.Flags().GetString("username")
 	password, _ := cmd.Flags().GetString("password")
 
 	if gateway == "" {
 		gateway = os.Getenv("CLOUD_CLAUDE_GATEWAY")
 	}
-	if shortID == "" {
-		shortID = os.Getenv("CLOUD_CLAUDE_SHORT_ID")
+	if username == "" {
+		username = os.Getenv("CLOUD_CLAUDE_USERNAME")
 	}
 	if password == "" {
 		password = os.Getenv("CLOUD_CLAUDE_PASSWORD")
@@ -126,9 +126,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Print("网关地址 (如 https://gw.example.com): ")
 		fmt.Scanln(&gateway)
 	}
-	if shortID == "" {
-		fmt.Print("Short ID: ")
-		fmt.Scanln(&shortID)
+	if username == "" {
+		fmt.Print("用户名: ")
+		fmt.Scanln(&username)
 	}
 	if password == "" {
 		fmt.Print("密码: ")
@@ -144,7 +144,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	cfg := &cloudclaude.Config{
 		Gateway:  gateway,
-		ShortID:  shortID,
+		Username: username,
 		Password: password,
 	}
 
@@ -173,7 +173,7 @@ func runEnvCheck(cmd *cobra.Command, args []string) error {
 
 	authResp, err := client.AuthenticateAndWait(
 		cmd.Context(),
-		cfg.ShortID,
+		cfg.Username,
 		cfg.Password,
 		func(msg string) {
 			fmt.Printf("\r%s", msg)
@@ -215,7 +215,7 @@ func runSSHDoctor(cmd *cobra.Command, args []string) error {
 	fmt.Println("正在连接云主机...")
 	authResp, err := client.AuthenticateAndWait(
 		cmd.Context(),
-		cfg.ShortID,
+		cfg.Username,
 		cfg.Password,
 		func(msg string) { fmt.Printf("\r%s", msg) },
 	)
@@ -314,7 +314,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 
 	authResp, err := client.AuthenticateAndWait(
 		cmd.Context(),
-		cfg.ShortID,
+		cfg.Username,
 		cfg.Password,
 		func(msg string) {
 			fmt.Printf("\r%s", msg)

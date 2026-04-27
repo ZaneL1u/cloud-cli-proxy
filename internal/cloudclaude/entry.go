@@ -68,13 +68,13 @@ func (c *EntryClient) CheckGateway(ctx context.Context) error {
 	return nil
 }
 
-func (c *EntryClient) Authenticate(ctx context.Context, shortID, password string) (*AuthResponse, error) {
+func (c *EntryClient) Authenticate(ctx context.Context, username, password string) (*AuthResponse, error) {
 	body, err := json.Marshal(map[string]string{"password": password})
 	if err != nil {
 		return nil, err
 	}
 
-	url := fmt.Sprintf("%s/v1/entry/%s/auth", c.gateway, shortID)
+	url := fmt.Sprintf("%s/v1/entry/%s/auth", c.gateway, username)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("构造认证请求失败: %w", err)
@@ -124,7 +124,7 @@ func (c *EntryClient) Authenticate(ctx context.Context, shortID, password string
 	return &authResp, nil
 }
 
-func (c *EntryClient) AuthenticateAndWait(ctx context.Context, shortID, password string, onWait func(msg string)) (*AuthResponse, error) {
+func (c *EntryClient) AuthenticateAndWait(ctx context.Context, username, password string, onWait func(msg string)) (*AuthResponse, error) {
 	if err := c.CheckGateway(ctx); err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (c *EntryClient) AuthenticateAndWait(ctx context.Context, shortID, password
 	deadline := time.Now().Add(c.pollTimeout)
 
 	for {
-		resp, err := c.Authenticate(ctx, shortID, password)
+		resp, err := c.Authenticate(ctx, username, password)
 		if err != nil {
 			return nil, err
 		}

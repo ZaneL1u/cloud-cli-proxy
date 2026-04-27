@@ -168,7 +168,7 @@ func ConnectAndRunClaudeV3(cfg SSHConfig, claudeArgs []string, cwd string,
 	// 自然处理；后续若需 ctx-cancel 由独立 phase 调整签名。
 	sessionCfg := SessionConfig{
 		AccountID:         mountCfg.ClaudeAccountID,
-		ShortID:           mountCfg.SessionShortID,
+		SessionID:         mountCfg.SessionShortID,
 		TakeOver:          mountCfg.SessionTakeOver,
 		KeepAliveInterval: mountCfg.KeepAliveInterval,
 		KeepAliveCountMax: mountCfg.KeepAliveCountMax,

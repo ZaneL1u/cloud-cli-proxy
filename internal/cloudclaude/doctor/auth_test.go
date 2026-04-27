@@ -27,7 +27,7 @@ func TestCheckConfigPresent_Fail(t *testing.T) {
 func TestCheckConfigPresent_Pass(t *testing.T) {
 	orig := loadConfig
 	loadConfig = func() (*cloudclaude.Config, error) {
-		return &cloudclaude.Config{Gateway: "https://gw.example.com", ShortID: "x", Password: "y"}, nil
+		return &cloudclaude.Config{Gateway: "https://gw.example.com", Username: "x", Password: "y"}, nil
 	}
 	t.Cleanup(func() { loadConfig = orig })
 	c, cfg := checkConfigPresent(context.Background())

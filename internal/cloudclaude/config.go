@@ -19,7 +19,7 @@ var DefaultProxyCommands = []string{"git"}
 
 type Config struct {
 	Gateway          string   `yaml:"gateway"`
-	ShortID          string   `yaml:"short_id"`
+	Username         string   `yaml:"username"`
 	Password         string   `yaml:"password"`
 	ProxyCommands    []string `yaml:"proxy_commands,omitempty"`
 	HotSyncMaxFileMB int      `yaml:"hot_sync_max_file_mb,omitempty"`
@@ -48,8 +48,8 @@ func (c *Config) Validate() error {
 	if c.Gateway == "" {
 		return fmt.Errorf("gateway 不能为空")
 	}
-	if c.ShortID == "" {
-		return fmt.Errorf("short_id 不能为空")
+	if c.Username == "" {
+		return fmt.Errorf("username 不能为空")
 	}
 	if c.Password == "" {
 		return fmt.Errorf("password 不能为空")

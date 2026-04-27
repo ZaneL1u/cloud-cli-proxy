@@ -311,7 +311,7 @@ func TestCheckGitProxyEnabled_Pass_ContainsGit(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "config.yaml"),
-		[]byte("gateway: https://example.com\nshort_id: test\npassword: test\nproxy_commands: [git, curl]\n"),
+		[]byte("gateway: https://example.com\nusername: test\npassword: test\nproxy_commands: [git, curl]\n"),
 		0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestCheckGitProxyEnabled_Warn_NoGit(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "config.yaml"),
-		[]byte("gateway: https://example.com\nshort_id: test\npassword: test\nproxy_commands: [curl]\n"),
+		[]byte("gateway: https://example.com\nusername: test\npassword: test\nproxy_commands: [curl]\n"),
 		0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}

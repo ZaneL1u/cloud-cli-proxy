@@ -195,7 +195,7 @@ func fixAuthTokenExpired(ctx context.Context, opts Options, _ Check) ([]string, 
 	if err != nil {
 		return nil, []string{"无法加载 config: " + err.Error()}
 	}
-	if _, err := execEntryRefresh(ctx, cfg.Gateway, cfg.ShortID, cfg.Password); err != nil {
+	if _, err := execEntryRefresh(ctx, cfg.Gateway, cfg.Username, cfg.Password); err != nil {
 		return nil, []string{"Entry API 刷新失败: " + err.Error()}
 	}
 	return []string{"Entry API token 已刷新"}, nil
@@ -206,9 +206,9 @@ func fixAuthOAuthRefreshFailed(ctx context.Context, opts Options, _ Check) ([]st
 	return nil, []string{"请在容器内运行 cloud-claude exec claude login 重新登录"}
 }
 
-func realExecEntryRefresh(ctx context.Context, gateway, shortID, password string) (*cloudclaude.AuthResponse, error) {
+func realExecEntryRefresh(ctx context.Context, gateway, username, password string) (*cloudclaude.AuthResponse, error) {
 	client := cloudclaude.NewEntryClient(gateway)
-	return client.AuthenticateAndWait(ctx, shortID, password, func(string) {})
+	return client.AuthenticateAndWait(ctx, username, password, func(string) {})
 }
 
 // ----------------------------------------------------------------------------
