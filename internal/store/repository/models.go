@@ -52,16 +52,18 @@ type Host struct {
 // HostSSHAuth holds the data needed by the SSH proxy resolver.
 type HostSSHAuth struct {
 	HostID        string
-	HostShortID   string
 	EntryPassword string
 	HostStatus    string
 	UserID        string
 	UserStatus    string
-	Username      string // 关联用户的 username，用于连接容器内 sshd
+	Username      string // SSH 登录用户名
 	// TemplateImageRef 对应 hosts.template_image_ref。
 	// Phase 30 Plan 02 会基于它推导 Entry API 的 image_version / supports_* 能力字段（D-05/D-06/D-07）。
 	// 数据层仅透传原值，不在此处做 tag 解析，避免数据层与协议层职责耦合。
 	TemplateImageRef string
+	// SSHPrivateKey 是控制面连接容器用的私钥（PEM 格式）。
+	// 当非空时，SSH proxy 优先使用公钥认证连接容器。
+	SSHPrivateKey string
 }
 
 type HostBinding struct {

@@ -16,9 +16,9 @@ import (
 )
 
 type EntryStore interface {
-	GetUserByShortID(context.Context, string) (repository.User, error)
+	GetUserByUsername(context.Context, string) (repository.User, error)
 	GetPrimaryHostByUserID(context.Context, string) (repository.Host, error)
-	GetHostByShortID(context.Context, string) (repository.HostSSHAuth, error)
+	GetHostByUsername(context.Context, string) (repository.HostSSHAuth, error)
 	GetUser(context.Context, string) (repository.User, error)
 	// ResolveClaudeAccountIDForEntry 供 ready 响应填充 claude_account_id（Phase 30 D-05）。
 	// 未命中返回 ok=false，而非错误。
@@ -57,8 +57,8 @@ func NewEntryHandler(logger *slog.Logger, store EntryStore, baseURL string) *Ent
 
 func (h *EntryHandler) Script() nethttp.Handler {
 	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
-		shortID := r.PathValue("shortId")
-		if shortID == "" {
+		username := r.PathValue("username")
+		if username == "" {
 			nethttp.NotFound(w, r)
 			return
 		}
@@ -97,7 +97,7 @@ else
   export SSH_ASKPASS="$ASKPASS" SSH_ASKPASS_REQUIRE=force
   exec ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" < /dev/tty
 fi
-`, base, shortID)
+`, base, username)
 
 		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 		w.WriteHeader(nethttp.StatusOK)
@@ -107,9 +107,9 @@ fi
 
 func (h *EntryHandler) Auth() nethttp.Handler {
 	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
-		shortID := r.PathValue("shortId")
-		if shortID == "" {
-			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "short_id is required"})
+		username := r.PathValue("username")
+		if username == "" {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "username is required"})
 			return
 		}
 
@@ -122,12 +122,12 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 		}
 
 		var user repository.User
-		var hostID, hostShortID, hostEntryPassword, hostStatus, templateImageRef string
+		var hostID, hostEntryPassword, hostStatus, templateImageRef string
 
-		hostAuth, hostErr := h.store.GetHostByShortID(r.Context(), shortID)
+		hostAuth, hostErr := h.store.GetHostByUsername(r.Context(), username)
 		if hostErr == nil {
-			h.logger.Info("entry auth: resolved by host short_id",
-				"short_id", shortID, "host_id", hostAuth.HostID, "host_status", hostAuth.HostStatus)
+			h.logger.Info("entry auth: resolved by username",
+				"username", username, "host_id", hostAuth.HostID, "host_status", hostAuth.HostStatus)
 			u, err := h.store.GetUser(r.Context(), hostAuth.UserID)
 			if err != nil {
 				h.logger.Error("entry auth: lookup host owner failed", "host_id", hostAuth.HostID, "error", err)
@@ -136,18 +136,18 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 			}
 			user = u
 			hostID = hostAuth.HostID
-			hostShortID = hostAuth.HostShortID
 			hostEntryPassword = hostAuth.EntryPassword
 			hostStatus = hostAuth.HostStatus
 			templateImageRef = hostAuth.TemplateImageRef
 		} else {
-			u, err := h.store.GetUserByShortID(r.Context(), shortID)
+			// 一期兼容：username 查不到时，尝试按旧 short_id 查 user 再 fallback 到 primary host
+			u, err := h.store.GetUserByUsername(r.Context(), username)
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					writeJSON(w, nethttp.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 					return
 				}
-				h.logger.Error("entry auth: lookup user failed", "short_id", shortID, "error", err)
+				h.logger.Error("entry auth: lookup user failed", "username", username, "error", err)
 				writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "internal error"})
 				return
 			}
@@ -165,10 +165,9 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 				writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "internal error"})
 				return
 			}
-			h.logger.Info("entry auth: resolved by user short_id (fallback to primary host)",
-				"short_id", shortID, "host_id", primaryHost.ID, "host_status", primaryHost.Status)
+			h.logger.Info("entry auth: resolved by username (fallback to primary host)",
+				"username", username, "host_id", primaryHost.ID, "host_status", primaryHost.Status)
 			hostID = primaryHost.ID
-			hostShortID = primaryHost.ShortID
 			hostEntryPassword = primaryHost.EntryPassword
 			hostStatus = primaryHost.Status
 			templateImageRef = primaryHost.TemplateImageRef
@@ -185,7 +184,7 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 		}
 
 		if hostStatus != "running" {
-			h.logger.Warn("entry auth: host not running", "short_id", shortID, "host_status", hostStatus)
+			h.logger.Warn("entry auth: host not running", "username", username, "host_status", hostStatus)
 			writeJSON(w, nethttp.StatusOK, map[string]any{
 				"status":  "not_ready",
 				"message": "Your machine is not running. Please contact admin.",
@@ -203,7 +202,7 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 		imageVersion, supportsMergerfs := deriveEntryCapabilities(templateImageRef)
 
 		resp := map[string]any{
-			"ssh_user":          hostShortID,
+			"ssh_user":          user.Username,
 			"ssh_pass":          hostEntryPassword,
 			"ssh_host":          sshHost,
 			"ssh_port":          2222,

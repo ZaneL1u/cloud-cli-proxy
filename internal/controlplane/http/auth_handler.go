@@ -30,10 +30,8 @@ func NewUnifiedLoginHandler(logger *slog.Logger, store AuthUserStore, jwtSecret 
 }
 
 type unifiedLoginRequest struct {
-	ShortID  string `json:"short_id"`
-	Password string `json:"password"`
-	// 兼容旧前端发送 username 字段
 	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 func (h *UnifiedLoginHandler) ServeHTTP(w nethttp.ResponseWriter, r *nethttp.Request) {
@@ -48,23 +46,18 @@ func (h *UnifiedLoginHandler) ServeHTTP(w nethttp.ResponseWriter, r *nethttp.Req
 		return
 	}
 
-	// 登录标识：优先使用 short_id 字段，否则使用 username（与网页表单「用户名」一致）
-	loginID := req.ShortID
-	if loginID == "" {
-		loginID = req.Username
-	}
-	if loginID == "" || req.Password == "" {
+	if req.Username == "" || req.Password == "" {
 		writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "username and password are required"})
 		return
 	}
 
-	user, err := h.store.GetUserByLoginIdentifierForAuth(r.Context(), loginID)
+	user, err := h.store.GetUserByLoginIdentifierForAuth(r.Context(), req.Username)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeJSON(w, nethttp.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 			return
 		}
-		h.logger.Error("unified login: lookup user failed", "login_id", loginID, "error", err)
+		h.logger.Error("unified login: lookup user failed", "username", req.Username, "error", err)
 		writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
 	}
@@ -88,7 +81,6 @@ func (h *UnifiedLoginHandler) ServeHTTP(w nethttp.ResponseWriter, r *nethttp.Req
 
 	writeJSON(w, nethttp.StatusOK, map[string]any{
 		"username":   user.Username,
-		"short_id":   user.ShortID,
 		"token":      tokenStr,
 		"role":       user.Role,
 		"expires_in": 86400,

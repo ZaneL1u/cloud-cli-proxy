@@ -188,8 +188,8 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 
 	if deps.EntryStore != nil {
 		entryHandler := NewEntryHandler(deps.Logger, deps.EntryStore, deps.EntryBaseURL)
-		mux.Handle("GET /entry/{shortId}", entryHandler.Script())
-		mux.Handle("POST /v1/entry/{shortId}/auth", entryHandler.Auth())
+		mux.Handle("GET /entry/{username}", entryHandler.Script())
+		mux.Handle("POST /v1/entry/{username}/auth", entryHandler.Auth())
 	}
 
 	if deps.Admin != nil {

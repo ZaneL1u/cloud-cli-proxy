@@ -1079,6 +1079,19 @@ func (r *Repository) ListEvents(ctx context.Context, params ListEventsParams) (L
 	return ListEventsResult{Events: events, Total: total}, nil
 }
 
+func (r *Repository) GetUserByUsername(ctx context.Context, username string) (User, error) {
+	var item User
+	if err := r.db.QueryRow(ctx, `
+		SELECT id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), COALESCE(ssh_public_key, ''), COALESCE(ssh_private_key, ''), COALESCE(ssh_key_type, ''), expires_at, created_at, updated_at
+		FROM users WHERE username = $1
+	`, username).Scan(&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.SSHPublicKey, &item.SSHPrivateKey, &item.SSHKeyType, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		return User{}, fmt.Errorf("get user by username: %w", err)
+	}
+	return item, nil
+}
+
+// GetUserByShortID 保留一期兼容。
+// 二期计划移除本方法。
 func (r *Repository) GetUserByShortID(ctx context.Context, shortID string) (User, error) {
 	var item User
 	if err := r.db.QueryRow(ctx, `
@@ -1177,23 +1190,49 @@ func (r *Repository) CreateUserWithRole(ctx context.Context, params CreateUserWi
 	return item, nil
 }
 
-// getHostByShortIDSQL 将 SQL 文本提升为包级常量，方便数据层回归测试断言
-// Wave 2 所需列（template_image_ref）已纳入 SELECT，且保持对 sshproxy / entry 的向后兼容。
-const getHostByShortIDSQL = `
-	SELECT h.id::text, h.short_id, h.entry_password, h.status,
+// getHostByUsernameSQL 将 SQL 文本提升为包级常量，方便数据层回归测试断言。
+// 按 username 查 host，同时 SELECT ssh_private_key 供控制面私钥认证容器。
+const getHostByUsernameSQL = `
+	SELECT h.id::text, h.entry_password, h.status,
 	       h.user_id::text, u.status, u.username,
-	       COALESCE(h.template_image_ref, '')
+	       COALESCE(h.template_image_ref, ''),
+	       COALESCE(u.ssh_private_key, '')
+	FROM hosts h
+	JOIN users u ON u.id = h.user_id
+	WHERE u.username = $1
+`
+
+// getHostByShortIDSQL 保留一期兼容：旧 short_id 仍可作为 fallback 查询。
+const getHostByShortIDSQL = `
+	SELECT h.id::text, h.entry_password, h.status,
+	       h.user_id::text, u.status, u.username,
+	       COALESCE(h.template_image_ref, ''),
+	       COALESCE(u.ssh_private_key, '')
 	FROM hosts h
 	JOIN users u ON u.id = h.user_id
 	WHERE h.short_id = $1
 `
 
+func (r *Repository) GetHostByUsername(ctx context.Context, username string) (HostSSHAuth, error) {
+	var item HostSSHAuth
+	if err := r.db.QueryRow(ctx, getHostByUsernameSQL, username).Scan(
+		&item.HostID, &item.EntryPassword,
+		&item.HostStatus, &item.UserID, &item.UserStatus, &item.Username,
+		&item.TemplateImageRef, &item.SSHPrivateKey,
+	); err != nil {
+		return HostSSHAuth{}, fmt.Errorf("get host by username: %w", err)
+	}
+	return item, nil
+}
+
+// GetHostByShortID 保留一期兼容，内部改调 GetHostByUsername 的 fallback 逻辑。
+// 二期计划移除本方法。
 func (r *Repository) GetHostByShortID(ctx context.Context, shortID string) (HostSSHAuth, error) {
 	var item HostSSHAuth
 	if err := r.db.QueryRow(ctx, getHostByShortIDSQL, shortID).Scan(
-		&item.HostID, &item.HostShortID, &item.EntryPassword,
+		&item.HostID, &item.EntryPassword,
 		&item.HostStatus, &item.UserID, &item.UserStatus, &item.Username,
-		&item.TemplateImageRef,
+		&item.TemplateImageRef, &item.SSHPrivateKey,
 	); err != nil {
 		return HostSSHAuth{}, fmt.Errorf("get host by short_id: %w", err)
 	}

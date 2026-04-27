@@ -18,14 +18,14 @@ import (
 )
 
 // stubEntryStore 覆盖 EntryHandler 的新老依赖：在 Phase 30 Wave 2 需要同时支持
-// GetHostByShortID 返回 template_image_ref、以及 ResolveClaudeAccountIDForEntry。
+// GetHostByUsername 返回 template_image_ref / ssh_private_key、以及 ResolveClaudeAccountIDForEntry。
 type stubEntryStore struct {
 	hostAuth          repository.HostSSHAuth
 	hostAuthErr       error
 	user              repository.User
 	userErr           error
-	userByShortID     repository.User
-	userByShortIDErr  error
+	userByUsername    repository.User
+	userByUsernameErr error
 	primaryHost       repository.Host
 	primaryHostErr    error
 	resolveAccountID  string
@@ -37,15 +37,15 @@ type stubEntryStore struct {
 	resolveCalled    bool
 }
 
-func (s *stubEntryStore) GetUserByShortID(_ context.Context, _ string) (repository.User, error) {
-	return s.userByShortID, s.userByShortIDErr
+func (s *stubEntryStore) GetUserByUsername(_ context.Context, _ string) (repository.User, error) {
+	return s.userByUsername, s.userByUsernameErr
 }
 
 func (s *stubEntryStore) GetPrimaryHostByUserID(_ context.Context, _ string) (repository.Host, error) {
 	return s.primaryHost, s.primaryHostErr
 }
 
-func (s *stubEntryStore) GetHostByShortID(_ context.Context, _ string) (repository.HostSSHAuth, error) {
+func (s *stubEntryStore) GetHostByUsername(_ context.Context, _ string) (repository.HostSSHAuth, error) {
 	return s.hostAuth, s.hostAuthErr
 }
 
@@ -69,13 +69,13 @@ func mustBcrypt(t *testing.T, password string) string {
 	return string(hash)
 }
 
-func doAuth(t *testing.T, store EntryStore, shortID, password string) (*httptest.ResponseRecorder, map[string]any) {
+func doAuth(t *testing.T, store EntryStore, username, password string) (*httptest.ResponseRecorder, map[string]any) {
 	t.Helper()
 	handler := NewEntryHandler(slog.Default(), store, "").Auth()
 	body, _ := json.Marshal(map[string]string{"password": password})
-	req := httptest.NewRequest(nethttp.MethodPost, "/v1/entry/"+shortID+"/auth", bytes.NewReader(body))
+	req := httptest.NewRequest(nethttp.MethodPost, "/v1/entry/"+username+"/auth", bytes.NewReader(body))
 	req.Host = "gateway.example.com"
-	req.SetPathValue("shortId", shortID)
+	req.SetPathValue("username", username)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -88,21 +88,21 @@ func doAuth(t *testing.T, store EntryStore, shortID, password string) (*httptest
 	return rec, resp
 }
 
-// TestEntryAuth_Ready_ViaHostShortID_V3Image 覆盖 D-03/D-06/D-07/D-08：
-// host short_id 路径，模板镜像 tag 为 v3.0.0 → ready 响应必须带齐扩展字段。
-func TestEntryAuth_Ready_ViaHostShortID_V3Image(t *testing.T) {
+// TestEntryAuth_Ready_ViaUsername_V3Image 覆盖 D-03/D-06/D-07/D-08：
+// username 路径，模板镜像 tag 为 v3.0.0 → ready 响应必须带齐扩展字段。
+func TestEntryAuth_Ready_ViaUsername_V3Image(t *testing.T) {
 	now := time.Now()
 	hash := mustBcrypt(t, "correct-horse")
 	store := &stubEntryStore{
 		hostAuth: repository.HostSSHAuth{
 			HostID:           "h1",
-			HostShortID:      "host-short-1",
 			EntryPassword:    "host-pwd",
 			HostStatus:       "running",
 			UserID:           "u1",
 			UserStatus:       "active",
 			Username:         "alice",
 			TemplateImageRef: "ghcr.io/example/cloud-claude:v3.0.0",
+			SSHPrivateKey:    "-----BEGIN OPENSSH PRIVATE KEY-----\ntest-key\n-----END OPENSSH PRIVATE KEY-----",
 		},
 		user: repository.User{
 			ID: "u1", Username: "alice", Status: "active", Role: "user",
@@ -111,12 +111,15 @@ func TestEntryAuth_Ready_ViaHostShortID_V3Image(t *testing.T) {
 		resolveAccountID: "claude-acct-1",
 		resolveAccountOK: true,
 	}
-	rec, resp := doAuth(t, store, "host-short-1", "correct-horse")
+	rec, resp := doAuth(t, store, "alice", "correct-horse")
 	if rec.Code != nethttp.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
 	if resp["status"] != "ready" {
 		t.Fatalf("status field = %v, want ready", resp["status"])
+	}
+	if resp["ssh_user"] != "alice" {
+		t.Errorf("ssh_user = %v, want alice", resp["ssh_user"])
 	}
 	if resp["image_version"] != "v3.0.0" {
 		t.Errorf("image_version = %v, want v3.0.0", resp["image_version"])
@@ -135,12 +138,12 @@ func TestEntryAuth_Ready_ViaHostShortID_V3Image(t *testing.T) {
 	}
 }
 
-// TestEntryAuth_Ready_ViaUserShortID_V3Image 覆盖 D-03/D-06/D-07/D-08 的用户 fallback 路径。
-func TestEntryAuth_Ready_ViaUserShortID_V3Image(t *testing.T) {
+// TestEntryAuth_Ready_ViaUsernameFallback_V3Image 覆盖 D-03/D-06/D-07/D-08 的 username fallback 路径。
+func TestEntryAuth_Ready_ViaUsernameFallback_V3Image(t *testing.T) {
 	hash := mustBcrypt(t, "correct-horse")
 	store := &stubEntryStore{
 		hostAuthErr: pgx.ErrNoRows,
-		userByShortID: repository.User{
+		userByUsername: repository.User{
 			ID: "u-99", Username: "bob", Status: "active", Role: "user", PasswordHash: hash,
 		},
 		primaryHost: repository.Host{
@@ -150,12 +153,15 @@ func TestEntryAuth_Ready_ViaUserShortID_V3Image(t *testing.T) {
 		resolveAccountID: "claude-acct-7",
 		resolveAccountOK: true,
 	}
-	rec, resp := doAuth(t, store, "user-short", "correct-horse")
+	rec, resp := doAuth(t, store, "bob", "correct-horse")
 	if rec.Code != nethttp.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
 	if resp["status"] != "ready" {
 		t.Fatalf("status = %v, want ready", resp["status"])
+	}
+	if resp["ssh_user"] != "bob" {
+		t.Errorf("ssh_user = %v, want bob", resp["ssh_user"])
 	}
 	if resp["image_version"] != "v3.0.0" {
 		t.Errorf("image_version = %v, want v3.0.0", resp["image_version"])
@@ -177,14 +183,14 @@ func TestEntryAuth_Ready_NoClaudeAccount_OmitsField(t *testing.T) {
 	hash := mustBcrypt(t, "correct-horse")
 	store := &stubEntryStore{
 		hostAuth: repository.HostSSHAuth{
-			HostID: "h1", HostShortID: "host-short-1", EntryPassword: "p",
+			HostID: "h1", EntryPassword: "p",
 			HostStatus: "running", UserID: "u1", UserStatus: "active", Username: "alice",
 			TemplateImageRef: "ghcr.io/example/cloud-claude:v2.0.0",
 		},
-		user: repository.User{ID: "u1", Status: "active", PasswordHash: hash},
+		user: repository.User{ID: "u1", Username: "alice", Status: "active", PasswordHash: hash},
 		// resolveAccountOK 默认为 false，resolveAccountID 默认为 ""
 	}
-	rec, resp := doAuth(t, store, "host-short-1", "correct-horse")
+	rec, resp := doAuth(t, store, "alice", "correct-horse")
 	if rec.Code != nethttp.StatusOK {
 		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
 	}
@@ -205,14 +211,14 @@ func TestEntryAuth_ResolverError_Returns500(t *testing.T) {
 	hash := mustBcrypt(t, "correct-horse")
 	store := &stubEntryStore{
 		hostAuth: repository.HostSSHAuth{
-			HostID: "h1", HostShortID: "host-short-1", EntryPassword: "p",
+			HostID: "h1", EntryPassword: "p",
 			HostStatus: "running", UserID: "u1", UserStatus: "active", Username: "alice",
 			TemplateImageRef: "ghcr.io/example/cloud-claude:v3.0.0",
 		},
-		user:              repository.User{ID: "u1", Status: "active", PasswordHash: hash},
+		user:              repository.User{ID: "u1", Username: "alice", Status: "active", PasswordHash: hash},
 		resolveAccountErr: fmt.Errorf("db down"),
 	}
-	rec, _ := doAuth(t, store, "host-short-1", "correct-horse")
+	rec, _ := doAuth(t, store, "alice", "correct-horse")
 	if rec.Code != nethttp.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500 on resolver error", rec.Code)
 	}
@@ -224,13 +230,13 @@ func TestEntryAuth_NotReady_DoesNotForceExtensionFields(t *testing.T) {
 	hash := mustBcrypt(t, "correct-horse")
 	store := &stubEntryStore{
 		hostAuth: repository.HostSSHAuth{
-			HostID: "h1", HostShortID: "host-short-1", EntryPassword: "p",
+			HostID: "h1", EntryPassword: "p",
 			HostStatus: "stopped", UserID: "u1", UserStatus: "active", Username: "alice",
 			TemplateImageRef: "ghcr.io/example/cloud-claude:v3.0.0",
 		},
-		user: repository.User{ID: "u1", Status: "active", PasswordHash: hash},
+		user: repository.User{ID: "u1", Username: "alice", Status: "active", PasswordHash: hash},
 	}
-	rec, resp := doAuth(t, store, "host-short-1", "correct-horse")
+	rec, resp := doAuth(t, store, "alice", "correct-horse")
 	if rec.Code != nethttp.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
@@ -252,13 +258,13 @@ func TestEntryAuth_InvalidCredentials_NoExtensions(t *testing.T) {
 	hash := mustBcrypt(t, "correct-horse")
 	store := &stubEntryStore{
 		hostAuth: repository.HostSSHAuth{
-			HostID: "h1", HostShortID: "host-short-1", EntryPassword: "p",
+			HostID: "h1", EntryPassword: "p",
 			HostStatus: "running", UserID: "u1", UserStatus: "active", Username: "alice",
 			TemplateImageRef: "ghcr.io/example/cloud-claude:v3.0.0",
 		},
-		user: repository.User{ID: "u1", Status: "active", PasswordHash: hash},
+		user: repository.User{ID: "u1", Username: "alice", Status: "active", PasswordHash: hash},
 	}
-	rec, resp := doAuth(t, store, "host-short-1", "wrong-password")
+	rec, resp := doAuth(t, store, "alice", "wrong-password")
 	if rec.Code != nethttp.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
 	}
