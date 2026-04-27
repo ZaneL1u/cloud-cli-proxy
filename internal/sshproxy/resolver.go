@@ -14,14 +14,15 @@ import (
 )
 
 type resolverRepo interface {
-	GetHostByShortID(ctx context.Context, shortID string) (repository.HostSSHAuth, error)
+	GetHostByUsername(ctx context.Context, username string) (repository.HostSSHAuth, error)
 	ListSSHKeysByUserAndPurpose(ctx context.Context, userID, purpose string) ([]repository.SSHKey, error)
 }
 
 type ContainerTarget struct {
-	Addr     string
-	User     string
-	Password string
+	Addr       string
+	User       string
+	Password   string
+	PrivateKey string // PEM 格式私钥，优先用于公钥认证
 }
 
 type RepoResolver struct {
@@ -32,8 +33,8 @@ func NewRepoResolver(repo resolverRepo) *RepoResolver {
 	return &RepoResolver{repo: repo}
 }
 
-func (r *RepoResolver) ResolveContainer(ctx context.Context, hostShortID, password string) (ContainerTarget, error) {
-	auth, err := r.repo.GetHostByShortID(ctx, hostShortID)
+func (r *RepoResolver) ResolveContainer(ctx context.Context, username, password string) (ContainerTarget, error) {
+	auth, err := r.repo.GetHostByUsername(ctx, username)
 	if err != nil {
 		return ContainerTarget{}, fmt.Errorf("host not found")
 	}
@@ -45,8 +46,8 @@ func (r *RepoResolver) ResolveContainer(ctx context.Context, hostShortID, passwo
 	return r.resolveTarget(ctx, auth)
 }
 
-func (r *RepoResolver) ResolveContainerByPublicKey(ctx context.Context, hostShortID string, clientKey gossh.PublicKey) (ContainerTarget, error) {
-	auth, err := r.repo.GetHostByShortID(ctx, hostShortID)
+func (r *RepoResolver) ResolveContainerByPublicKey(ctx context.Context, username string, clientKey gossh.PublicKey) (ContainerTarget, error) {
+	auth, err := r.repo.GetHostByUsername(ctx, username)
 	if err != nil {
 		return ContainerTarget{}, fmt.Errorf("host not found")
 	}
@@ -90,8 +91,10 @@ func (r *RepoResolver) resolveTarget(ctx context.Context, auth repository.HostSS
 	}
 
 	return ContainerTarget{
-		Addr:     fmt.Sprintf("%s:22", containerIP),
-		Password: auth.EntryPassword,
+		Addr:       fmt.Sprintf("%s:22", containerIP),
+		User:       auth.Username,
+		Password:   auth.EntryPassword,
+		PrivateKey: auth.SSHPrivateKey,
 	}, nil
 }
 

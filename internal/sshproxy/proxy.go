@@ -20,8 +20,8 @@ import (
 )
 
 type ContainerResolver interface {
-	ResolveContainer(ctx context.Context, hostShortID, password string) (ContainerTarget, error)
-	ResolveContainerByPublicKey(ctx context.Context, hostShortID string, clientKey ssh.PublicKey) (ContainerTarget, error)
+	ResolveContainer(ctx context.Context, username, password string) (ContainerTarget, error)
+	ResolveContainerByPublicKey(ctx context.Context, username string, clientKey ssh.PublicKey) (ContainerTarget, error)
 }
 
 type Server struct {
@@ -131,9 +131,10 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 			}
 			return &ssh.Permissions{
 				Extensions: map[string]string{
-					"target_addr":     target.Addr,
-					"target_user":     target.User,
-					"target_password": target.Password,
+					"target_addr":        target.Addr,
+					"target_user":        target.User,
+					"target_password":    target.Password,
+					"target_private_key": target.PrivateKey,
 				},
 			}, nil
 		},
@@ -148,9 +149,10 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 			}
 			return &ssh.Permissions{
 				Extensions: map[string]string{
-					"target_addr":     target.Addr,
-					"target_user":     target.User,
-					"target_password": target.Password,
+					"target_addr":        target.Addr,
+					"target_user":        target.User,
+					"target_password":    target.Password,
+					"target_private_key": target.PrivateKey,
 				},
 			}, nil
 		},
@@ -196,6 +198,7 @@ func (s *Server) handleConnection(netConn net.Conn, config *ssh.ServerConfig) {
 	targetAddr := ext["target_addr"]
 	targetUser := ext["target_user"]
 	targetPassword := ext["target_password"]
+	targetPrivateKey := ext["target_private_key"]
 	s.logger.Info("SSH proxy session", "user", sshConn.User(), "target", targetAddr, "container_user", targetUser, "remote", netConn.RemoteAddr())
 
 	go ssh.DiscardRequests(globalReqs)
@@ -205,11 +208,11 @@ func (s *Server) handleConnection(netConn net.Conn, config *ssh.ServerConfig) {
 			newChan.Reject(ssh.UnknownChannelType, "only session channels supported")
 			continue
 		}
-		go s.handleChannel(newChan, targetAddr, targetUser, targetPassword)
+		go s.handleChannel(newChan, targetAddr, targetUser, targetPassword, targetPrivateKey)
 	}
 }
 
-func (s *Server) handleChannel(newChan ssh.NewChannel, targetAddr, targetUser, targetPassword string) {
+func (s *Server) handleChannel(newChan ssh.NewChannel, targetAddr, targetUser, targetPassword, targetPrivateKey string) {
 	clientChan, clientReqs, err := newChan.Accept()
 	if err != nil {
 		s.logger.Error("accept channel failed", "error", err)
@@ -226,13 +229,19 @@ func (s *Server) handleChannel(newChan ssh.NewChannel, targetAddr, targetUser, t
 	if pass == "" {
 		pass = s.containerPassword
 	}
-	// 密码优先：先尝试公钥会占用 OpenSSH 的 MaxAuthTries，导致密码未尝试；
-	// 部分发行版仅宣告 keyboard-interactive，需同时提供 KeyboardInteractive。
-	authMethods := []ssh.AuthMethod{
-		ssh.Password(pass),
-		passwordKeyboardInteractive(pass),
-		ssh.PublicKeys(s.hostKey),
+
+	var authMethods []ssh.AuthMethod
+	if targetPrivateKey != "" && (strings.Contains(targetPrivateKey, "BEGIN OPENSSH PRIVATE KEY") || strings.Contains(targetPrivateKey, "BEGIN RSA PRIVATE KEY") || strings.Contains(targetPrivateKey, "BEGIN EC PRIVATE KEY") || strings.Contains(targetPrivateKey, "BEGIN DSA PRIVATE KEY")) {
+		signer, err := ssh.ParsePrivateKey([]byte(targetPrivateKey))
+		if err == nil {
+			authMethods = append(authMethods, ssh.PublicKeys(signer))
+			s.logger.Debug("SSH proxy using private key auth for container", "addr", targetAddr, "user", user)
+		} else {
+			s.logger.Warn("SSH proxy failed to parse target private key, falling back to password", "error", err)
+		}
 	}
+	// 密码 fallback：始终追加，确保私钥失败后仍有退路
+	authMethods = append(authMethods, ssh.Password(pass), passwordKeyboardInteractive(pass), ssh.PublicKeys(s.hostKey))
 
 	targetConfig := &ssh.ClientConfig{
 		User:            user,
