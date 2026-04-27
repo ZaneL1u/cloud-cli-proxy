@@ -10,7 +10,7 @@ func init() {
 		Code:       DISK_LOCAL_LOW,
 		Severity:   SeverityWarn,
 		Message:    "本地 ~/.cloud-claude/ 可用空间 %dMB，低于警戒线",
-		NextAction: "清理 ~/.cloud-claude/mutagen/ 或释放本地磁盘",
+		NextAction: "清理 ~/.cloud-claude/hotsync/ 或释放本地磁盘",
 	})
 
 	MustRegister(Entry{
@@ -21,9 +21,9 @@ func init() {
 	})
 
 	MustRegister(Entry{
-		Code:       DISK_MUTAGEN_DATA_BLOAT,
+		Code:       DISK_HOTSYNC_DATA_BLOAT,
 		Severity:   SeverityWarn,
-		Message:    "Mutagen 数据目录 ~/.cloud-claude/mutagen/ 已达 %s，超过 1GB 警戒线",
-		NextAction: "运行 mutagen daemon stop && rm -rf ~/.cloud-claude/mutagen/sessions/",
+		Message:    "HotSync 数据目录 ~/.cloud-claude/hotsync/ 已达 %s，超过 1GB 警戒线",
+		NextAction: "运行 rm -rf ~/.cloud-claude/hotsync/sessions/ 后重启 cloud-claude",
 	})
 }

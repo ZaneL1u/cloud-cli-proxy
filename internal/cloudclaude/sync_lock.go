@@ -1,4 +1,4 @@
-// Package cloudclaude — Phase 32 Plan 03 账号级 Mutagen 单例锁。
+// Package cloudclaude — Phase 32 Plan 03 账号级热同步单例锁。
 //
 // 在远端容器内通过 flock(1) 创建账号级单例：同一 claude_account 在
 // 容器内同一时刻只能有一个 cloud-claude 后端持有锁。后端拿不到锁即
@@ -28,7 +28,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// ErrSyncLocked 表示另一端 cloud-claude 已持有同一 claude_account 的 Mutagen 单例锁。
+// ErrSyncLocked 表示另一端 cloud-claude 已持有同一 claude_account 的热同步单例锁。
 //
 // 调用方（mount_strategy.go::MountWorkspace 经 mountCfg.SyncSessionLock）应当：
 //  1. 视为非致命，降级到 sshfs-only（只读视图）；

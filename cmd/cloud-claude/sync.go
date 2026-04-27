@@ -35,7 +35,7 @@ func newSyncCmd() *cobra.Command {
 }
 
 // runSyncConflicts 仅读取本地上次会话快照，不发起 SSH 连接。
-// 当前实现不再依赖 Mutagen daemon，也不维护逐文件冲突清单。
+// 当前实现不再依赖外部同步 daemon，也不维护逐文件冲突清单。
 func runSyncConflicts(cmd *cobra.Command, args []string) error {
 	snap, err := cloudclaude.LoadLastSession()
 	if err != nil {

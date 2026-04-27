@@ -15,9 +15,7 @@ func TestErrcodesRegistry(t *testing.T) {
 		t.Fatalf("注册表条目不足：want >= 30, got %d", len(reg))
 	}
 
-	// PLAN 原表达式 ^[A-Z]+_[A-Z]+_[A-Z0-9]+$ 仅允许 3 段，
-	// 但实际 code（如 MOUNT_MUTAGEN_VERSION_SKEW）为 4 段；故放宽为 3+ 段。
-	// 见 SUMMARY.md「Deviations from Plan - Rule 1」。
+	// 命名规范：^[A-Z]+_[A-Z]+_[A-Z0-9]+(_[A-Z0-9]+)*$，允许 3+ 段。
 	re := regexp.MustCompile(`^[A-Z]+_[A-Z]+_[A-Z0-9]+(_[A-Z0-9]+)*$`)
 
 	seen := map[Code]struct{}{}
@@ -48,8 +46,8 @@ func TestErrcodesRegistry(t *testing.T) {
 }
 
 func TestFormat_Render(t *testing.T) {
-	got := Format(MOUNT_MUTAGEN_VERSION_SKEW, "v0.18.1", "v0.99.99")
-	want := "[MOUNT_MUTAGEN_VERSION_SKEW] Mutagen 客户端版本 (v0.18.1) 与容器内 agent 版本 (v0.99.99) 不一致，已降级到 sshfs-only\n  建议: 升级容器镜像到 v3.0.0+ 或重装 cloud-claude"
+	got := Format(MOUNT_HOT_SYNC_FAILED, "SFTP 连接断开")
+	want := "[MOUNT_HOT_SYNC_FAILED] 热同步失败: SFTP 连接断开\n  建议: 检查当前目录可读写、远端 staging 路径权限，或回退到 sshfs-only"
 	if got != want {
 		t.Errorf("Format 输出不匹配模板：\nwant:\n%s\n\ngot:\n%s", want, got)
 	}

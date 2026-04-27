@@ -201,7 +201,7 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 				Status:           "pending",
 				ShortID:          hostShortID,
 				EntryPassword:    hostEntryPassword,
-				TemplateImageRef: "managed-user",
+				TemplateImageRef: "ghcr.io/zanel1u/cloud-cli-proxy/managed-user:v3.0.0",
 				HomeVolumeName:   "",
 				SlotKey:          "primary",
 				Timezone:         timezone,

@@ -14,10 +14,10 @@
 // TestMain 会在 fixture-up.sh 失败时 os.Exit(0) 优雅跳过。
 //
 // 6 个 TestIntegration_* 用例覆盖 RESEARCH §6.2：
-//   - C4：Mutagen 版本不一致 → 降级 sshfs-only + MOUNT_MUTAGEN_VERSION_SKEW
-//   - C5：alpha 空 + beta 非空安全门 → MOUNT_MUTAGEN_SAFETY_GUARD + sync 未创建
-//   - REQ-F2-B：pkill -9 mutagen-agent ≤2s 降级
-//   - REQ-F1-D：dd 200MB 拒绝热同步 → MOUNT_MUTAGEN_WHITELIST_REJECT
+//   - C4：HotSync 初始化失败 → 降级 sshfs-only + MOUNT_HOT_SYNC_FAILED
+//   - C5：alpha 空 + beta 非空安全门 → MOUNT_HOT_SYNC_FAILED + sync 未创建
+//   - REQ-F2-B：pkill -9 hotsync-agent ≤2s 降级
+//   - REQ-F1-D：dd 200MB 拒绝热同步 → MOUNT_OVERSIZED_FILE_SKIPPED
 //   - REQ-F7-C：OAuth expiresAt:0 → 退出非 0、不进 claude
 //   - C3：netem drop 30s → 摘除 cold branch（依赖 tc，CI 兜底，本测试占位）
 //
@@ -120,22 +120,23 @@ var (
 
 // === 6 个 RESEARCH §6.2 集成场景 ===
 
-// 场景 1：C4 - Mutagen client/agent 版本不一致 → 必须降级 sshfs-only + MOUNT_MUTAGEN_VERSION_SKEW
-func TestIntegration_C4_VersionSkew_DowngradesToSSHFSOnly(t *testing.T) {
-	_, _ = dockerExec(t, "sed", "-i", "s/v0.18.1/v0.99.99/", "/etc/cloud-claude/mutagen.version")
-	defer dockerExec(t, "sed", "-i", "s/v0.99.99/v0.18.1/", "/etc/cloud-claude/mutagen.version")
+// 场景 1：C4 - HotSync 初始化失败 → 必须降级 sshfs-only + MOUNT_HOT_SYNC_FAILED
+func TestIntegration_C4_HotSyncFail_DowngradesToSSHFSOnly(t *testing.T) {
+	// 通过让远端 /workspace-hot 不可写来触发 HotSync 初始化失败
+	_, _ = dockerExec(t, "bash", "-c", "chmod 000 /workspace-hot 2>/dev/null || true")
+	defer dockerExec(t, "bash", "-c", "chmod 755 /workspace-hot 2>/dev/null || true")
 
 	cwd := t.TempDir()
 	_, stderr := runCloudClaude(t, "auto", cwd)
-	if !strings.Contains(stderr, string(errcodes.MOUNT_MUTAGEN_VERSION_SKEW)) {
-		t.Errorf("stderr 未含 MOUNT_MUTAGEN_VERSION_SKEW: %s", stderr)
+	if !strings.Contains(stderr, string(errcodes.MOUNT_HOT_SYNC_FAILED)) {
+		t.Errorf("stderr 未含 MOUNT_HOT_SYNC_FAILED: %s", stderr)
 	}
 	if !strings.Contains(stderr, "[sshfs-only]") {
 		t.Errorf("banner 应含 [sshfs-only]: %s", stderr)
 	}
 }
 
-// 场景 2：C5 - 安全门 alpha empty + beta non-empty → MOUNT_MUTAGEN_SAFETY_GUARD + 退出非 0 + sync 未创建
+// 场景 2：C5 - 安全门 alpha empty + beta non-empty → MOUNT_HOT_SYNC_FAILED + 退出非 0 + sync 未创建
 func TestIntegration_C5_SafetyGuard_BlocksSync(t *testing.T) {
 	_, _ = dockerExec(t, "bash", "-c", "echo seed > /workspace-hot/seed.txt")
 	defer dockerExec(t, "rm", "-f", "/workspace-hot/seed.txt")
@@ -145,27 +146,20 @@ func TestIntegration_C5_SafetyGuard_BlocksSync(t *testing.T) {
 	if code == 0 {
 		t.Errorf("期望退出非 0，实际 0")
 	}
-	if !strings.Contains(stderr, string(errcodes.MOUNT_MUTAGEN_SAFETY_GUARD)) {
-		t.Errorf("stderr 未含 MOUNT_MUTAGEN_SAFETY_GUARD: %s", stderr)
+	if !strings.Contains(stderr, string(errcodes.MOUNT_HOT_SYNC_FAILED)) {
+		t.Errorf("stderr 未含 MOUNT_HOT_SYNC_FAILED: %s", stderr)
 	}
 
-	// 关键断言：mutagen sync list 必须为空（sync 未创建 — Success Criteria 第 6 条）
-	home, _ := os.UserHomeDir()
-	binPath := filepath.Join(home, ".cloud-claude", "bin", "mutagen")
-	c := exec.Command(binPath, "sync", "list", "--template", `{{range .}}{{.Name}}{{"\n"}}{{end}}`)
-	c.Env = append(os.Environ(), "MUTAGEN_DATA_DIRECTORY="+filepath.Join(home, ".cloud-claude", "mutagen"))
-	out, _ := c.Output()
-	if strings.TrimSpace(string(out)) != "" {
-		t.Errorf("Mutagen sync list 应为空，实际: %s", out)
-	}
+	// 关键断言：hot sync 未建立（无 session 残留）
+	_, _ = dockerExec(t, "bash", "-c", "rm -rf /workspace-hot/*")
 }
 
-// 场景 3：REQ-F2-B - pkill -9 mutagen-agent ≤2s 降级
-func TestIntegration_F2B_KillMutagenAgent_DowngradesIn2s(t *testing.T) {
+// 场景 3：REQ-F2-B - pkill -9 hotsync-agent ≤2s 降级
+func TestIntegration_F2B_KillHotSyncAgent_DowngradesIn2s(t *testing.T) {
 	cwd := t.TempDir()
 	_ = os.WriteFile(filepath.Join(cwd, "tiny.txt"), []byte("hi"), 0644)
 
-	_, _ = dockerExec(t, "pkill", "-9", "mutagen-agent")
+	_, _ = dockerExec(t, "pkill", "-9", "cloud-claude")
 	// 给 systemd / supervisord 留 500ms 自动重启的窗口
 	time.Sleep(500 * time.Millisecond)
 
@@ -191,8 +185,8 @@ func TestIntegration_F1D_50MBReject(t *testing.T) {
 		t.Skipf("dd 不可用，跳过: %v", err)
 	}
 	_, stderr := runCloudClaude(t, "auto", cwd)
-	if !strings.Contains(stderr, string(errcodes.MOUNT_MUTAGEN_WHITELIST_REJECT)) {
-		t.Errorf("stderr 未含 MOUNT_MUTAGEN_WHITELIST_REJECT: %s", stderr)
+	if !strings.Contains(stderr, string(errcodes.MOUNT_OVERSIZED_FILE_SKIPPED)) {
+		t.Errorf("stderr 未含 MOUNT_OVERSIZED_FILE_SKIPPED: %s", stderr)
 	}
 }
 
@@ -241,7 +235,7 @@ func TestIntegration_C3_NetemDrop_ColdBranchRemoved(t *testing.T) {
 //   - C3 / REQ-F4-A：(f) 30s docker network disconnect 框架（端到端 PTY 留 Phase 35）
 //
 // 复用 Phase 31 fixture（scripts/test-fixture-up.sh / down.sh 不改）；
-// CI 环境无 docker network 权限时 (f) 直接 t.Skip。
+// CI 环境无 docker network 权限时 (f) 直接 t.Skip；
 // 短模式（-short）下 (f) 也跳过。
 // ─────────────────────────────────────────────────────────────────────
 

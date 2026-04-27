@@ -1192,9 +1192,11 @@ func (r *Repository) CreateUserWithRole(ctx context.Context, params CreateUserWi
 
 // getHostByUsernameSQL 将 SQL 文本提升为包级常量，方便数据层回归测试断言。
 // 按 username 查 host，同时 SELECT ssh_private_key 供控制面私钥认证容器。
+// ContainerUser 硬编码为 'workspace'，与容器镜像 entrypoint 的 CONTAINER_USER 默认值一致。
 const getHostByUsernameSQL = `
 	SELECT h.id::text, h.entry_password, h.status,
 	       h.user_id::text, u.status, u.username,
+	       'workspace',
 	       COALESCE(h.template_image_ref, ''),
 	       COALESCE(u.ssh_private_key, '')
 	FROM hosts h
@@ -1206,6 +1208,7 @@ const getHostByUsernameSQL = `
 const getHostByShortIDSQL = `
 	SELECT h.id::text, h.entry_password, h.status,
 	       h.user_id::text, u.status, u.username,
+	       'workspace',
 	       COALESCE(h.template_image_ref, ''),
 	       COALESCE(u.ssh_private_key, '')
 	FROM hosts h
@@ -1218,6 +1221,7 @@ func (r *Repository) GetHostByUsername(ctx context.Context, username string) (Ho
 	if err := r.db.QueryRow(ctx, getHostByUsernameSQL, username).Scan(
 		&item.HostID, &item.EntryPassword,
 		&item.HostStatus, &item.UserID, &item.UserStatus, &item.Username,
+		&item.ContainerUser,
 		&item.TemplateImageRef, &item.SSHPrivateKey,
 	); err != nil {
 		return HostSSHAuth{}, fmt.Errorf("get host by username: %w", err)
@@ -1232,6 +1236,7 @@ func (r *Repository) GetHostByShortID(ctx context.Context, shortID string) (Host
 	if err := r.db.QueryRow(ctx, getHostByShortIDSQL, shortID).Scan(
 		&item.HostID, &item.EntryPassword,
 		&item.HostStatus, &item.UserID, &item.UserStatus, &item.Username,
+		&item.ContainerUser,
 		&item.TemplateImageRef, &item.SSHPrivateKey,
 	); err != nil {
 		return HostSSHAuth{}, fmt.Errorf("get host by short_id: %w", err)

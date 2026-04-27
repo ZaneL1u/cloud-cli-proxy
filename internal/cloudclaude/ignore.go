@@ -1,7 +1,9 @@
 // Package cloudclaude — gitignore-style 忽略规则解析。
 //
-// 用于把用户工程根目录下的 .gitignore 喂给热同步引擎：
-// 命中 ignore 的文件/目录不走 hot 同步，留在 cold 层通过 sshfs 按需读取。
+// 用于把用户工程根目录下的 .gitignore（以及可选的 .cloud-claude-ignore）喂给
+// 两个路径：
+//  1. 前置体积检查 localDuBytes —— 命中 ignore 的文件不计入 50MB 阈值
+//  2. HotSync 热同步 —— 命中 ignore 的 pattern 不会进入热同步扫描列表
 //
 // 设计目标：覆盖 gitignore 常见 95% pattern，不引入新依赖，行为可被测试锁住。
 // 显式不支持的 gitignore 特性：
@@ -36,13 +38,14 @@ type IgnoreMatcher struct {
 // DefaultBinaryIgnorePatterns 是 cloud-claude 内置的"媒体/二进制"扩展名黑名单。
 //
 // 设计要点：
-//   - 按扩展名精确匹配（gitignore pattern），不做文件大小判定，不需要 per-file stat
+//   - 按扩展名精确匹配（gitignore pattern），不做文件大小判定，契合 HotSync
+//     扫描逻辑、不需要 per-file stat
 //   - 命中文件走 sshfs 冷层按需拉取（Full 模式下 /workspace-cold 里仍可访问），
-//     不会进入 hot sync 的首次全量传输
+//     不会进入 HotSync 的首次全量传输
 //   - 歧义扩展名（`*.bin` / `*.obj` 等）刻意不入表，避免 C 工程 target object
 //     / 通用二进制 blob 被误伤；此类文件用户应在 .gitignore 自行处理
-//   - 用户在 .gitignore 用 `!foo.png` 之类 negation 能把具体文件救回 hot 路径
-//     （gitignore 顺序覆盖语义）
+//   - 用户在 .gitignore 或 .cloud-claude-ignore 用 `!foo.png` 之类 negation 能
+//     把具体文件救回到 HotSync 热同步路径（gitignore 顺序覆盖语义）
 //
 // 如果整体禁用，设置环境变量 CLOUD_CLAUDE_NO_DEFAULT_IGNORE=1。
 var DefaultBinaryIgnorePatterns = []string{
@@ -55,7 +58,7 @@ var DefaultBinaryIgnorePatterns = []string{
 	"*.m4v", "*.mpg", "*.mpeg",
 	// ===== 音频 =====
 	"*.mp3", "*.wav", "*.flac", "*.aac", "*.ogg", "*.m4a", "*.wma", "*.opus",
-	// ===== 光栅图片（SVG / ICO 是矢量或小体积，保留走 mutagen）=====
+	// ===== 光栅图片（SVG / ICO 是矢量或小体积，保留走 HotSync）=====
 	"*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.tiff", "*.tif",
 	"*.heic", "*.heif", "*.webp", "*.avif", "*.psd", "*.ai",
 	// ===== 字体 =====
@@ -69,7 +72,7 @@ var DefaultBinaryIgnorePatterns = []string{
 	"*.sqlite", "*.sqlite3", "*.sqlite-journal", "*.mdb",
 	// ===== CAD / 工程 =====
 	"*.dxf", "*.dwg", "*.step", "*.stp", "*.igs", "*.iges",
-	// ===== 办公文档（二进制，不适合 mutagen 双向同步）=====
+	// ===== 办公文档（二进制，不适合 HotSync 双向同步）=====
 	"*.pdf", "*.doc", "*.docx", "*.ppt", "*.pptx", "*.xls", "*.xlsx",
 	// ===== 进程崩溃 core dump（claude / Node / Python 常见产物）=====
 	"core", "core.*",
@@ -86,12 +89,12 @@ func LoadGitIgnorePatterns(cwd string) []string {
 	return lines
 }
 
-// LoadMountIgnorePatterns 返回挂载流程实际使用的合并 ignore 列表：
+// LoadMountIgnorePatterns 返回 HotSync 挂载流程实际使用的合并 ignore 列表：
 //
 //	[DefaultBinaryIgnorePatterns...] + [用户 .gitignore]
 //
-// 默认二进制黑名单在前、.gitignore 规则在后，后出现规则覆盖语义使得用户写
-// `!specific.png` 能够把被黑名单命中的具体文件救回热同步。
+// 默认黑名单在前、用户规则在后，后出现规则覆盖语义使得用户写 `!specific.png`
+// 能够把被黑名单命中的具体文件救回 HotSync 热同步。
 //
 // 环境变量 CLOUD_CLAUDE_NO_DEFAULT_IGNORE=1 时完全不启用默认黑名单，等价于
 // 仅用户 .gitignore。用于排查黑名单误伤或需要同步特殊二进制的场景。

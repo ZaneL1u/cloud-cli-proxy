@@ -31,7 +31,7 @@ func checkConfigPresent(ctx context.Context) (Check, *cloudclaude.Config) {
 }
 
 // checkEntryTokenValid — AUTH_TOKEN_EXPIRED (Warn)：调 AuthenticateAndWait dry-run，200 pass / 401 warn。
-// 返回 authResp 供后续 check（mount.mutagen_version_match / auth.oauth_credentials）复用。
+// 返回 authResp 供后续 check（auth.oauth_credentials）复用。
 func checkEntryTokenValid(ctx context.Context, cfg *cloudclaude.Config) (Check, *cloudclaude.AuthResponse) {
 	if cfg == nil {
 		return newSkip("auth", "entry_token_valid", "未加载 config，跳过"), nil

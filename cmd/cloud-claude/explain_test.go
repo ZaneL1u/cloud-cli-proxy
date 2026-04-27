@@ -62,14 +62,14 @@ func runExplainBin(t *testing.T, bin string, args ...string) (exitCode int, stdo
 }
 
 // TestExplain_KnownCode_Exit0 — 覆盖 REQ-F8-C / ROADMAP §Phase 34 SC#8：
-// cloud-claude explain MOUNT_MUTAGEN_VERSION_SKEW 必须 exit 0 + stdout 含错误码字面量 + "建议:" 子串。
+// cloud-claude explain MOUNT_HOT_SYNC_FAILED 必须 exit 0 + stdout 含错误码字面量 + "建议:" 子串。
 func TestExplain_KnownCode_Exit0(t *testing.T) {
 	bin := buildOnceExplainBin(t)
-	code, stdout, stderr := runExplainBin(t, bin, "explain", "MOUNT_MUTAGEN_VERSION_SKEW")
+	code, stdout, stderr := runExplainBin(t, bin, "explain", "MOUNT_HOT_SYNC_FAILED")
 	if code != 0 {
 		t.Fatalf("known code 应 exit 0，实际 %d；stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stdout, "MOUNT_MUTAGEN_VERSION_SKEW") {
+	if !strings.Contains(stdout, "MOUNT_HOT_SYNC_FAILED") {
 		t.Errorf("stdout 未包含错误码字面量: %q", stdout)
 	}
 	if !strings.Contains(stdout, "建议:") {
@@ -97,10 +97,10 @@ func TestExplain_UnknownCode_Exit4(t *testing.T) {
 }
 
 // TestExplain_CaseSensitive_LowerCaseUnknown — 覆盖 RESEARCH §8.4 / PITFALLS C8：
-// cloud-claude explain mount_mutagen_version_skew（小写）必须 exit 4，禁止自动修正。
+// cloud-claude explain mount_hot_sync_failed（小写）必须 exit 4，禁止自动修正。
 func TestExplain_CaseSensitive_LowerCaseUnknown(t *testing.T) {
 	bin := buildOnceExplainBin(t)
-	code, _, stderr := runExplainBin(t, bin, "explain", "mount_mutagen_version_skew")
+	code, _, stderr := runExplainBin(t, bin, "explain", "mount_hot_sync_failed")
 	if code != 4 {
 		t.Fatalf("lower-case 输入应 exit 4（禁止自动修正），实际 %d；stderr=%q", code, stderr)
 	}

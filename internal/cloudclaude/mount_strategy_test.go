@@ -452,7 +452,7 @@ func TestMountWorkspace_SyncLocked(t *testing.T) {
 
 // TestMountWorkspace_SyncLockSuccess 验证成功分支：SyncSessionLock 返回非 nil release。
 //   - mount 全栈成功（Full 模式 hooks 全 OK）
-//   - cleanup 调用时 LIFO 顺序：先卸 mergerfs / sshfs / mutagen（modeCleanup 内部 LIFO），
+//   - cleanup 调用时 LIFO 顺序：先卸 mergerfs / sshfs / hotsync（modeCleanup 内部 LIFO），
 //     再释放 sync 锁（syncRelease）—— 锁覆盖整个 mount 生命周期
 //   - 成功拿锁不触发 IsSecondaryClient（保持 false）
 func TestMountWorkspace_SyncLockSuccess(t *testing.T) {

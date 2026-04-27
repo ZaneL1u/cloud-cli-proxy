@@ -1,6 +1,6 @@
 // Package doctor — Phase 34 Plan 03：doctor --fix 自动修复 + FixerRegistry + confirmDestructive。
 //
-// 4 类修复（CONTEXT D-09 表，经移除 Mutagen 后）：
+// 4 类修复（CONTEXT D-09 表）：
 //  1. SYSTEM_FUSE_RESIDUAL_MOUNT       → fusermount -u <path>（批量 y/N 确认）
 //  2. SSH_KNOWN_HOSTS_CONFLICT         → ssh-keygen -R <host:port>（低危 / 免确认）
 //  3. AUTH_TOKEN_EXPIRED / AUTH_OAUTH_REFRESH_FAILED → 重调 EntryClient.AuthenticateAndWait（低危 / 免确认）
@@ -56,7 +56,7 @@ func init() {
 //  1. opts.Yes=true           → true  （CI 友好）
 //  2. opts.JSON=true          → false + 调用方写 FixFailed «JSON 模式禁止交互式修复，请在终端模式重试或追加 --yes»
 //  3. 非 TTY（stdin 非 pipe）  → false + 调用方写 FixFailed «非 TTY 环境，请追加 --yes 或在终端重试»
-//  4. 否则交互 y/N（提示字面量风格与 mutagen 一致）
+//  4. 否则交互 y/N（提示字面量风格与 HotSync 一致）
 //
 // 返回 (confirmed bool, refusalReason string)。refusalReason 为空说明用户确认（或 --yes）。
 func confirmDestructive(opts Options, promptZH string) (bool, string) {

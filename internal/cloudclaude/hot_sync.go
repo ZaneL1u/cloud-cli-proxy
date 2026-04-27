@@ -16,7 +16,13 @@ import (
 	"github.com/zanel1u/cloud-cli-proxy/internal/cloudclaude/errcodes"
 )
 
-const defaultHotSyncInterval = 1 * time.Second
+const (
+	defaultHotSyncInterval = 1 * time.Second
+	minHotSyncInterval     = 500 * time.Millisecond
+	maxHotSyncInterval     = 5 * time.Second
+	idleBackoffFactor      = 1.5
+	activeSpeedupFactor    = 0.5
+)
 
 // HotSyncStatus 是热同步层返回的扩展状态。
 // 供 banner / last-session.json 展示。
@@ -29,7 +35,7 @@ type HotSyncStatus struct {
 }
 
 // HotSyncConfig 描述基于现有 SSH 隧道的热同步配置。
-// 它替代 Mutagen，不再额外启动任何 ssh/scp/daemon 进程。
+// 它替代外部同步工具，不再额外启动任何 ssh/scp/daemon 进程。
 type HotSyncConfig struct {
 	LocalDir       string
 	RemoteDir      string
@@ -66,11 +72,17 @@ func (e *hotSyncErr) Error() string       { return errcodes.Format(errcodes.MOUN
 func (e *hotSyncErr) Code() errcodes.Code { return errcodes.MOUNT_HOT_SYNC_FAILED }
 func (e *hotSyncErr) Reason() string      { return e.reason }
 
-// HotSyncEngine 在 connB 上维持一个 SFTP client，通过秒级轮询实现双向热同步。
+// HotSyncEngine 在 connB 上维持一个 SFTP client，通过自适应轮询实现双向热同步。
 // 约束：
 //   - 不同步 ignore 命中的文件/目录（它们走冷层 sshfs）
 //   - 只处理常规文件；符号链接和特殊文件跳过
 //   - 启动期以本地目录为主，全量推到 remoteDir；运行期再做双向 reconcile
+//   - 轮询间隔自适应：有变更时加速到 500ms，空闲时退避到 5s
+//
+// 自适应策略：
+//   - 每次 syncOnce 检测到变更 → interval *= activeSpeedupFactor（最低 minHotSyncInterval）
+//   - 连续 3 次无变更 → interval *= idleBackoffFactor（最高 maxHotSyncInterval）
+//   - 避免固定 1s 轮询在大型仓库下浪费 CPU / 网络
 type HotSyncEngine struct {
 	connA     *ssh.Client
 	connB     *ssh.Client
@@ -94,6 +106,9 @@ type HotSyncEngine struct {
 	// [Phase 36 D-06/D-07] initialSync 阶段填充；run() goroutine 只读，
 	// 通过 StartHotSync 返回值携带给 mount_strategy。
 	oversized []OversizedFile
+
+	// adaptive polling state
+	idleStreak int // 连续无变更次数
 }
 
 // StartHotSync 基于现有 SSH 连接启动热同步。
@@ -231,18 +246,147 @@ func (e *HotSyncEngine) initialSync() error {
 
 func (e *HotSyncEngine) run() {
 	defer close(e.doneCh)
-	ticker := time.NewTicker(e.interval)
-	defer ticker.Stop()
+	interval := e.interval
+	if interval < minHotSyncInterval {
+		interval = minHotSyncInterval
+	}
+	if interval > maxHotSyncInterval {
+		interval = maxHotSyncInterval
+	}
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
 	for {
 		select {
 		case <-e.stopCh:
 			return
-		case <-ticker.C:
-			if err := e.syncOnce(true); err != nil && e.logger != nil {
+		case <-timer.C:
+			hasChanges, err := e.syncOnceAdaptive(true)
+			if err != nil && e.logger != nil {
 				fmt.Fprintln(e.logger, "[!] 热同步轮询失败: "+err.Error())
+			}
+			interval = e.nextInterval(interval, hasChanges)
+			timer.Reset(interval)
+		}
+	}
+}
+
+// nextInterval 根据是否有变更计算下一轮轮询间隔。
+// 有变更 → 加速（缩短间隔）；连续无变更 → 退避（拉长间隔）。
+func (e *HotSyncEngine) nextInterval(current time.Duration, hasChanges bool) time.Duration {
+	if hasChanges {
+		e.idleStreak = 0
+		next := time.Duration(float64(current) * activeSpeedupFactor)
+		if next < minHotSyncInterval {
+			return minHotSyncInterval
+		}
+		return next
+	}
+	e.idleStreak++
+	if e.idleStreak >= 3 {
+		next := time.Duration(float64(current) * idleBackoffFactor)
+		if next > maxHotSyncInterval {
+			return maxHotSyncInterval
+		}
+		return next
+	}
+	return current
+}
+
+// syncOnceAdaptive 执行一次双向同步并返回是否检测到变更。
+// 供 run() 自适应轮询使用；cleanup 最终收敛仍调用 syncOnce(false)。
+func (e *HotSyncEngine) syncOnceAdaptive(logConflicts bool) (hasChanges bool, err error) {
+	localFiles, err := scanLocalSyncFiles(e.localDir, e.matcher)
+	if err != nil {
+		return false, fmt.Errorf("扫描本地目录失败: %w", err)
+	}
+	oversizedSet := e.applyOversizedFilter(localFiles, false)
+	remoteFiles, err := scanRemoteSyncFiles(e.client, e.remoteDir, e.matcher)
+	if err != nil {
+		return false, fmt.Errorf("扫描远端目录失败: %w", err)
+	}
+	for rel := range oversizedSet {
+		delete(remoteFiles, rel)
+	}
+
+	// 快速路径：无任何文件变化时直接返回
+	if len(localFiles) == 0 && len(remoteFiles) == 0 && len(e.last) == 0 {
+		return false, nil
+	}
+
+	paths := make(map[string]struct{}, len(e.last)+len(localFiles)+len(remoteFiles))
+	for p := range e.last {
+		paths[p] = struct{}{}
+	}
+	for p := range localFiles {
+		paths[p] = struct{}{}
+	}
+	for p := range remoteFiles {
+		paths[p] = struct{}{}
+	}
+
+	names := make([]string, 0, len(paths))
+	for p := range paths {
+		names = append(names, p)
+	}
+	sort.Strings(names)
+
+	next := make(map[string]syncFileState, len(paths))
+	changeCount := 0
+	for _, rel := range names {
+		localState, hasLocal := localFiles[rel]
+		remoteState, hasRemote := remoteFiles[rel]
+		baseState, hasBase := e.last[rel]
+
+		localChanged := !sameSyncState(localState, hasLocal, baseState, hasBase)
+		remoteChanged := !sameSyncState(remoteState, hasRemote, baseState, hasBase)
+
+		switch {
+		case !localChanged && !remoteChanged:
+			if hasBase {
+				next[rel] = baseState
+			}
+		case localChanged && !remoteChanged:
+			if err := e.applyLocal(rel, localState, hasLocal); err != nil {
+				return false, err
+			}
+			changeCount++
+			if hasLocal {
+				next[rel] = localState
+			}
+		case !localChanged && remoteChanged:
+			if err := e.applyRemote(rel, remoteState, hasRemote); err != nil {
+				return false, err
+			}
+			changeCount++
+			if hasRemote {
+				next[rel] = remoteState
+			}
+		default:
+			winner := chooseConflictWinner(localState, hasLocal, remoteState, hasRemote)
+			if logConflicts && e.logger != nil {
+				fmt.Fprintf(e.logger, "⚠ 热同步冲突已自动解决：%s（保留 %s 侧）\n", rel, winner)
+			}
+			changeCount++
+			if winner == "local" {
+				if err := e.applyLocal(rel, localState, hasLocal); err != nil {
+					return false, err
+				}
+				if hasLocal {
+					next[rel] = localState
+				}
+			} else {
+				if err := e.applyRemote(rel, remoteState, hasRemote); err != nil {
+					return false, err
+				}
+				if hasRemote {
+					next[rel] = remoteState
+				}
 			}
 		}
 	}
+
+	e.last = next
+	return changeCount > 0, nil
 }
 
 func (e *HotSyncEngine) syncOnce(logConflicts bool) error {

@@ -25,5 +25,5 @@ const (
 	// 6-8：v3.0 Phase 31 新增（OAuth + mount force）
 	ExitOAuthNotFound    = 6 // /home/claude/.claude/.credentials.json 不存在或解析失败（D-22 第 3 条）
 	ExitOAuthExpired     = 7 // expiresAt < now（D-22 第 3 条）
-	ExitMountForceFailed = 8 // --mount-mode=full|hot-only|sshfs-only 任一档失败（兼容 legacy: mutagen-only）
+	ExitMountForceFailed = 8 // --mount-mode=full|hot-only|sshfs-only 任一档失败
 )

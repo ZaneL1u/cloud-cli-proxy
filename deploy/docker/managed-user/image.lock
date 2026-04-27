@@ -1,5 +1,5 @@
-image_name: ghcr.io/zanel1u/cloud-cli-proxy/managed-user:latest
-local_dev_image_name: ghcr.io/zanel1u/cloud-cli-proxy/managed-user:latest
+image_name: ghcr.io/zanel1u/cloud-cli-proxy/managed-user:v3.0.0
+local_dev_image_name: ghcr.io/zanel1u/cloud-cli-proxy/managed-user:v3.0.0
 base_image: ubuntu:24.04
 pull_policy: never-implicit-latest
 ssh_port: 22

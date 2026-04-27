@@ -121,7 +121,7 @@ func (c *MountConfig) effectiveHotSyncMaxFileMB() int {
 }
 
 // strategyHooks 让 mount_strategy_test.go 注入三层 mount 的 mock 实现，
-// 不依赖真实 ssh / mutagen / mergerfs。
+// 不依赖真实 ssh / hotsync / mergerfs。
 type strategyHooks struct {
 	tryHotSync func() (cleanup func(), status HotSyncStatus, err error)
 	trySSHFS   func() (cleanup func(), err error)
@@ -130,18 +130,18 @@ type strategyHooks struct {
 
 // MountWorkspace 是 Phase 31 文件映射顶层入口。
 //
-// 调度逻辑（CONTEXT D-15，经自研 hot sync 替换 Mutagen 后）：
+// 调度逻辑（CONTEXT D-15，自研 HotSync）：
 //  1. APFS 检测 → 写入 snapshot.APFSCaseInsensitive
 //  2. 能力降级（SupportsMergerfs=false 且 Mode=Auto/Full → 降级 HotOnly；
-//     该档语义现为 hot-only，保留 flag 兼容但不再依赖外部 Mutagen）
+//     该档语义现为 hot-only，保留 flag 兼容）
 //  3. 按 Mode 决定 try 顺序：
-//     - Auto: [Full, MutagenOnly, SSHFSOnly]，每档失败 stderr 输出 MOUNT_AUTO_DOWNGRADED 后转下一档
-//     - Force (Full/MutagenOnly/SSHFSOnly)：单档跑，失败 → MOUNT_FORCE_MODE_FAILED + ModeFailed
+//     - Auto: [Full, HotOnly, SSHFSOnly]，每档失败 stderr 输出 MOUNT_AUTO_DOWNGRADED 后转下一档
+//     - Force (Full/HotOnly/SSHFSOnly)：单档跑，失败 → MOUNT_FORCE_MODE_FAILED + ModeFailed
 //  4. 三段式中文进度按最终决策的 mode 渲染
 //  5. mount 全 ready 输出 banner [<mode>]（着色：full=green / 其它=yellow）
 //  6. 写 last-session.json（成功 / 失败均写）
 //
-// cleanup LIFO 顺序：mergerfs → mutagen/sshfs → connections。
+// cleanup LIFO 顺序：mergerfs → hotsync/sshfs → connections。
 // 任何 error 已经被 errcodes.Format 包装为可直接 stderr 的字符串。
 func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), finalMode Mode, err error) {
 	if cfg.Logger == nil {
@@ -177,7 +177,7 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 		intended = ModeHotOnly
 	}
 
-	// [Phase 32 Gap #2 / REQ-F5-D] 账号级 Mutagen 单例锁 invoke。
+	// [Phase 32 Gap #2 / REQ-F5-D] 账号级热同步单例锁 invoke。
 	// 闭合 Phase 31 D-31 遗留的 orphan 字段：Plan 03 在 ssh.go 注入 AcquireSyncLock 闭包，
 	// 但本函数此前从未真正调用 —— 导致 flock 永不触发，M15 双写防御失效。
 	//
@@ -324,7 +324,7 @@ func MountWorkspace(connA, connB *ssh.Client, cfg MountConfig) (cleanup func(), 
 }
 
 // tryMode 按 mode 调度子层：
-//   - Full = mutagen + sshfs + merge（任一失败即失败）
+//   - Full = HotSync + sshfs + merge（任一失败即失败）
 //   - HotOnly = hot-only 单层
 //   - SSHFSOnly = sshfs 单层（v2.0 路径）
 //
@@ -408,7 +408,7 @@ func tryModeWithHooks(mode Mode, h *strategyHooks) (cleanup func(), status HotSy
 
 // tryModeReal 是生产路径：调用真实 mountSSHFS / 热同步 / mountMerge。
 // 说明：
-//   - ModeHotOnly 对应 CLI 的 hot-only（兼容 legacy mutagen-only）
+//   - ModeHotOnly 对应 CLI 的 hot-only
 //   - Full = hidden hot sync + hidden sshfs cold + mergerfs -> cfg.Cwd
 //   - SSHFSOnly 保持 v2.0 行为：直接把本地 cwd 挂到同路径
 //
@@ -567,7 +567,7 @@ done` + "\n"
 }
 
 // printProgress 按 finalMode 输出三段式中文进度（CONTEXT D-18）。
-// 每段对应 mutagen / sshfs / merge 三层；非该层时打印 "跳过 (模式: <mode>)"。
+// 每段对应 HotSync / sshfs / merge 三层；非该层时打印 "跳过 (模式: <mode>)"。
 func printProgress(w io.Writer, mode Mode) {
 	switch mode {
 	case ModeFull:
@@ -621,7 +621,7 @@ func extractErrCodeAndReason(err error) (errcodes.Code, string) {
 	return errcodes.MOUNT_FORCE_MODE_FAILED, err.Error()
 }
 
-// codedError 是 mount_mutagen / mount_merge 内部 sentinel error 的通用接口。
+// codedError 是 mount_hotsync / mount_merge 内部 sentinel error 的通用接口。
 // 通过 errors.As(err, &ce) 让 mount_strategy 拿到结构化的 Code + reason。
 type codedError interface {
 	error
@@ -639,7 +639,7 @@ func writeLastSessionWarn(path string, snap LastSessionSnapshot, w io.Writer) {
 	}
 }
 
-// buildSessionName 生成 mutagen sync session 名：
+// buildSessionName 生成热同步 session 名：
 //
 //	cloud-claude-{account_id_or_anon}-{cwd_hash8}
 func buildSessionName(accountID, cwd string) string {

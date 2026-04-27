@@ -1,6 +1,6 @@
 // Package cloudclaude — OAuth credentials 过期检查（Phase 31 / REQ-F7-C）。
 //
-// 在 SSH 握手成功后、Mutagen sync create / sshfs mount 之前的窗口期，
+// 在 SSH 握手成功后、HotSync 启动 / sshfs mount 之前的窗口期，
 // 远程 timeout 2 cat /home/claude/.claude/.credentials.json，按 D-22
 // 三态分支处理：NotFound / Expired / ExpiringSoon / Valid。
 //

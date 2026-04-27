@@ -92,7 +92,7 @@ func (r *RepoResolver) resolveTarget(ctx context.Context, auth repository.HostSS
 
 	return ContainerTarget{
 		Addr:       fmt.Sprintf("%s:22", containerIP),
-		User:       auth.Username,
+		User:       auth.ContainerUser,
 		Password:   auth.EntryPassword,
 		PrivateKey: auth.SSHPrivateKey,
 	}, nil

@@ -1,10 +1,10 @@
 // Package cloudclaude — 文件挂载共享 helper。
 //
-// Phase 31 拆分后 mount.go 仅承载 sshfs / mutagen / merge / strategy 四档共享 helper：
+// Phase 31 拆分后 mount.go 仅承载 sshfs / hotsync / merge / strategy 四档共享 helper：
 //   - MountNotReadyError / channelRWC：基础类型
 //   - waitForMount / fusermountCleanup / cleanupStaleFUSE / rmdirChain / sshRun / shellQuote
 //
-// 具体 mount 实现见 mount_{sshfs,mutagen,merge,strategy}.go。
+// 具体 mount 实现见 mount_{sshfs,hotsync,merge,strategy}.go。
 package cloudclaude
 
 import (

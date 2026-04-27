@@ -45,47 +45,11 @@ func init() {
 	// MOUNT_* 域（Phase 31）
 	// ────────────────────────────────────────────────────────────────────
 
-	registerExplanation(MOUNT_MUTAGEN_VERSION_SKEW, `触发场景：cloud-claude 客户端 embed 的 Mutagen 二进制版本与容器内 /etc/cloud-claude/mutagen.version 不匹配。
-根本原因：Mutagen agent / client 协议版本必须严格一致，否则 sync session 创建会握手失败。cloud-claude 在启动热同步前会做 TrimPrefix+Contains 双保险比对，版本漂移立即降级到 sshfs-only。
-复现方式：docker exec <ctr> sed -i 's/v0.18.1/v0.99.99/' /etc/cloud-claude/mutagen.version
-修复路径：升级容器镜像到 v3.0.0+（含 mutagen v0.18.1 agent），或重装 cloud-claude；也可运行 cloud-claude doctor mount --fix 自动重启 daemon 复测。
-关联文档：.planning/research/PITFALLS.md C4`)
-
-	registerExplanation(MOUNT_MUTAGEN_WHITELIST_REJECT, `触发场景：选定的同步候选目录体积超过 50MB 白名单阈值，cloud-claude 拒绝把它纳入 Mutagen 热同步以防初始化扫描雪崩。
-根本原因：Mutagen 在首次握手时会对每个文件做哈希指纹，超大目录会导致 daemon 内存暴涨且首连耗时远超 8s 性能基线。50MB 阈值参考真实工程仓库统计（src/* 下 95 分位）。
-复现方式：cd ~/big-repo（>50MB）&& cloud-claude → 立即降级 sshfs。
-修复路径：在仓库根目录创建 .mutagen.yml 加 ignore 规则排除 node_modules / target / dist 等大目录；或运行 du -sh ./* 找出最大子目录后清理。
-关联文档：Phase 31 PLAN.md errcode_registry / .planning/research/PITFALLS.md C2`)
-
-	registerExplanation(MOUNT_MUTAGEN_SAFETY_GUARD, `触发场景：本地 cwd 为空目录但容器内 /workspace-hot 已含文件，cloud-claude 拒绝启动同步以防止反向清空远端工作目录。
-根本原因：Mutagen 默认 two-way-resolved 模式会把空侧的"删除"传播到对侧；首次连接时若本地新建空目录，会瞬间清空远端历史代码。这是 PITFALLS C8 中的 P0 数据丢失场景。
-复现方式：mkdir empty && cd empty && cloud-claude → 立即 SeverityFatal 阻断。
-修复路径：如果确认要从远端拉取，先用 cloud-claude exec rsync /workspace-hot/ ./ 把容器侧文件同步到本地空目录，再正常启动 cloud-claude。
-关联文档：.planning/research/PITFALLS.md C8 / Phase 31 D-19`)
-
-	registerExplanation(MOUNT_MUTAGEN_DAEMON_UNAVAILABLE, `触发场景：mutagen daemon start 子进程返回非零或在 5s 超时内未起来。
-根本原因：常见原因有 ~/.cloud-claude/mutagen/ 目录权限错误、磁盘配额耗尽、上一次进程崩溃残留 lock 文件、用户主目录被 noexec 挂载等。
-复现方式：chmod 000 ~/.cloud-claude/mutagen && cloud-claude。
-修复路径：恢复目录权限 chmod 700 ~/.cloud-claude/mutagen；删除 ~/.cloud-claude/mutagen/daemon.lock；如果磁盘满，运行 cloud-claude doctor disk 查看本地可用空间；最后重启 cloud-claude。
-关联文档：Phase 31 RESEARCH §4.2 / .planning/research/PITFALLS.md C4`)
-
-	registerExplanation(MOUNT_MUTAGEN_SYNC_FAILED, `触发场景：mutagen sync create 子命令返回非零，无法建立本地↔容器双向同步会话。
-根本原因：底层多为 SSH 握手失败、容器内 Mutagen agent 缺失或版本错位、ssh ProxyCommand 配置错误、远端磁盘满等。Mutagen 启动失败后客户端会自动降级到 sshfs-only。
-复现方式：人为关闭容器 sshd（systemctl stop sshd in container）→ cloud-claude 启动时 sync 失败。
-修复路径：先运行 cloud-claude doctor mount 看具体子项；如果是 SSH 问题运行 cloud-claude doctor ssh；网络问题运行 cloud-claude doctor network；都失败则联系管理员检查容器健康。
-关联文档：Phase 31 RESEARCH §4.3`)
-
-	registerExplanation(MOUNT_MUTAGEN_TRANSPORT_FAILED, `触发场景：Mutagen 启动 ssh 子进程作为 transport 时失败（ssh 二进制不存在 / Path 错位 / sshpass 缺失）。
-根本原因：Mutagen 走外部 ssh 客户端（不是内置 SSH 库），强依赖本机 PATH 上有可用的 ssh + 可选 sshpass。Windows / 极简 Linux 容器宿主机常缺。
-复现方式：env -i PATH=/nonexistent cloud-claude → ssh: command not found。
-修复路径：macOS 自带 ssh 不需操作；Linux 安装 openssh-client 包；如果用密码登录而非密钥，再装 sshpass；最差情况移除 ProxyCommand 配置走默认。
-关联文档：Phase 31 PATTERNS §3.4 / .planning/research/PITFALLS.md M14`)
-
 	registerExplanation(MOUNT_HOT_SYNC_FAILED, `触发场景：自研热同步层在初始全量上传或后续双向轮询同步过程中失败，未能把代码层变更推到远端 hot staging 或从远端拉回本地。
 根本原因：常见原因包括当前目录中存在不可读文件、远端 hot staging 目录权限不正确、SFTP channel 被提前关闭、轮询过程中某个文件被并发删除、或隐藏 staging 路径与现有挂载状态冲突。
 复现方式：chmod 000 某个源码文件后启动 cloud-claude，或在同步过程中手工删除远端 hot staging 根目录。
 修复路径：先确认本地目录与远端 staging 路径均可读写；若是会话残留，重启 cloud-claude 让 staging 目录重建；若仍失败，可临时回退 sshfs-only，随后查看具体 stderr reason 定位。
-关联文档：replace_mutagen_sync 计划 / 同路径 hot+cold 方案设计`)
+关联文档：同路径 hot+cold 方案设计`)
 
 	registerExplanation(MOUNT_SSHFS_FAILED, `触发场景：sshfs 命令挂载远端 /workspace 失败（macOS macFUSE 未授权 / Linux fuse 模块未加载 / fusermount3 缺失）。
 根本原因：sshfs 是 cloud-claude 的兜底文件映射方案，依赖宿主机上有 macFUSE / fuse3。macOS 升级后 macFUSE 内核扩展常需重新允许；Linux 容器或最小化镜像可能未装 fuse3。
@@ -99,32 +63,32 @@ func init() {
 修复路径：网络恢复后运行 cloud-claude doctor mount --fix 自动 fusermount3 -u + 重新 mount + mergerfs add 回去；或直接重启 cloud-claude 全栈重连。
 关联文档：Phase 31 RESEARCH §4.4 / Phase 32 D-04`)
 
-	registerExplanation(MOUNT_MERGERFS_FAILED, `触发场景：mergerfs 挂载 /workspace 失败，无法把 hot（Mutagen）+ cold（sshfs）合并成统一视图。
+	registerExplanation(MOUNT_MERGERFS_FAILED, `触发场景：mergerfs 挂载 /workspace 失败，无法把 hot（HotSync）+ cold（sshfs）合并成统一视图。
 根本原因：常见原因为容器未启用 SYS_ADMIN capability 或 /dev/fuse 设备节点不可用、mergerfs 二进制缺失（很老的镜像）、mergerfs 选项不支持当前内核版本。
 复现方式：移除容器 SYS_ADMIN cap → cloud-claude → mergerfs cannot allocate fuse device。
 修复路径：升级容器镜像到 v3.0.0+（已默认带 mergerfs 2.41.x + fuse3）；运行 cloud-claude doctor mount 查看具体子项；管理员侧确认 docker run --cap-add SYS_ADMIN --device /dev/fuse 已配置。
 关联文档：Phase 31 RESEARCH §4.5`)
 
-	registerExplanation(MOUNT_AUTO_DOWNGRADED, `触发场景：自动 mount 模式下某一层（Mutagen / sshfs / mergerfs）启动失败，cloud-claude 降级到下一档（如 mutagen → sshfs-only）。
-根本原因：cloud-claude 文件映射是三层栈：Mutagen 双向高速 + sshfs 容量层 + mergerfs 合并视图。任一层失败时不阻塞用户使用，自动降级保证基本可用，但会牺牲性能或功能（hot 同步失败后 IDE 反向写需手动 rsync）。
-复现方式：docker exec <ctr> mv /usr/local/bin/mutagen /tmp → cloud-claude → 自动降级到 sshfs-only。
+	registerExplanation(MOUNT_AUTO_DOWNGRADED, `触发场景：自动 mount 模式下某一层（HotSync / sshfs / mergerfs）启动失败，cloud-claude 降级到下一档（如 HotSync → sshfs-only）。
+根本原因：cloud-claude 文件映射是三层栈：HotSync 双向高速 + sshfs 容量层 + mergerfs 合并视图。任一层失败时不阻塞用户使用，自动降级保证基本可用，但会牺牲性能或功能（hot 同步失败后 IDE 反向写需手动 rsync）。
+复现方式：docker exec <ctr> mv /usr/local/bin/mergerfs /tmp → cloud-claude → 自动降级到 sshfs-only。
 修复路径：观察 stderr 提示的下游错误码（[CODE] 后面的部分）针对修复；运行 cloud-claude doctor mount 看完整健康度；如要锁定模式可用 --mount-mode flag 强制。
 关联文档：Phase 31 RESEARCH §6 / Phase 31 PITFALLS M13（禁止静默降级）`)
 
-registerExplanation(MOUNT_FORCE_MODE_FAILED, `触发场景：用户通过 --mount-mode={full,hot-only,sshfs-only} 强制指定模式，但该模式启动失败。强制模式下 cloud-claude 不会自动降级。
+	registerExplanation(MOUNT_FORCE_MODE_FAILED, `触发场景：用户通过 --mount-mode={full,hot-only,sshfs-only} 强制指定模式，但该模式启动失败。强制模式下 cloud-claude 不会自动降级。
 根本原因：用户显式指定模式意味着接受失败即报错的语义（M13 防御静默降级）。常见触发为 hot-only 模式下热同步初始化失败、sshfs-only 模式下 fuse 不可用。
 复现方式：cloud-claude --mount-mode=hot-only 但远端同路径目录不可写 → SeverityFatal 阻断。
 修复路径：移除 --mount-mode flag 让自动降级生效，或针对错误信息中的具体下游 code 修复；需要锁定模式时建议先运行 cloud-claude doctor mount 看可用层。
 关联文档：Phase 31 PLAN <errcode_registry> / Phase 31 PITFALLS M13`)
 
 	registerExplanation(MOUNT_REQUIRE_GIT_REPO, `触发场景：用户在非 git 仓库目录（例如 /tmp、下载目录、家目录下的临时文件夹）直接运行 cloud-claude，启动前的 git rev-parse --show-toplevel 检查返回非零，系统立即拒绝进入挂载流程。
-根本原因：cloud-claude 的热同步语义是“同步一个项目”，而不是“同步你当前目录里的所有东西”。如果允许在非仓库目录启动，最危险的情况是把整个家目录、下载目录或临时目录误当成工程同步到远端，既会显著拉长首次扫描时间，也可能把与当前任务无关的大量文件带进容器工作区，重演 Phase 31 讨论过的 cwd 误同步风险。git 仓库边界是当前版本最稳定、最可解释的项目边界信号。
+根本原因：cloud-claude 的热同步语义是"同步一个项目"，而不是"同步你当前目录里的所有东西"。如果允许在非仓库目录启动，最危险的情况是把整个家目录、下载目录或临时目录误当成工程同步到远端，既会显著拉长首次扫描时间，也可能把与当前任务无关的大量文件带进容器工作区，重演 Phase 31 讨论过的 cwd 误同步风险。git 仓库边界是当前版本最稳定、最可解释的项目边界信号。
 复现方式：执行 cd /tmp && cloud-claude，或 mkdir /tmp/demo && cd /tmp/demo && cloud-claude；由于目录内没有 .git 元数据，命令会直接输出对应错误码并以 exitConfigError 退出，不会继续发起 SSH、SFTP、sshfs 或 mergerfs 相关操作。
-修复路径：进入已有 git 仓库目录后重新运行 cloud-claude；如果当前目录本来就是一个新项目，请先执行 git init 建立仓库边界，再启动 cloud-claude；注意这是一道全局前置闸门，任何 --mount-mode 都不能绕过它，因为它保护的是“同步范围正确性”而不是某一种挂载实现细节。
+修复路径：进入已有 git 仓库目录后重新运行 cloud-claude；如果当前目录本来就是一个新项目，请先执行 git init 建立仓库边界，再启动 cloud-claude；注意这是一道全局前置闸门，任何 --mount-mode 都不能绕过它，因为它保护的是"同步范围正确性"而不是某一种挂载实现细节。
 关联文档：.planning/REQUIREMENTS.md REQ-MOUNT-V31-01；.planning/milestones/v3.0-phases/31-cli/31-CONTEXT.md §D-11（目录级熔断）`)
 
 	registerExplanation(MOUNT_OVERSIZED_FILE_SKIPPED, `触发场景：热同步初始化扫描发现某个未被 ignore 规则命中的文件大小已经达到或超过 hot_sync_max_file_mb 阈值（默认 50MB），系统不会把它推入 hot 分支，而是让它继续留在 cold sshfs 分支中提供访问。
-根本原因：大文件通常不是需要高频双向实时同步的源码，而更像模型、视频、安装包、构建产物或导出的数据集。把这类文件纳入热同步会明显拖慢首次连接时间、增大本地与远端的传输负担，并放大同步冲突或重试成本。Phase 36 的设计目标不是“禁止读取大文件”，而是“避免为了一个大文件拖垮整个工作区的热同步体验”，因此选择跳过热同步、保留 cold sshfs 兜底这一更稳妥的策略。
+根本原因：大文件通常不是需要高频双向实时同步的源码，而更像模型、视频、安装包、构建产物或导出的数据集。把这类文件纳入热同步会明显拖慢首次连接时间、增大本地与远端的传输负担，并放大同步冲突或重试成本。Phase 36 的设计目标不是"禁止读取大文件"，而是"避免为了一个大文件拖垮整个工作区的热同步体验"，因此选择跳过热同步、保留 cold sshfs 兜底这一更稳妥的策略。
 复现方式：在一个 git 仓库里放入 60MB 的 model.bin 或 archive.tar，确保它既不在 .gitignore 也不在默认二进制黑名单里，然后启动 cloud-claude。stderr 会出现一次性的跳过提示，last-session.json 中也会记录 oversized_files 列表；文件依然可读，只是不会进入 hot tree。
 修复路径：如果你确实希望它参与热同步，可以手动编辑 ~/.cloud-claude/config.yaml 调高 hot_sync_max_file_mb；如果它本就不需要同步，建议把路径加入 .gitignore 或 cloud-claude 的忽略列表，减少启动期提示噪音；如果只是偶尔读取，保持默认配置即可，因为 cold sshfs 仍会提供完整访问，且结合 page cache 后重复读取成本会明显下降。
 关联文档：.planning/REQUIREMENTS.md REQ-MOUNT-V31-02 / REQ-MOUNT-V31-03；.planning/milestones/v3.0-phases/31-cli/31-CONTEXT.md §D-11`)
@@ -249,7 +213,7 @@ registerExplanation(MOUNT_FORCE_MODE_FAILED, `触发场景：用户通过 --moun
 
 	registerExplanation(SYSTEM_FUSE_RESIDUAL_MOUNT, `触发场景：cloud-claude doctor 扫描宿主机 /workspace 类目录，发现上次崩溃留下的残留 FUSE 挂载点（mount | grep fuse）。
 根本原因：cloud-claude 进程被 kill -9 时来不及做 fusermount3 -u 清理，下次启动会被 mount table 中的旧条目阻塞或导致 stale handle。
-复现方式：kill -9 cloud-claude 进程 → 留下若干 fuse.sshfs / fuse.mergerfs / fuse.mutagen 挂载条目。
+复现方式：kill -9 cloud-claude 进程 → 留下若干 fuse.sshfs / fuse.mergerfs 挂载条目。
 修复路径：运行 cloud-claude doctor mount --fix 自动 fusermount3 -u 所有残留；手动方式 mount | grep fuse 列出后逐个 fusermount3 -u <path>；最后重启 cloud-claude 验证。
 关联文档：Phase 34 RESEARCH §3.4 fuse_residual / Phase 31 PITFALLS M14`)
 
@@ -288,7 +252,7 @@ registerExplanation(MOUNT_FORCE_MODE_FAILED, `触发场景：用户通过 --moun
 	registerExplanation(AUTH_CONFIG_MISSING, `触发场景：cloud-claude 启动期读取 ~/.cloud-claude/config.yaml 失败（文件不存在 / YAML 解析错误 / 必填字段缺失）。
 根本原因：首次使用未运行 cloud-claude init；或文件被外部工具误删 / 改坏；或权限问题（chmod 000）。这是 Fatal 级错误，cloud-claude 无法继续。
 复现方式：rm ~/.cloud-claude/config.yaml && cloud-claude → 立即 exit 4。
-修复路径：运行 cloud-claude init 交互式重新配置网关地址 + short_id + 密码；或手动恢复 config.yaml（参考 docs/runbooks/v3-claude-state-volumes.md 配置示例）；权限问题 chmod 600 ~/.cloud-claude/config.yaml。
+修复路径：运行 cloud-claude init 交互式重新配置网关地址 + username + 密码；或手动恢复 config.yaml（参考 docs/runbooks/v3-claude-state-volumes.md 配置示例）；权限问题 chmod 600 ~/.cloud-claude/config.yaml。
 关联文档：Phase 31 init 流程 / Phase 34 D-21`)
 
 	registerExplanation(AUTH_GATEWAY_UNREACHABLE, `触发场景：cloud-claude 向配置的 gateway URL 发起 /v1/cli/authenticate 请求失败（连接超时 / TLS 握手失败 / DNS 解析失败 / HTTP 5xx）。
@@ -300,7 +264,7 @@ registerExplanation(MOUNT_FORCE_MODE_FAILED, `触发场景：用户通过 --moun
 	registerExplanation(AUTH_TOKEN_EXPIRED, `触发场景：cloud-claude 调 Entry API 时收到 401 Unauthorized 或服务端明确返回 token 过期错误。
 根本原因：Entry API 颁发的 access token 有过期时间（默认 24h），长时间未使用 cloud-claude 后再启动会触发；或服务端轮换密钥强制失效旧 token。
 复现方式：手动把 ~/.cloud-claude/cache/token.json 中的 expiry 改成过去 → cloud-claude → 401 → 提示。
-修复路径：运行 cloud-claude doctor auth --fix 自动重新走 username/password 拿新 token；或手动 rm ~/.cloud-claude/cache/token.json 触发下次启动重新认证；如果反复 401 检查 short_id / password 是否正确。
+修复路径：运行 cloud-claude doctor auth --fix 自动重新走 username/password 拿新 token；或手动 rm ~/.cloud-claude/cache/token.json 触发下次启动重新认证；如果反复 401 检查 username / password 是否正确。
 关联文档：Phase 34 D-21 / Phase 31 RESEARCH §3`)
 
 	registerExplanation(AUTH_OAUTH_REFRESH_FAILED, `触发场景：cloud-claude 在容器内尝试用 refresh_token 换新的 access_token 失败（Anthropic API 5xx / refresh_token 也已过期 / 网络问题）。
@@ -320,9 +284,9 @@ registerExplanation(MOUNT_FORCE_MODE_FAILED, `触发场景：用户通过 --moun
 	// ────────────────────────────────────────────────────────────────────
 
 	registerExplanation(DISK_LOCAL_LOW, `触发场景：cloud-claude doctor disk 发现本地 ~/.cloud-claude/ 所在分区可用空间 < 500MB 警戒线。
-根本原因：~/.cloud-claude/ 存放 Mutagen 数据目录、token 缓存、日志等，分区满会导致 mutagen daemon 无法 staging 文件、token 无法刷新、日志切割失败。
+根本原因：~/.cloud-claude/ 存放 HotSync 数据目录、token 缓存、日志等，分区满会导致热同步无法 staging 文件、token 无法刷新、日志切割失败。
 复现方式：dd if=/dev/zero of=~/big bs=1M count=1000（填到剩 < 500MB）→ doctor warn。
-修复路径：清理 ~/.cloud-claude/mutagen/sessions/ 旧 session 数据（mutagen daemon stop && rm -rf 后会自动重建）；删除 ~/.cloud-claude/cache/ 下旧日志；如果是系统盘满，找出大文件 du -sh ~/* | sort -h；考虑把 ~/.cloud-claude 软链到大分区。
+修复路径：清理 ~/.cloud-claude/hotsync/sessions/ 旧 session 数据（下次启动 cloud-claude 自动重建）；删除 ~/.cloud-claude/cache/ 下旧日志；如果是系统盘满，找出大文件 du -sh ~/* | sort -h；考虑把 ~/.cloud-claude 软链到大分区。
 关联文档：Phase 34 D-21 / RESEARCH §6 disk thresholds`)
 
 	registerExplanation(DISK_CONTAINER_LOW, `触发场景：cloud-claude doctor disk 通过远端 df 命令发现容器内 /workspace 可用空间 < 100MB 警戒线。
@@ -331,9 +295,9 @@ registerExplanation(MOUNT_FORCE_MODE_FAILED, `触发场景：用户通过 --moun
 修复路径：在容器内清理大文件 du -sh /workspace/* | sort -h；删除 build artifacts（node_modules / target / dist）；联系管理员扩容 docker volume 或在宿主机加盘；最坏情况 cloud-claude admin hosts recreate（保留 claude_account 持久化登录态）。
 关联文档：Phase 33 SUMMARY / Phase 34 D-21`)
 
-	registerExplanation(DISK_MUTAGEN_DATA_BLOAT, `触发场景：cloud-claude doctor disk 发现本地 ~/.cloud-claude/mutagen/ 目录已经超过 1GB 警戒线。
-根本原因：Mutagen 在每个 sync session 下保存 staging snapshot + 冲突历史 + 元数据，长期使用会逐渐膨胀；session 异常退出时可能留 orphan 数据；大仓库初次同步也会瞬间放大。
-复现方式：连续启动 cloud-claude 在多个大仓库下数十次 → mutagen 数据目录显著膨胀。
-修复路径：运行 mutagen daemon stop && rm -rf ~/.cloud-claude/mutagen/sessions/ 强制清理（下次启动 cloud-claude 自动重建 session）；这不会丢失代码（实际代码在仓库 + 远端 /workspace 中），只丢同步历史；定期运行 cloud-claude doctor disk 监控趋势。
+	registerExplanation(DISK_HOTSYNC_DATA_BLOAT, `触发场景：cloud-claude doctor disk 发现本地 ~/.cloud-claude/hotsync/ 目录已经超过 1GB 警戒线。
+根本原因：HotSync 在每个 session 下保存 staging snapshot + 冲突历史 + 元数据，长期使用会逐渐膨胀；session 异常退出时可能留 orphan 数据；大仓库初次同步也会瞬间放大。
+复现方式：连续启动 cloud-claude 在多个大仓库下数十次 → hotsync 数据目录显著膨胀。
+修复路径：运行 rm -rf ~/.cloud-claude/hotsync/sessions/ 强制清理（下次启动 cloud-claude 自动重建 session）；这不会丢失代码（实际代码在仓库 + 远端 /workspace 中），只丢同步历史；定期运行 cloud-claude doctor disk 监控趋势。
 关联文档：Phase 34 D-21 / RESEARCH §6`)
 }

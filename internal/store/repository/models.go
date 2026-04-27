@@ -56,7 +56,10 @@ type HostSSHAuth struct {
 	HostStatus    string
 	UserID        string
 	UserStatus    string
-	Username      string // SSH 登录用户名
+	Username      string // SSH 登录用户名（外部标识）
+	// ContainerUser 是容器内实际存在的 Unix 用户名（如 workspace）。
+	// SSH proxy 连接容器时使用此用户，而非 Username。
+	ContainerUser string
 	// TemplateImageRef 对应 hosts.template_image_ref。
 	// Phase 30 Plan 02 会基于它推导 Entry API 的 image_version / supports_* 能力字段（D-05/D-06/D-07）。
 	// 数据层仅透传原值，不在此处做 tag 解析，避免数据层与协议层职责耦合。

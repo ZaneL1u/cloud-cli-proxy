@@ -63,12 +63,12 @@ type SessionConfig struct {
 	// [Phase 32 Plan 03 新增] 由 ssh.go 从 mountCfg.IsSecondaryClient 透传而来。
 	// true → writeLastSessionTmuxField 写 ClientRole="secondary" + writeClientFile
 	//        client_role="secondary"；
-	// false（默认）→ "primary"（即 attach 上即视为本端持有 Mutagen 同步锁）。
+	// false（默认）→ "primary"（即 attach 上即视为本端持有热同步锁）。
 	IsSecondaryClient bool
 }
 
 // clientsRegistryDir 是容器内文件注册表目录（D-12 完整方案）。
-// UID 1000 默认可写 /workspace；不污染 mergerfs/Mutagen — Phase 31 mutagen
+// UID 1000 默认可写 /workspace；不污染 mergerfs/HotSync — Phase 31
 // ignore 已包含 .cloud-claude/ 顶层匹配。
 const clientsRegistryDir = "/workspace/.cloud-claude/clients"
 
