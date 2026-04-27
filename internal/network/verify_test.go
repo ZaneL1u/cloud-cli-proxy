@@ -1,6 +1,9 @@
 package network
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestVerifyResult_AllPassed(t *testing.T) {
 	tests := []struct {

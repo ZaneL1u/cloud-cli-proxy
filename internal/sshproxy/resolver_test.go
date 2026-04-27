@@ -17,6 +17,8 @@ type stubResolverRepo struct {
 	hostAuthErr    error
 	inboundKeys    []repository.SSHKey
 	inboundKeysErr error
+	targetAddr     string
+	targetErr      error
 }
 
 func (s *stubResolverRepo) GetHostByUsername(_ context.Context, _ string) (repository.HostSSHAuth, error) {
@@ -29,19 +31,27 @@ func (s *stubResolverRepo) ListSSHKeysByUserAndPurpose(_ context.Context, _, _ s
 
 // ContainerResolver implementation for proxy tests.
 func (s *stubResolverRepo) ResolveContainer(_ context.Context, _, _ string) (ContainerTarget, error) {
+	addr := s.targetAddr
+	if addr == "" {
+		addr = "127.0.0.1:22"
+	}
 	return ContainerTarget{
-		Addr:     "127.0.0.1:22",
+		Addr:     addr,
 		User:     s.hostAuth.ContainerUser,
 		Password: s.hostAuth.EntryPassword,
-	}, s.hostAuthErr
+	}, s.targetErr
 }
 
 func (s *stubResolverRepo) ResolveContainerByPublicKey(_ context.Context, _ string, _ gossh.PublicKey) (ContainerTarget, error) {
+	addr := s.targetAddr
+	if addr == "" {
+		addr = "127.0.0.1:22"
+	}
 	return ContainerTarget{
-		Addr:       "127.0.0.1:22",
+		Addr:       addr,
 		User:       s.hostAuth.ContainerUser,
 		PrivateKey: s.hostAuth.SSHPrivateKey,
-	}, s.hostAuthErr
+	}, s.targetErr
 }
 
 func generateTestKey(t *testing.T) (gossh.PublicKey, string) {
