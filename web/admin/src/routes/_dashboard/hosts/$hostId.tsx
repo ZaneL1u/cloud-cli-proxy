@@ -1,16 +1,24 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Check,
   Copy,
+  Download,
   KeyRound,
   Monitor,
   Settings,
   Terminal,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getToken } from "@/lib/auth";
-import { useHostDetail, useHostImageInfo, useRestartHostVNC } from "@/hooks/use-hosts";
+import {
+  useHostDetail,
+  useHostImageInfo,
+  useRestartHostVNC,
+  useExportHostConfig,
+  useImportHostConfig,
+} from "@/hooks/use-hosts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,11 +60,30 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   failed: { label: "失败", variant: "destructive" },
 };
 
+const dockerStatusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  running: { label: "运行中", variant: "default" },
+  exited: { label: "已停止", variant: "secondary" },
+  "not found": { label: "未创建", variant: "outline" },
+  created: { label: "已创建", variant: "outline" },
+  restarting: { label: "重启中", variant: "outline" },
+  paused: { label: "已暂停", variant: "outline" },
+  dead: { label: "已死亡", variant: "destructive" },
+};
+
+function getHostStatus(host: { status: string; docker_status?: string }) {
+  const docker = host.docker_status;
+  if (docker && dockerStatusConfig[docker]) return dockerStatusConfig[docker];
+  return statusConfig[host.status] ?? { label: host.status, variant: "outline" as const };
+}
+
 function HostDetailPage() {
   const { hostId } = Route.useParams();
   const { data, isLoading } = useHostDetail(hostId);
   const { data: imageInfo } = useHostImageInfo(hostId, !!data?.host);
   const restartVNCMutation = useRestartHostVNC();
+  const exportConfigMutation = useExportHostConfig();
+  const importConfigMutation = useImportHostConfig();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [rotateLoginOpen, setRotateLoginOpen] = useState(false);
   const [rotateSSHOpen, setRotateSSHOpen] = useState(false);
   const [changeRootPwOpen, setChangeRootPwOpen] = useState(false);
@@ -80,10 +107,7 @@ function HostDetailPage() {
   }
 
   const { host, user, bindings } = data;
-  const sc = statusConfig[host.status] ?? {
-    label: host.status,
-    variant: "outline" as const,
-  };
+  const sc = getHostStatus(host);
 
   function openVNC() {
     const token = getToken();
@@ -101,7 +125,7 @@ function HostDetailPage() {
     });
   }
 
-  const displayName = host.hostname || host.short_id || host.id.slice(0, 8) + "…";
+  const displayName = host.hostname || user.username || host.id.slice(0, 8) + "…";
 
   return (
     <div className="space-y-6">
@@ -145,10 +169,6 @@ function HostDetailPage() {
               <div className="space-y-1">
                 <dt className="text-xs text-muted-foreground">主机 ID</dt>
                 <dd className="break-all font-mono text-sm">{host.id}</dd>
-              </div>
-              <div className="space-y-1">
-                <dt className="text-xs text-muted-foreground">主机短 ID</dt>
-                <dd className="font-mono text-sm">{host.short_id || "—"}</dd>
               </div>
               <div className="space-y-1">
                 <dt className="text-xs text-muted-foreground">主机名</dt>
@@ -376,6 +396,51 @@ function HostDetailPage() {
                       编辑 Claude 配置
                     </span>
                   </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-11 justify-start gap-2 px-4 sm:col-span-1"
+                    disabled={host.status !== "running" || exportConfigMutation.isPending}
+                    onClick={() =>
+                      exportConfigMutation.mutate(host.id, {
+                        onError: (err: Error) => toast.error(err.message || "导出配置失败"),
+                      })
+                    }
+                  >
+                    <Download className="h-4 w-4 shrink-0" />
+                    <span className="text-left text-sm leading-snug">
+                      {exportConfigMutation.isPending ? "导出中..." : "导出配置"}
+                    </span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-11 justify-start gap-2 px-4 sm:col-span-1"
+                    disabled={host.status !== "running" || importConfigMutation.isPending}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="h-4 w-4 shrink-0" />
+                    <span className="text-left text-sm leading-snug">
+                      {importConfigMutation.isPending ? "导入中..." : "导入配置"}
+                    </span>
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".tar.gz,application/gzip"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      importConfigMutation.mutate(
+                        { hostId: host.id, file },
+                        {
+                          onError: (err: Error) => toast.error(err.message || "导入配置失败"),
+                        }
+                      );
+                      e.target.value = "";
+                    }}
+                  />
                   <Button
                     type="button"
                     variant="secondary"
