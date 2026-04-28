@@ -26,7 +26,7 @@ Milestone: v3.1 映射语义补齐与懒加载 — ✅ SHIPPED (2026-04-24)
 Phase: 37 (e2e-uat) — COMPLETE
 Plan: 5 of 5 (全部完成)
 Status: v3.1 归档完成，等待下一里程碑规划
-Last activity: 2026-04-24
+Last activity: 2026-04-28 - Completed quick task 260420: 后台添加 claude 配置和 chrome 配置的导出导入功能
 
 Progress: [██████████] 100% (11/11 plans across v3.1 phases)
 
@@ -105,6 +105,7 @@ v3.1 milestone 已启动；等待 ROADMAP.md 写入后进入 Phase 36 执行：
 | 260416-wvu | injectSSHKeys 幂等化，保留用户手加密钥 | 2026-04-16 | cc18acf | [260416-wvu-make-injectsshkeys-idempotent-so-user-ge](./quick/260416-wvu-make-injectsshkeys-idempotent-so-user-ge/) |
 | 260417-0w4 | 新增 cloud-claude ssh doctor 子命令（owner/mode/PEM 尾换行自检与修复） | 2026-04-16 | d716b14, 3f0567c, 7836821 | [260417-0w4-cloud-claude-cli-ssh-doctor-workspace-ss](./quick/260417-0w4-cloud-claude-cli-ssh-doctor-workspace-ss/) |
 | 260418 | 三层 panic recovery（Worker/Dispatcher/HTTP handler）修复启动排队卡住 | 2026-04-24 | e2bdc38, 19b098f, 15b5f1b | [260418-running-panic-recovery](./quick/260418-running-panic-recovery/) |
+| 260420 | 后台添加 claude 配置和 chrome 配置的导出导入功能 | 2026-04-28 | f224a9b | [260420-claude-chrome](./quick/260420-claude-chrome/) |
 
 ### Roadmap Evolution
 
