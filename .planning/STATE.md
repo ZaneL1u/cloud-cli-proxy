@@ -2,13 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-04-29T06:03:09.691Z"
+status: verifying
+stopped_at: Completed 260423-machine-id
+last_updated: "2026-04-29T09:26:19.657Z"
+last_activity: "2026-04-29 - 完成 quick task 260422: 研究 cac 项目并评估 Claude 伪装增强方案"
 progress:
   total_phases: 5
   completed_phases: 5
   total_plans: 18
   completed_plans: 18
+  percent: 100
 ---
 
 # Project State
@@ -110,6 +113,7 @@ v3.1 milestone 已启动；等待 ROADMAP.md 写入后进入 Phase 36 执行：
 | 260420 | 后台添加 claude 配置和 chrome 配置的导出导入功能 | 2026-04-28 | f224a9b | [260420-claude-chrome](./quick/260420-claude-chrome/) |
 | 260421 | 宿主机路径挂载管理（DB + API + Worker + 前端全链路） | 2026-04-29 | 2e910f3, ee98afa | [260421-host-bind-mounts](./quick/260421-host-bind-mounts/) |
 | 260422 | 研究 cac 项目并评估 Claude 伪装增强方案 | 2026-04-29 | — | [260422-cac-claude](./quick/260422-cac-claude/) |
+| 260423 | 容器反检测 + 遥测阻断 + machine-id 唯一化 | 2026-04-29 | 986a18d, 458e1cd, 9b0e660 | [260423-machine-id](./quick/260423-machine-id/) |
 
 ### Roadmap Evolution
 
@@ -122,8 +126,8 @@ v3.1 milestone 已启动；等待 ROADMAP.md 写入后进入 Phase 36 执行：
 
 ## Session Continuity
 
-Last session: 2026-04-29T07:34:00Z
-Stopped at: Completed 260421-host-bind-mounts
+Last session: 2026-04-29T09:26:19.642Z
+Stopped at: Completed 260423-machine-id
 Resume file: None
 
 ## Deferred Items
