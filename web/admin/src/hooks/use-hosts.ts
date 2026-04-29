@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { getToken } from "@/lib/auth";
 import type { EgressIP } from "./use-egress-ips";
 
 export interface HostWithUsername {
@@ -330,7 +331,7 @@ export function useUnbindEgressIP() {
 export function useExportHostConfig() {
   return useMutation({
     mutationFn: async (hostId: string) => {
-      const token = localStorage.getItem("token");
+      const token = getToken();
       const resp = await fetch(`/v1/admin/hosts/${hostId}/config/export`, {
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -362,7 +363,7 @@ export function useExportHostConfig() {
 export function useImportHostConfig() {
   return useMutation({
     mutationFn: async ({ hostId, file }: { hostId: string; file: File }) => {
-      const token = localStorage.getItem("token");
+      const token = getToken();
       const formData = new FormData();
       formData.append("file", file);
       const resp = await fetch(`/v1/admin/hosts/${hostId}/config/import`, {
