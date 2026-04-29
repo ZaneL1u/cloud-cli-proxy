@@ -28,6 +28,13 @@ type VolumeMount struct {
 	Labels   map[string]string `json:"labels,omitempty"`
 }
 
+// BindMount 描述 docker create --mount type=bind 的宿主机路径映射。
+type BindMount struct {
+	Source   string `json:"source"`
+	Target   string `json:"target"`
+	ReadOnly bool   `json:"read_only,omitempty"`
+}
+
 type HostActionRequest struct {
 	TaskID        string            `json:"task_id"`
 	HostID        string            `json:"host_id"`
@@ -53,6 +60,8 @@ type HostActionRequest struct {
 	// 组装 `claude-state-{claude_account_id}` volume 与容器 label 使用。
 	// `omitempty` 是契约：空串表示"本次 action 无账号维度"，禁止写入空字符串来表达"已分配但未知"。
 	ClaudeAccountID string `json:"claude_account_id,omitempty"`
+	// BindMounts 携带宿主机目录 bind mount 配置，由 Runtime Service 从 repository.HostMounts 映射而来。
+	BindMounts []BindMount `json:"bind_mounts,omitempty"`
 }
 
 type TaskStatusUpdate struct {

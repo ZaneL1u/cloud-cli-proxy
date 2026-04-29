@@ -34,6 +34,7 @@ type AdminHostStore interface {
 	UpdateHostEntryPassword(context.Context, string, string) error
 	ListRunningHosts(ctx context.Context) ([]repository.Host, error)
 	GetHostWithClaudeAccount(ctx context.Context, hostID string) (repository.HostWithClaudeAccount, error) // Phase 33 D-22
+	UpdateHostMounts(ctx context.Context, hostID string, mounts repository.HostMounts) error
 }
 
 type AdminHostsHandler struct {
@@ -152,12 +153,13 @@ func (h *AdminHostsHandler) Get() nethttp.Handler {
 func (h *AdminHostsHandler) Create() nethttp.Handler {
 	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		var body struct {
-			UserID        string  `json:"user_id"`
-			EgressIPID    string  `json:"egress_ip_id"`
-			Timezone      string  `json:"timezone"`
-			MemoryLimitMB int     `json:"memory_limit_mb"`
-			CPULimit      float64 `json:"cpu_limit"`
-			DiskLimitGB   int     `json:"disk_limit_gb"`
+			UserID        string               `json:"user_id"`
+			EgressIPID    string               `json:"egress_ip_id"`
+			Timezone      string               `json:"timezone"`
+			MemoryLimitMB int                  `json:"memory_limit_mb"`
+			CPULimit      float64              `json:"cpu_limit"`
+			DiskLimitGB   int                  `json:"disk_limit_gb"`
+			HostMounts    repository.HostMounts `json:"host_mounts"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.UserID == "" {
 			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "user_id is required"})
@@ -203,6 +205,7 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 				MemoryLimitMB:    body.MemoryLimitMB,
 				CPULimit:         body.CPULimit,
 				DiskLimitGB:      body.DiskLimitGB,
+				HostMounts:       body.HostMounts,
 			})
 			if err == nil {
 				break
@@ -1149,6 +1152,45 @@ func (h *AdminHostsHandler) UpdateClaude() nethttp.Handler {
 		}
 
 		writeJSON(w, nethttp.StatusOK, map[string]any{"status": "ok", "version": version})
+	})
+}
+
+func (h *AdminHostsHandler) UpdateMounts() nethttp.Handler {
+	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		hostID := r.PathValue("hostID")
+		var body struct {
+			Mounts repository.HostMounts `json:"mounts"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		for _, m := range body.Mounts {
+			if m.Source == "" || m.Target == "" {
+				writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "source and target are required"})
+				return
+			}
+			if !strings.HasPrefix(m.Source, "/") || !strings.HasPrefix(m.Target, "/") {
+				writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "paths must be absolute (start with /)"})
+				return
+			}
+		}
+		if err := h.store.UpdateHostMounts(r.Context(), hostID, body.Mounts); err != nil {
+			h.logger.Error("update host mounts failed", "host_id", hostID, "error", err)
+			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "update mounts failed"})
+			return
+		}
+		if h.events != nil {
+			hid := hostID
+			if _, err := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
+				HostID: &hid, Level: "info", Type: "admin.host.update_mounts",
+				Message: "管理员更新主机挂载配置",
+				Metadata: map[string]any{"operator": "admin", "mount_count": len(body.Mounts)},
+			}); err != nil {
+				h.logger.Error("record event failed", "type", "admin.host.update_mounts", "error", err)
+			}
+		}
+		writeJSON(w, nethttp.StatusOK, map[string]string{"status": "ok"})
 	})
 }
 

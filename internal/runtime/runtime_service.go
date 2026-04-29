@@ -162,6 +162,18 @@ func (s *Service) QueueHostAction(ctx context.Context, hostID string, action age
 		ClaudeAccountID: claudeAccountID,
 	}
 
+	// 宿主机 bind mount 映射：repository.HostMounts -> agentapi.BindMounts
+	if len(host.HostMounts) > 0 {
+		request.BindMounts = make([]agentapi.BindMount, 0, len(host.HostMounts))
+		for _, hm := range host.HostMounts {
+			request.BindMounts = append(request.BindMounts, agentapi.BindMount{
+				Source:   hm.Source,
+				Target:   hm.Target,
+				ReadOnly: hm.ReadOnly,
+			})
+		}
+	}
+
 	if request.EntryPassword == "" {
 		hid := hostID
 		if s.repo != nil {

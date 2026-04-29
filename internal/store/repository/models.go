@@ -45,9 +45,18 @@ type Host struct {
 	MemoryLimitMB    int       `json:"memory_limit_mb"`
 	CPULimit         float64   `json:"cpu_limit"`
 	DiskLimitGB      int       `json:"disk_limit_gb"`
+	HostMounts       HostMounts `json:"host_mounts"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
+
+type HostMount struct {
+	Source   string `json:"source"`
+	Target   string `json:"target"`
+	ReadOnly bool   `json:"read_only,omitempty"`
+}
+
+type HostMounts []HostMount
 
 // HostSSHAuth holds the data needed by the SSH proxy resolver.
 type HostSSHAuth struct {
@@ -268,6 +277,7 @@ type UpsertHostParams struct {
 	MemoryLimitMB    int
 	CPULimit         float64
 	DiskLimitGB      int
+	HostMounts       HostMounts
 }
 
 type RecordEventParams struct {

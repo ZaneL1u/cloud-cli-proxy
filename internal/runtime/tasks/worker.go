@@ -229,6 +229,23 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 		args = append(args, "--mount", opts)
 	}
 
+	for _, bm := range request.BindMounts {
+		if bm.Source == "" || bm.Target == "" {
+			return nil, fmt.Errorf("invalid bind mount: source=%q target=%q", bm.Source, bm.Target)
+		}
+		if !strings.HasPrefix(bm.Source, "/") || !strings.HasPrefix(bm.Target, "/") {
+			return nil, fmt.Errorf("bind mount paths must be absolute: source=%q target=%q", bm.Source, bm.Target)
+		}
+		if err := os.MkdirAll(bm.Source, 0o755); err != nil {
+			return nil, fmt.Errorf("create bind mount source dir %s: %w", bm.Source, err)
+		}
+		opts := fmt.Sprintf("type=bind,src=%s,dst=%s", bm.Source, bm.Target)
+		if bm.ReadOnly {
+			opts += ",readonly"
+		}
+		args = append(args, "--mount", opts)
+	}
+
 	for key, value := range request.Labels {
 		args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
 	}
