@@ -434,7 +434,61 @@ cac 在**应用层指纹伪装**和**遥测阻断**方面做得更深入：
 
 ---
 
-## 六、源码级深度对比（基于 cac 最新代码 clone）
+## 六、Bun 二进制兼容性问题（关键发现）
+
+### 6.0 核心问题
+
+Claude Code 现在是 **Bun 编译的独立二进制**，不是 Node.js 脚本。
+
+| 注入机制 | 适用运行时 | cac 是否使用 | 我们是否使用 |
+|----------|-----------|-------------|-------------|
+| `NODE_OPTIONS --require` | Node.js 进程 | ✅ | ✅（唯一） |
+| `BUN_OPTIONS --preload` | Bun 二进制 | ✅ | ❌ |
+
+**cac 的做法（双轨注入）：**
+```bash
+# fingerprint-hook.js
+export NODE_OPTIONS="--require $CAC_DIR/fingerprint-hook.js ${NODE_OPTIONS:-}"
+export BUN_OPTIONS="--preload $CAC_DIR/fingerprint-hook.js ${NODE_OPTIONS:-}"
+
+# dns-guard.js
+export NODE_OPTIONS="${NODE_OPTIONS:-} --require $CAC_DIR/cac-dns-guard.js"
+export BUN_OPTIONS="${BUN_OPTIONS:-} --preload $CAC_DIR/cac-dns-guard.js"
+```
+
+**我们的做法（仅 Node.js）：**
+```bash
+export NODE_OPTIONS="--require $SPOOF_SCRIPT ${NODE_OPTIONS:-}"
+# BUN_OPTIONS 完全缺失！
+```
+
+### 6.0.1 失效/有效层分析
+
+| 层次 | 对 Bun 二进制是否有效 | 说明 |
+|------|---------------------|------|
+| `os.hostname()` 补丁 | ❌ 失效 | 需要 `BUN_OPTIONS --preload` |
+| `os.networkInterfaces()` 补丁 | ❌ 失效 | 同上 |
+| `os.userInfo/platform/cpus` 补丁 | ❌ 失效 | 同上 |
+| `process.platform/arch` 补丁 | ❌ 失效 | 同上 |
+| `fs.readFileSync` machine-id 拦截 | ❌ 失效 | 同上 |
+| `child_process.execSync` 命令拦截 | ❌ 失效 | 同上 |
+| `dns.lookup` / `fetch` 遥测拦截 | ❌ 失效 | 同上 |
+| **Shell shim（PATH 优先级）** | ✅ 有效 | 不依赖运行时 |
+| **`/etc/machine-id` 真实文件** | ✅ 有效 | 任何进程都能读到 |
+| **`/etc/hostname` 真实文件** | ✅ 有效 | 同上 |
+| **环境变量 `HOSTNAME`** | ✅ 有效 | 任何进程继承 |
+| **环境变量 `DO_NOT_TRACK` 等** | ✅ 有效 | 同上 |
+| **HOSTALIASES** | ✅ 有效 | libc 级别 DNS |
+
+### 6.0.2 修订后的架构建议
+
+**结论：Shell shim + 真实文件写入才是最可靠的伪装层，因为它们不依赖任何 JS 运行时。**
+
+如果要保留 JS 层补丁（更全面的 os API 覆盖），必须同时注入 `BUN_OPTIONS --preload`。
+
+---
+
+## 七、源码级深度对比（基于 cac 最新代码 clone）
 
 > 以下对比基于 `cac` 源码 `/tmp/cac-analysis/` 与本项目 `tools/spoof-fingerprint.js` + `tools/claude-spoofed.sh` 的逐行分析。
 
