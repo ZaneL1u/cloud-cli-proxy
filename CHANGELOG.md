@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v3.2.2 - 2026-04-29
+## What's Changed
+
+### Runtime & Deployment
+- fix(image): 修复 Claude Code 二进制路径查找 (045f50d)
+- perf(image): 镜像瘦身 — 去 nodejs/npm，用官方二进制安装 Claude Code，清理 apt 缓存 (9739fe0)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v3.2.1...v3.2.2
+
+
 ## v2.1.2 - 2026-04-16
 ## What's Changed
 
