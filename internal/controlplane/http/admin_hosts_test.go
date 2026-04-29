@@ -71,6 +71,10 @@ func (s *stubHostStore) GetHostWithClaudeAccount(_ context.Context, _ string) (r
 	return s.hostWithCA, s.hostWithCAErr
 }
 
+func (s *stubHostStore) UpdateHostMounts(_ context.Context, _ string, _ repository.HostMounts) error {
+	return nil
+}
+
 func TestAdminHostsHandler(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 	sampleHost := repository.HostWithUsername{

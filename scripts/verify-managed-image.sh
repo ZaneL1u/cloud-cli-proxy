@@ -10,4 +10,4 @@ fi
 
 docker image inspect "${IMAGE_NAME}" >/dev/null
 docker run --rm --entrypoint sh "${IMAGE_NAME}" -lc 'sshd -T >/dev/null && command -v claude && command -v chromium && command -v xdpyinfo && command -v xterm && command -v pcmanfm && getent passwd workspace && test -d /workspace'
-rg -n "^Port 22$" deploy/docker/managed-user/sshd_config >/dev/null
+grep -n "^Port 22$" deploy/docker/managed-user/sshd_config >/dev/null
