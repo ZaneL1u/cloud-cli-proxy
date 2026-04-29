@@ -2,8 +2,7 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 260423-machine-id
+status: active
 last_updated: "2026-04-29T09:26:19.657Z"
 last_activity: "2026-04-29 - 完成 quick task 260422: 研究 cac 项目并评估 Claude 伪装增强方案"
 progress:
@@ -29,7 +28,7 @@ Milestone: v3.1 映射语义补齐与懒加载 — ✅ SHIPPED (2026-04-24)
 Phase: 37 (e2e-uat) — COMPLETE
 Plan: 5 of 5 (全部完成)
 Status: Phase complete — ready for verification
-Last activity: 2026-04-29 - 完成 quick task 260422: 研究 cac 项目并评估 Claude 伪装增强方案
+Last activity: 2026-04-29 - 完成 quick task 260423: 容器反检测 + 遥测阻断 + machine-id 唯一化
 
 Progress: [██████████] 100% (11/11 plans across v3.1 phases)
 
@@ -127,8 +126,6 @@ v3.1 milestone 已启动；等待 ROADMAP.md 写入后进入 Phase 36 执行：
 ## Session Continuity
 
 Last session: 2026-04-29T09:26:19.642Z
-Stopped at: Completed 260423-machine-id
-Resume file: None
 
 ## Deferred Items
 
