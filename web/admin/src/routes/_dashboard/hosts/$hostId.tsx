@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { BindingManager } from "@/components/hosts/binding-manager";
+import { MountManager } from "@/components/hosts/mount-manager";
 import { HostLifecycleActions } from "@/components/hosts/host-lifecycle-actions";
 import { RotatePasswordDialog } from "@/components/users/rotate-password-dialog";
 import { RotateHostSSHPasswordDialog } from "@/components/hosts/rotate-host-ssh-password-dialog";
@@ -330,6 +331,22 @@ function HostDetailPage() {
               hostId={hostId}
               hostStatus={host.status}
               bindings={bindings}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl border-border/80 shadow-sm">
+          <CardHeader className="border-b bg-muted/30 pb-4">
+            <CardTitle className="text-base">挂载路径</CardTitle>
+            <CardDescription className="text-xs leading-relaxed">
+              配置宿主机目录到容器的 bind mount。运行中主机需先停止后再编辑。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 pt-5">
+            <MountManager
+              hostId={hostId}
+              hostStatus={host.status}
+              mounts={host.host_mounts ?? []}
             />
           </CardContent>
         </Card>

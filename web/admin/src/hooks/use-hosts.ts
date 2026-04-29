@@ -41,6 +41,12 @@ export interface ConnectionInfo {
   vnc_url?: string;
 }
 
+export interface HostMount {
+  source: string;
+  target: string;
+  read_only?: boolean;
+}
+
 export interface HostDetail {
   host: {
     id: string;
@@ -52,6 +58,7 @@ export interface HostDetail {
     slot_key: string;
     timezone: string;
     hostname: string;
+    host_mounts?: HostMount[];
     created_at: string;
     updated_at: string;
   };
@@ -78,7 +85,7 @@ export function useHostDetail(hostId: string) {
 export function useCreateHost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { user_id: string; egress_ip_id: string; timezone?: string }) =>
+    mutationFn: (data: { user_id: string; egress_ip_id: string; timezone?: string; host_mounts?: HostMount[] }) =>
       apiFetch<{ host: HostWithUsername; task_id: string; short_id: string; entry_password: string }>("/hosts", {
         method: "POST",
         body: JSON.stringify(data),
@@ -87,6 +94,20 @@ export function useCreateHost() {
       qc.invalidateQueries({ queryKey: ["hosts"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+}
+
+export function useUpdateHostMounts(hostId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (mounts: HostMount[]) =>
+      apiFetch(`/hosts/${hostId}/mounts`, {
+        method: "PUT",
+        body: JSON.stringify({ mounts }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hosts", hostId] });
     },
   });
 }

@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, AlertCircle, X, Plus } from "lucide-react";
 import { useUsers } from "@/hooks/use-users";
 import { useCreateHost } from "@/hooks/use-hosts";
 import { useEgressIPs } from "@/hooks/use-egress-ips";
 import { useTaskPolling } from "@/hooks/use-tasks";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -66,6 +67,10 @@ export function CreateHostDialog({
   const [userId, setUserId] = useState("");
   const [egressIpId, setEgressIpId] = useState("");
   const [timezone, setTimezone] = useState("America/Los_Angeles");
+  const [hostMounts, setHostMounts] = useState<Array<{ source: string; target: string; read_only?: boolean }>>([]);
+  const [newMountSource, setNewMountSource] = useState("");
+  const [newMountTarget, setNewMountTarget] = useState("");
+  const [prevMountSource, setPrevMountSource] = useState("");
   const [taskId, setTaskId] = useState<string | null>(null);
   const [hostAccess, setHostAccess] = useState<{
     shortId: string;
@@ -112,7 +117,7 @@ export function CreateHostDialog({
       return;
     }
     createMutation.mutate(
-      { user_id: userId, egress_ip_id: egressIpId, timezone },
+      { user_id: userId, egress_ip_id: egressIpId, timezone, host_mounts: hostMounts.length > 0 ? hostMounts : undefined },
       {
         onSuccess: (data: any) => {
           setTaskId(data.task_id);
@@ -130,6 +135,10 @@ export function CreateHostDialog({
     setUserId("");
     setEgressIpId("");
     setTimezone("America/Los_Angeles");
+    setHostMounts([]);
+    setNewMountSource("");
+    setNewMountTarget("");
+    setPrevMountSource("");
     setTaskId(null);
     setHostAccess(null);
     onOpenChange(false);
@@ -230,6 +239,67 @@ export function CreateHostDialog({
                     <SelectItem value="Pacific/Honolulu">夏威夷</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>挂载路径（可选）</Label>
+                {hostMounts.map((m, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <span className="truncate font-mono" title={m.source}>{m.source}</span>
+                    <span className="text-muted-foreground">-&gt;</span>
+                    <span className="truncate font-mono" title={m.target}>{m.target}</span>
+                    {m.read_only && <span className="text-xs text-muted-foreground">(只读)</span>}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto h-6 w-6 p-0"
+                      onClick={() => setHostMounts(hostMounts.filter((_, j) => j !== i))}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+                <div className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <Input
+                      placeholder="宿主机路径 (例: /data/shared)"
+                      value={newMountSource}
+                      onChange={(e) => {
+                        setNewMountSource(e.target.value);
+                        if (!newMountTarget || newMountTarget === prevMountSource) {
+                          setNewMountTarget(e.target.value);
+                        }
+                        setPrevMountSource(e.target.value);
+                      }}
+                    />
+                  </div>
+                  <span className="pb-2 text-muted-foreground">-&gt;</span>
+                  <div className="flex-1 space-y-1">
+                    <Input
+                      placeholder="容器路径 (默认同宿主机路径)"
+                      value={newMountTarget}
+                      onChange={(e) => setNewMountTarget(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9"
+                    disabled={!newMountSource.startsWith("/") || !newMountTarget.startsWith("/")}
+                    onClick={() => {
+                      setHostMounts([...hostMounts, { source: newMountSource, target: newMountTarget }]);
+                      setNewMountSource("");
+                      setNewMountTarget("");
+                      setPrevMountSource("");
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {newMountSource && !newMountSource.startsWith("/") && (
+                  <p className="text-xs text-destructive">宿主机路径必须以 / 开头</p>
+                )}
               </div>
             </div>
 
