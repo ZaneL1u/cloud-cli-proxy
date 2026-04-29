@@ -67,7 +67,7 @@ export function CreateHostDialog({
   const [userId, setUserId] = useState("");
   const [egressIpId, setEgressIpId] = useState("");
   const [timezone, setTimezone] = useState("America/Los_Angeles");
-  const [hostMounts, setHostMounts] = useState<Array<{ source: string; target: string; read_only?: boolean }>>([]);
+  const [hostMounts, setHostMounts] = useState<Array<{ source: string; target: string }>>([]);
   const [newMountSource, setNewMountSource] = useState("");
   const [newMountTarget, setNewMountTarget] = useState("");
   const [prevMountSource, setPrevMountSource] = useState("");
@@ -248,7 +248,6 @@ export function CreateHostDialog({
                     <span className="truncate font-mono" title={m.source}>{m.source}</span>
                     <span className="text-muted-foreground">-&gt;</span>
                     <span className="truncate font-mono" title={m.target}>{m.target}</span>
-                    {m.read_only && <span className="text-xs text-muted-foreground">(只读)</span>}
                     <Button
                       type="button"
                       variant="ghost"
