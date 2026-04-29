@@ -30,7 +30,9 @@ ARG CLAUDE_USER=claude
 ARG CLAUDE_UID=1000
 ARG CLAUDE_GID=1000
 
-RUN groupadd --gid "${CLAUDE_GID}" "${CLAUDE_USER}" \
+RUN userdel -f ubuntu 2>/dev/null || true \
+    && groupdel ubuntu 2>/dev/null || true \
+    && groupadd --force --gid "${CLAUDE_GID}" "${CLAUDE_USER}" \
     && useradd --uid "${CLAUDE_UID}" --gid "${CLAUDE_GID}" \
        --home-dir "/home/${CLAUDE_USER}" --create-home \
        --shell /bin/bash "${CLAUDE_USER}" \
