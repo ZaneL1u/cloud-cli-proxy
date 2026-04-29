@@ -434,6 +434,145 @@ cac 在**应用层指纹伪装**和**遥测阻断**方面做得更深入：
 
 ---
 
+## 六、源码级深度对比（基于 cac 最新代码 clone）
+
+> 以下对比基于 `cac` 源码 `/tmp/cac-analysis/` 与本项目 `tools/spoof-fingerprint.js` + `tools/claude-spoofed.sh` 的逐行分析。
+
+### 6.1 Node.js 指纹补丁对比
+
+| API | cac (`fingerprint-hook.js`) | 我们 (`spoof-fingerprint.js`) | 差异 |
+|-----|---------------------------|-------------------------------|------|
+| `os.hostname()` | 补丁，读 `CAC_HOSTNAME` | 补丁，读 `SPOOF_HOSTNAME` | 等价 |
+| `os.userInfo()` | 只覆盖 `username` | 覆盖 `username` + `homedir` + `shell` | **我们更全面** |
+| `os.networkInterfaces()` | 修改真实接口的 MAC（XOR 派生 per-interface） | 完全替换为虚构的 `eth0` + `lo` | cac 更隐蔽（保留真实接口名和 IP） |
+| `os.platform/type/release/arch` | 未补丁 | 已补丁 | **我们更全面** |
+| `os.totalmem/freemem` | 未补丁 | 已补丁 | **我们更全面** |
+| `os.cpus()` | 未补丁 | 已补丁 | **我们更全面** |
+| `os.homedir()` | 未补丁 | 已补丁 | **我们更全面** |
+| `os.uptime()` | 未补丁 | 已补丁（7 天随机偏移） | **我们更全面** |
+| `process.platform/arch` | 未补丁 | 已补丁（defineProperty） | **我们更全面** |
+| `fs.readFileSync` (machine-id) | 补丁，读 `CAC_MACHINE_ID` | 未补丁（仅 child_process 拦截） | **cac 更深** |
+| `fs.readFile` (machine-id) | 补丁（callback 版） | 未补丁 | **cac 更深** |
+| `fs.promises.readFile` (machine-id) | 补丁 | 未补丁 | **cac 更深** |
+| `fs.existsSync('/.dockerenv')` | 补丁（返回 false） | 未补丁 | **cac 更深** |
+| `/proc/1/cgroup` 读取 | 补丁（替换 docker/containerd/kubepods → system.slice） | 未补丁 | **cac 更深** |
+| `.git/config` 读取 | 补丁（替换 remote origin URL） | 未补丁 | **cac 更深** |
+| Git email 拦截 | 补丁 `git config --get user.email` | 未补丁 | **cac 更深** |
+| Git remote 命令拦截 | 补丁 `git remote get-url/-v/--get` | 未补丁 | **cac 更深** |
+| MAC 地址派生 | SHA256 + XOR per-interface index | SHA256 直接截取 | cac 更真实 |
+
+### 6.2 child_process 拦截对比
+
+| 拦截目标 | cac | 我们 | 差异 |
+|----------|-----|------|------|
+| `ioreg` (macOS) | Shell shim（PATH 优先级） | Node.js child_process 内正则 | cac 更可靠 |
+| `system_profiler` (macOS) | 无（macOS 通过 ioreg 已覆盖） | Node.js child_process 内正则 | 我们多余 |
+| `sysctl kern.uuid` | 无（macOS 通过 ioreg 已覆盖） | Node.js child_process 内正则 | 我们多余 |
+| `cat /etc/machine-id` | Shell shim `cat`（PATH 优先级）+ Node.js fs patch | Node.js child_process 内正则 | cac 双层 |
+| `hostname` | Shell shim（PATH 优先级） | Node.js child_process 内正则 | cac 更可靠 |
+| `ifconfig` | Shell shim（sed 替换 MAC） | 未拦截 | **cac 更深** |
+| `wmic csproduct get uuid` (Windows) | Node.js child_process 内正则 | 未覆盖 | cac 更全 |
+| `reg query MachineGuid` (Windows) | Node.js child_process 内正则 | 未覆盖 | cac 更全 |
+| `git remote get-url/-v` | Node.js child_process 内正则 | 未拦截 | **cac 更深** |
+| `git config --get user.email` | Node.js child_process 内正则 | 未拦截 | **cac 更深** |
+
+### 6.3 遥测阻断对比（cac 独有）
+
+| 阻断层 | cac 实现 | 我们 |
+|--------|----------|------|
+| `dns.lookup` 拦截 | `cac-dns-guard.js` 补丁 | 无 |
+| `dns.resolve/resolve4/resolve6` 拦截 | 同上 | 无 |
+| `dns.promises.*` 拦截 | 同上 | 无 |
+| `net.connect/net.createConnection` 拦截 | 同上（安全网） | 无 |
+| `globalThis.fetch` 拦截 | 同上（undici 路径） | 无 |
+| `https.request/https.get` 拦截 | 同上 | 无 |
+| HOSTALIASES 文件 | `blocked_hosts` → localhost | 无 |
+| 环境变量（DO_NOT_TRACK 等） | 12 个变量 | 无 |
+| 健康检查绕过 | 拦截 `api.anthropic.com/api/hello` 返回假 200 | 无 |
+
+**cac 拦截的遥测域名：**
+- `statsig.anthropic.com`
+- `sentry.io`
+- `o1137031.ingest.sentry.io`
+- `cdn.growthbook.io`
+- `http-intake.logs.us5.datadoghq.com`
+
+### 6.4 网络层对比（cac 独有）
+
+| 功能 | cac 实现 | 我们 |
+|------|----------|------|
+| mTLS 客户端证书 | `tls.connect` 拦截注入 + `https.globalAgent.options.ca` 注入 | 无 |
+| 代理自动检测 | `curl ip-api.com` + 协议自动检测 | 手动配置 |
+| 时区自动检测 | 通过代理 IP 检测时区和国家 | 无 |
+| 心跳检测 | `relay.js` 内置 | 无 |
+
+### 6.5 环境隔离对比
+
+| 功能 | cac | 我们 |
+|------|-----|------|
+| `CLAUDE_CONFIG_DIR` 隔离 | 完整支持，每个环境独立 `.claude` 目录 | 无（共享配置） |
+| settings.json 合并 | 支持 clone + override + 深度合并 | 无 |
+| 环境切换 | `cac <name>` 一键切换 | 无 |
+| 版本管理 | `cac claude install/pin/ls` | 无 |
+| Persona 预设 | `macos-vscode`, `macos-cursor`, `macos-iterm`, `linux-desktop` | 无 |
+| 遥测模式 | `stealth`（默认）, `paranoid`, `transparent` 三档 | 无 |
+| 设备 token | 每环境独立 `device_token` | 无 |
+
+### 6.6 关键发现总结
+
+**我们做得更好的地方（os API 层）：**
+- `os.platform/type/release/arch/tmpdir` — cac 未补丁
+- `os.totalmem/freemem/cpus` — cac 未补丁
+- `os.homedir/uptime` — cac 未补丁
+- `process.platform/arch` — cac 未补丁
+- `os.userInfo()` 补丁更全面（homedir + shell）
+
+**cac 做得更深的地方（文件系统 + 容器检测层）：**
+- `fs.readFileSync/readFile/promises.readFile` 三路 machine-id 拦截
+- `fs.existsSync('/.dockerenv')` 容器检测绕过
+- `/proc/1/cgroup` 内容清洗
+- `.git/config` 读取拦截（防 repo hash 关联）
+- Git email/remote 命令拦截
+
+**cac 独有的关键能力：**
+1. **遥测阻断**（DNS + fetch + net.connect + HOSTALIASES + 环境变量 + 健康检查绕过）— 我们完全缺失
+2. **Shell shim**（PATH 优先级命令代理）— 我们完全缺失
+3. **mTLS 客户端证书注入** — 我们完全缺失
+4. **CLAUDE_CONFIG_DIR 环境隔离** — 我们完全缺失
+5. **容器检测绕过**（/.dockerenv + cgroup）— 我们有占位符未实现
+
+### 6.7 修订后的优先级建议
+
+基于源码级分析，修订之前的优先级排序：
+
+#### P0 — 必须实施（安全关键）
+
+| 编号 | 建议 | 理由 | 工作量 |
+|------|------|------|--------|
+| P0-1 | **实现遥测阻断** | 最大安全风险。DNS guard + fetch + 环境变量三层阻断。直接复用 cac 的 `cac-dns-guard.js` 架构，适配我们的域名列表 | 半天 |
+| P0-2 | **添加 Shell shim** | PATH 优先级 `hostname`、`cat`（machine-id）、`ifconfig` 脚本。确保非 Node.js 进程也能拿到伪装结果 | 半天 |
+| P0-3 | **fs 层 machine-id 拦截** | 在 `spoof-fingerprint.js` 中补丁 `fs.readFileSync`、`fs.readFile`、`fs.promises.readFile`，拦截 `/etc/machine-id` 和 `/var/lib/dbus/machine-id` | 1 小时 |
+| P0-4 | **容器检测绕过** | 补丁 `fs.existsSync('/.dockerenv')` 返回 false + `/proc/1/cgroup` 内容清洗 | 1 小时 |
+
+#### P1 — 建议实施（显著提升）
+
+| 编号 | 建议 | 理由 | 工作量 |
+|------|------|------|--------|
+| P1-1 | **Git remote/email 拦截** | 防止 Claude Code 通过 repo hash 做跨账户关联 | 2 小时 |
+| P1-2 | **健康检查绕过** | 拦截 `api.anthropic.com/api/hello` 返回假 200，避免 Cloudflare 403 | 1 小时 |
+| P1-3 | **CLAUDE_CONFIG_DIR 隔离** | 每个用户容器独立配置目录 | 1 小时 |
+| P1-4 | **容器 entrypoint 集成** | 将指纹伪装集成到 Docker entrypoint，开箱即用 | 2 小时 |
+
+#### P2 — 可选增强
+
+| 编号 | 建议 | 理由 | 工作量 |
+|------|------|------|--------|
+| P2-1 | **mTLS 客户端证书** | 当前 sing-box 隧道已足够，额外价值有限 | 半天 |
+| P2-2 | **MAC 地址 per-interface 派生** | XOR 派生更真实，但实际影响不大 | 1 小时 |
+| P2-3 | **Persona 预设** | macOS/Linux 桌面环境预设，提升开箱体验 | 半天 |
+
+---
+
 ## Self-Check: PASSED
 
 - 计划文件 `.planning/quick/260422-cac-claude/260422-PLAN.md` 存在：FOUND
