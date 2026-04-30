@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: active
-last_updated: "2026-04-29T09:26:19.657Z"
-last_activity: "2026-04-29 - 完成 quick task 260422: 研究 cac 项目并评估 Claude 伪装增强方案"
+milestone: v3.1
+milestone_name: "映射语义补齐与懒加载"
+status: complete
+last_updated: "2026-04-30T13:30:00.000Z"
+last_activity: 2026-04-30
 progress:
   total_phases: 5
   completed_phases: 5
@@ -28,7 +28,7 @@ Milestone: v3.1 映射语义补齐与懒加载 — ✅ SHIPPED (2026-04-24)
 Phase: 37 (e2e-uat) — COMPLETE
 Plan: 5 of 5 (全部完成)
 Status: Phase complete — ready for verification
-Last activity: 2026-04-30 - 完成 quick task 260424: 为 cloud-claude 添加外层信息面板（出口IP、账号、文件状态等）
+Last activity: 2026-04-30
 
 Progress: [██████████] 100% (11/11 plans across v3.1 phases)
 

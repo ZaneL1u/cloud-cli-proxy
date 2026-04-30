@@ -1,5 +1,30 @@
 # Milestones
 
+## v3.1 映射语义补齐与懒加载 (Shipped: 2026-04-30)
+
+**Phases completed:** 5 phases, 18 plans, 32 tasks
+
+**Key accomplishments:**
+
+- 0007 迁移引入 users.role 列和 claude_accounts 表，扩展 Go 模型支持角色和 Claude 账号，定义统一 AuthClaims JWT claims 结构体和 GenerateAuthToken 工具函数
+- 统一登录端点 /v1/auth/login 接受 short_id + password bcrypt 认证返回带 role 的 JWT，通用 AuthMiddleware 替代旧 AdminAuthMiddleware，entry.go 废弃明文密码，启动时自动创建种子管理员
+- 统一登录页改用 short_id 发送到 /v1/auth/login，按 JWT role 字段跳转 dashboard 或 portal，管理员路由守卫增加角色校验
+- 用户自助 API 三端点（主机列表/详情/重建）+ 归属校验 + 敏感字段过滤 + JWT 认证中间件
+- Portal 主机列表卡片页 + 主机详情页（含出口 IP/隧道类型展示和重建确认对话框）+ Topbar 路由标题和角色标签适配
+- claude-shell 专用 Docker 镜像（Ubuntu 24.04 + sing-box 1.13.3 + Claude Code）与 step-function entrypoint 编排脚本
+- Dockerfile Claude Code 安装步骤增加 3 次重试 + GitHub release binary 回退，解决 CDN 返回 HTTP 403 导致 docker build 失败的问题
+- 两条 Phase 36 mount 错误码、对应中文长说明和 explain 子进程回归测试已接入统一 errcodes 注册表。
+- Config 新增 HotSyncMaxFileMB(默认 50) accessor，LastSessionSnapshot 新增 OversizedFiles 数组与 OversizedFile struct，schema_version=1 不变，3 条序列化测试 PASS。
+- HotSyncEngine 在 initialSync / syncOnce 注入单文件大小熔断，超阈文件经 HotSyncStatus 透传到 mount_strategy，写入 last-session.json 并通过 stderr 一次性提示，三场景测试 PASS。
+- runRoot 工作目录获取与 git 仓库前置检测前移到 AuthenticateAndWait 之前，非 git 目录立即 exit 4 且不发起任何 SSH 连接（修复 RESEARCH §L1 时序地雷）。
+- mount_sshfs.go 注入 4 个 FUSE page cache 参数（cache=yes,kernel_cache,auto_cache,cache_timeout=300），并新增 fixture SFTP counter 测试端到端验证「同会话同文件 ReadFile 2 次 → server-side Fileread = 1」。
+- doctor mount 维度从 v3.0 的 4 项 check 扩展到 9 项（+5 项 require_git_repo / oversized_files_count / sshfs_cache_args / git_proxy_enabled / default_ignore_loaded），覆盖 git 仓库前置约束、上次会话大文件熔断记录、sshfs 内核缓存参数完整性、代理配置与默认 ignore 加载状态；13 条矩阵测试全 PASS，schema_version=1 不变，CI 三段 grep gate 继续通过。
+- 1. [Rule 3 - 缺少依赖] MOUNT_PROMOTER_FAILED 错误码不存在
+- ColdPromoter 挂入 tryModeReal Full 路径：mergerfs 就绪后启动，cleanup LIFO 回收，LastSessionSnapshot 新增 3 个 promotion 字段，CLOUD_CLAUDE_NO_PROMOTION=1 完全跳过
+- MOUNT_PROMOTER_FAILED 错误码全链路（37-01 ship）+ 4 项 promotion doctor check + explain 子进程测试
+
+---
+
 ## v3.1 映射语义补齐与懒加载 (Shipped: 2026-04-24)
 
 **Phases completed:** 2 phases, 11 plans, ~35 tasks
@@ -19,6 +44,7 @@
 - 运维手册 + e2e UAT：`docs/runbooks/v31-cold-promotion.md` Pattern G 5 章手册；619 行 `uat-v31-promotion.sh` 覆盖 6 大场景，接入 `make ci-gate`
 
 **Coverage:**
+
 - Requirements: **16/16 satisfied** — Phase 36 全部 6 条 + Phase 37 全部 10 条
 - Cross-phase integration: Phase 36→37 4 条依赖链路全 VERIFIED
 - CI: `make ci-gate` PASS（go test + ci-doctor-grep + uat dry-run）
@@ -28,6 +54,7 @@
 **Audit:** `.planning/milestones/v3.1-MILESTONE-AUDIT.md` (status: tech_debt — 0 实现 gap)
 **Tag:** v3.1
 **Archive:**
+
 - `.planning/milestones/v3.1-ROADMAP.md`
 - `.planning/milestones/v3.1-REQUIREMENTS.md`
 - `.planning/milestones/v3.1-MILESTONE-AUDIT.md`
@@ -64,6 +91,7 @@
 - Critical Pitfalls 防御：C1/C2/C3/C4/C5/C6/C7/C8 + M13/M14 全部覆盖（验证手段见 v3.0-MILESTONE-AUDIT.md）
 
 **Known deferred items at close:** 23 (see STATE.md `## Deferred Items`)
+
 - 3 真机签字（M5 APFS / BASE-03 2min / C6 Ubuntu 25.04）— ship 前补签
 - 2 v1.2 历史 verification gap（Phase 11/12，与 v3.0 无关）
 - 5 docker UAT（Phase 32 → Phase 35 真机 UAT 队列）
@@ -73,6 +101,7 @@
 **Audit:** `.planning/milestones/v3.0-MILESTONE-AUDIT.md` (status: tech_debt — 0 实现 gap，4 E2E flow WIRED)
 **Tag:** v3.0
 **Archive:**
+
 - `.planning/milestones/v3.0-ROADMAP.md`
 - `.planning/milestones/v3.0-REQUIREMENTS.md`
 - `.planning/milestones/v3.0-MILESTONE-AUDIT.md`

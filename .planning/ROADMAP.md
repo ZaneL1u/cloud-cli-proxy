@@ -96,34 +96,22 @@
 
 </details>
 
-### 📋 Next Milestone (Planned)
+### 📋 Next Milestone (待规划)
 
-- [ ] Phase 38: TBD
+运行 `/gsd:new-milestone` 开始下一里程碑规划。
 
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. 基础控制面与主机代理 | v1.0 | 3/3 | Complete | 2026-03-26 |
-| 2. 隧道出网强制层 | v1.0 | 3/3 | Complete | 2026-03-27 |
-| 3. 启动入口与 SSH 接入 | v1.0 | 3/3 | Complete | 2026-03-27 |
-| 4. 后台管理界面 | v1.0 | 3/3 | Complete | 2026-03-27 |
-| 5. 到期、审计与清理 | v1.0 | 3/3 | Complete | 2026-03-27 |
-| 6. 加固与 MVP 就绪 | v1.0 | 4/4 | Complete | 2026-03-28 |
-| 7. 数据层与类型化 | v1.1 | 3/3 | Complete | 2026-03-28 |
-| 8. SingBoxProvider 与受管镜像 | v1.1 | 3/3 | Complete | 2026-03-28 |
-| 9. 前端适配与代理测试 | v1.1 | 3/3 | Complete | 2026-03-28 |
-| 10. 技术债务清理 | v1.1 | 2/2 | Complete | 2026-03-28 |
-| 11. 认证基础设施与数据迁移 | v1.2 | 3/3 | Complete | 2026-03-29 |
-| 12. 用户自助 API 与前端路由 | v1.2 | 2/2 | Complete | 2026-03-29 |
-| 13-16. v1.2 剩余阶段 | v1.2 | — | Deferred | — |
+| 1-6. v1.0 MVP | v1.0 | 19/19 | Complete | 2026-03-28 |
+| 7-10. v1.1 代理协议出网 | v1.1 | 11/11 | Complete | 2026-03-28 |
+| 11-12. v1.2 认证与自助面板 | v1.2 | 5/5 | Partial | 2026-03-29 |
 | 17-23. claude-shell 本地代理 | v1.3 | — | Paused | — |
-| 24-28. v2.0 cloud-claude 全部 | v2.0 | 7/7 | Complete | 2026-04-15 |
+| 24-28. v2.0 cloud-claude | v2.0 | 7/7 | Complete | 2026-04-15 |
 | 29-35. v3.0 远端开发体验升级 | v3.0 | 30/30 | Complete | 2026-04-23 |
-| 36. 映射前置约束 + sshfs 内核缓存 | v3.1 | 6/6 | Complete | 2026-04-23 |
-| 37. 冷文件读触发晋升 + e2e UAT | v3.1 | 5/5 | Complete | 2026-04-24 |
-| 38. TBD | next | — | Planned | — |
+| 36-37. v3.1 映射语义补齐与懒加载 | v3.1 | 11/11 | Complete | 2026-04-24 |
 
 ---
 
-*Last updated: 2026-04-24 — v3.1 milestone shipped. Ready for next milestone planning.*
+*Last updated: 2026-04-30 — v3.1 milestone archived. Ready for next milestone planning.*

@@ -331,4 +331,4 @@ v3.0 已交付，新增：
 4. 用当前产品状态更新"背景"
 
 ---
-*Last updated: 2026-04-24 — v3.1 milestone shipped (映射语义补齐与懒加载, 2 phases, 11 plans, 16/16 REQ satisfied)*
+*Last updated: 2026-04-30 — v3.1 milestone archived. Ready for next milestone planning.*
