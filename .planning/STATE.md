@@ -113,7 +113,7 @@ v3.1 milestone 已启动；等待 ROADMAP.md 写入后进入 Phase 36 执行：
 | 260421 | 宿主机路径挂载管理（DB + API + Worker + 前端全链路） | 2026-04-29 | 2e910f3, ee98afa | [260421-host-bind-mounts](./quick/260421-host-bind-mounts/) |
 | 260422 | 研究 cac 项目并评估 Claude 伪装增强方案 | 2026-04-29 | — | [260422-cac-claude](./quick/260422-cac-claude/) |
 | 260423 | 容器反检测 + 遥测阻断 + machine-id 唯一化 | 2026-04-29 | 986a18d, 458e1cd, 9b0e660 | [260423-machine-id](./quick/260423-machine-id/) |
-| 260424 | 为 cloud-claude 添加外层信息面板（出口IP、账号、文件状态等） | 2026-04-30 | 77aee4d | [260424-cloud-claude-ip](./quick/260424-cloud-claude-ip/) |
+| 260424 | 为 cloud-claude 添加外层信息面板（出口IP、账号、文件状态等） | 2026-04-30 | 77aee4d, 64cfcc9 | [260424-cloud-claude-ip](./quick/260424-cloud-claude-ip/) |
 
 ### Roadmap Evolution
 
