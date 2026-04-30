@@ -43,3 +43,21 @@
 - `go build ./cmd/cloud-claude/` PASS
 - `go test ./internal/cloudclaude/ -run TestPrintDashboard -v` 5/5 PASS
 - `go test ./internal/cloudclaude/ -count=1` 全包 PASS（45.8s）
+
+## 安全修复（紧急追加）
+
+修复 hot-sync 在退出 cleanup 和运行期间批量删除本地文件的安全问题：
+
+### 问题
+`applyRemote` 在远程文件不存在时调用 `deleteLocal(rel)`，导致：
+1. **退出 cleanup**：`syncOnce(false)` 双向 reconcile，远程空状态 → 本地文件被删
+2. **运行期间**：`syncOnceAdaptive` 轮询检测到远程文件消失 → 本地文件被同步删除
+
+### 修复
+1. **cleanup 函数**（`hot_sync.go:169-185`）：移除 `syncOnceUploadOnly` / `syncOnce(false)`，直接 `close → wait → client.Close()`。退出即断开，不碰文件。
+2. **applyRemote**（`hot_sync.go:590-595`）：远程文件不存在时，不再调用 `deleteLocal`，改为记录日志并保留本地文件。
+
+### 修复后行为
+- 本地文件删除仍会上传到远程（`applyLocal → deleteRemote`）
+- 远程文件删除**不再**同步到本地
+- 退出时**不做**任何文件同步，直接关闭连接

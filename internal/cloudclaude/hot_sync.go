@@ -169,18 +169,10 @@ func StartHotSync(connA, connB *ssh.Client, cfg HotSyncConfig) (cleanup func(), 
 	cleanup = func() {
 		close(engine.stopCh)
 		<-engine.doneCh
-		// 会话退出前最后做一次收敛。
-		// Full 模式（resetRemote=true）只做 local → remote 单向上传，
-		// 防止远端 staging 的意外修改反向覆盖本地。
-		if engine.resetRemote {
-			if err := engine.syncOnceUploadOnly(); err != nil && engine.logger != nil {
-				fmt.Fprintln(engine.logger, "[!] 热同步最终上传失败: "+err.Error())
-			}
-		} else {
-			if err := engine.syncOnce(false); err != nil && engine.logger != nil {
-				fmt.Fprintln(engine.logger, "[!] 热同步最终收敛失败: "+err.Error())
-			}
-		}
+		// 安全修复：退出时不做任何文件同步，直接关闭连接。
+		// 之前的 syncOnce / syncOnceUploadOnly 在远程状态异常时
+		// 会反向删除本地文件（applyRemote → deleteLocal），导致
+		// 用户工作区数据丢失。取消映射即断开，不删文件。
 		_ = engine.client.Close()
 	}
 	return cleanup, HotSyncStatus{
@@ -589,7 +581,13 @@ func (e *HotSyncEngine) applyLocal(rel string, state syncFileState, exists bool)
 
 func (e *HotSyncEngine) applyRemote(rel string, state syncFileState, exists bool) error {
 	if !exists {
-		return e.deleteLocal(rel)
+		// 安全修复：远程文件不存在时，不再自动删除本地文件。
+		// 防止容器重启、mergerfs 异常卸载等场景导致远程目录暂时为空，
+		// 从而批量删除用户本地工作区。改为记录日志并保留本地。
+		if e.logger != nil {
+			fmt.Fprintf(e.logger, "[!] 热同步保留本地文件：%s（远程已不存在，跳过删除）\n", rel)
+		}
+		return nil
 	}
 	return e.copyRemoteToLocal(rel, state)
 }
