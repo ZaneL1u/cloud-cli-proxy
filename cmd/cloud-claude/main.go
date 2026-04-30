@@ -169,21 +169,24 @@ func runEnvCheck(cmd *cobra.Command, args []string) error {
 
 	client := cloudclaude.NewEntryClient(cfg.Gateway)
 
-	fmt.Println("正在连接云主机...")
+	stage := "正在连接云主机"
+	fmt.Printf("%s .... ", stage)
 
 	authResp, err := client.AuthenticateAndWait(
 		cmd.Context(),
 		cfg.Username,
 		cfg.Password,
 		func(msg string) {
-			fmt.Printf("\r%s", msg)
+			fmt.Printf("\r\033[2K%s .... %s", stage, msg)
 		},
 	)
 	if err != nil {
+		fmt.Printf("\r\033[2K%s .... 失败\n", stage)
 		return fmt.Errorf("认证失败: %w", err)
 	}
+	fmt.Printf("\r\033[2K%s .... 成功\n", stage)
 
-	fmt.Println("\r正在检测远端环境...")
+	fmt.Println("正在检测远端环境...")
 
 	sshCfg := cloudclaude.SSHConfig{
 		Host:     authResp.SSHHost,
@@ -212,18 +215,24 @@ func runSSHDoctor(cmd *cobra.Command, args []string) error {
 
 	client := cloudclaude.NewEntryClient(cfg.Gateway)
 
-	fmt.Println("正在连接云主机...")
+	stage := "正在连接云主机"
+	fmt.Printf("%s .... ", stage)
+
 	authResp, err := client.AuthenticateAndWait(
 		cmd.Context(),
 		cfg.Username,
 		cfg.Password,
-		func(msg string) { fmt.Printf("\r%s", msg) },
+		func(msg string) {
+			fmt.Printf("\r\033[2K%s .... %s", stage, msg)
+		},
 	)
 	if err != nil {
+		fmt.Printf("\r\033[2K%s .... 失败\n", stage)
 		return fmt.Errorf("认证失败: %w", err)
 	}
+	fmt.Printf("\r\033[2K%s .... 成功\n", stage)
 
-	fmt.Println("\r正在体检远端 /workspace/.ssh ...")
+	fmt.Println("正在体检远端 /workspace/.ssh ...")
 
 	sshCfg := cloudclaude.SSHConfig{
 		Host:     authResp.SSHHost,
@@ -310,17 +319,19 @@ func runRoot(cmd *cobra.Command, args []string) error {
 
 	client := cloudclaude.NewEntryClient(cfg.Gateway)
 
-	fmt.Println("正在连接云主机...")
+	stage := "正在连接云主机"
+	fmt.Printf("%s .... ", stage)
 
 	authResp, err := client.AuthenticateAndWait(
 		cmd.Context(),
 		cfg.Username,
 		cfg.Password,
 		func(msg string) {
-			fmt.Printf("\r%s", msg)
+			fmt.Printf("\r\033[2K%s .... %s", stage, msg)
 		},
 	)
 	if err != nil {
+		fmt.Printf("\r\033[2K%s .... 失败\n", stage)
 		errMsg := err.Error()
 		fmt.Fprintln(os.Stderr, "错误: "+errMsg)
 		switch {
@@ -339,8 +350,9 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		}
 		return nil
 	}
+	fmt.Printf("\r\033[2K%s .... 成功\n", stage)
 
-	fmt.Println("\r正在映射工作目录并进入 Claude Code 会话...")
+	fmt.Println("正在映射工作目录并进入 Claude Code 会话...")
 
 	sshCfg := cloudclaude.SSHConfig{
 		Host:     authResp.SSHHost,

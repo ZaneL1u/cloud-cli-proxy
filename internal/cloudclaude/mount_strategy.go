@@ -486,14 +486,12 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig, snapshot 
 		return nil, HotSyncStatus{}, hErr
 	}
 
-	fmt.Fprintln(cfg.Logger, "\n━━ (2/3) 启动冷兜底 ━━")
 	sCleanup, sErr := mountSSHFS(connA, cfg.Cwd, coldRoot)
 	if sErr != nil {
 		hCleanup()
 		return nil, HotSyncStatus{}, sErr
 	}
 
-	fmt.Fprintln(cfg.Logger, "\n━━ (3/3) 合并视图 ━━")
 	cleanupStaleFUSE(connA, cfg.Cwd)
 	branches := []string{hotRoot + "=RW", coldRoot + "=RO"}
 	mergeCleanup, mergeErr := mountMerge(connA, branches, cfg.Cwd)
@@ -502,6 +500,8 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig, snapshot 
 		hCleanup()
 		return nil, HotSyncStatus{}, mergeErr
 	}
+
+	fmt.Fprintln(cfg.Logger, "冷兜底就绪  合并视图就绪")
 
 	// Phase 37: ColdPromoter 集成（仅在 Full 模式 + Linux + 非 NO_PROMOTION 时启动）
 	noPromotion := os.Getenv("CLOUD_CLAUDE_NO_PROMOTION") == "1" || runtime.GOOS != "linux"
@@ -553,15 +553,11 @@ func tryModeReal(connA, connB *ssh.Client, mode Mode, cfg MountConfig, snapshot 
 func printProgress(w io.Writer, mode Mode) {
 	switch mode {
 	case ModeFull:
-		fmt.Fprintln(w, "\n━━ (1/3) 热同步 ━━")
+		// Full 模式阶段标题由 ProgressUI 统一输出，此处不重复。
 	case ModeHotOnly:
-		fmt.Fprintln(w, "\n━━ (1/3) 热同步 ━━")
-		fmt.Fprintf(w, "  (2/3) 跳过 sshfs（模式: %s）\n", mode.String())
-		fmt.Fprintf(w, "  (3/3) 跳过 mergerfs（模式: %s）\n", mode.String())
+		fmt.Fprintln(w, "同步代码库（hot-only）")
 	case ModeSSHFSOnly:
-		fmt.Fprintf(w, "\n━━ (1/3) 跳过热同步（模式: %s）━━\n", mode.String())
-		fmt.Fprintln(w, "━━ (2/3) 启动冷兜底 ━━")
-		fmt.Fprintf(w, "  (3/3) 跳过 mergerfs（模式: %s）\n", mode.String())
+		fmt.Fprintln(w, "跳过同步，直接挂载 sshfs")
 	}
 }
 
