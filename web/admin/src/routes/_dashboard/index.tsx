@@ -11,6 +11,14 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useEvents, eventTypeLabel } from "@/hooks/use-events";
+import { useImageStatus, useRefreshImage } from "@/hooks/use-image";
+import {
+  Container,
+  RotateCw,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
+import { toast } from "sonner";
 
 interface DashboardStats {
   active_users: number;
@@ -39,6 +47,9 @@ function DashboardPage() {
     limit: 5,
   });
   const events = eventsData?.events ?? [];
+
+  const { data: imageStatus, isLoading: imageLoading } = useImageStatus();
+  const refreshImage = useRefreshImage();
 
   const cards = [
     {
@@ -112,6 +123,94 @@ function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div className="flex items-center gap-2">
+            <Container className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-base font-semibold">镜像版本</CardTitle>
+          </div>
+          <button
+            onClick={() => {
+              if (imageStatus?.refreshing) {
+                toast.info("镜像刷新正在进行中");
+                return;
+              }
+              refreshImage.mutate(undefined, {
+                onSuccess: () => toast.success("镜像刷新已启动"),
+                onError: () => toast.error("刷新启动失败"),
+              });
+            }}
+            disabled={refreshImage.isPending || imageStatus?.refreshing}
+            className="flex items-center gap-1 text-xs text-primary hover:underline font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RotateCw
+              className={`h-3 w-3 ${imageStatus?.refreshing ? "animate-spin" : ""}`}
+            />
+            {imageStatus?.refreshing ? "刷新中…" : "检查更新"}
+          </button>
+        </CardHeader>
+        <CardContent>
+          {imageLoading ? (
+            <div className="space-y-2">
+              <div className="h-4 w-48 animate-pulse rounded bg-muted" />
+              <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+            </div>
+          ) : imageStatus?.last_refresh_error ? (
+            <div className="flex items-start gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">刷新失败</p>
+                <p className="text-xs text-destructive/80 mt-0.5">
+                  {imageStatus.last_refresh_error}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">镜像</span>
+                <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
+                  {imageStatus?.image_name || "—"}
+                </code>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">版本</span>
+                <span className="font-medium">
+                  {imageStatus?.image_version || "—"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">本地 Digest</span>
+                <div className="flex items-center gap-1.5">
+                  {imageStatus?.local_digest ? (
+                    <>
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      <code className="text-xs font-mono">
+                        {imageStatus.local_digest}
+                      </code>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">
+                      尚未缓存
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">上次刷新</span>
+                <span className="text-xs text-muted-foreground">
+                  {imageStatus?.last_refresh_at
+                    ? new Date(imageStatus.last_refresh_at).toLocaleString(
+                        "zh-CN"
+                      )
+                    : "—"}
+                </span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">

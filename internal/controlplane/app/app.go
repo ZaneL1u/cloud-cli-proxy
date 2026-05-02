@@ -43,15 +43,16 @@ type Config struct {
 }
 
 type App struct {
-	cfg            Config
-	logger         *slog.Logger
-	db             *pgxpool.Pool
-	repo           *repository.Repository
-	migrator       func(context.Context, *pgxpool.Pool, string) error
-	handler        http.Handler
-	expiryScanner  *scheduler.ExpiryScanner
-	reconciler     *scheduler.Reconciler
-	sshProxy       *sshproxy.Server
+	cfg           Config
+	logger        *slog.Logger
+	db            *pgxpool.Pool
+	repo          *repository.Repository
+	migrator      func(context.Context, *pgxpool.Pool, string) error
+	handler       http.Handler
+	expiryScanner *scheduler.ExpiryScanner
+	reconciler    *scheduler.Reconciler
+	imageCache    *runtime.ImageCache
+	sshProxy      *sshproxy.Server
 }
 
 func newLogger() *slog.Logger {
@@ -114,6 +115,7 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 	}
 
 	runtimeService := runtime.NewService(repo, dispatcher, runtime.DefaultImageLockPath)
+	imageCache := runtime.NewImageCache(logger, runtime.DefaultImageLockPath)
 
 	var adminCfg *repository.AdminConfig
 	if cfg.AdminJWTSecret != "" {
@@ -160,6 +162,7 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		ImageLockPath:  runtime.DefaultImageLockPath,
 		UserHosts:      repo,
 		SSHKeys:        repo,
+		ImageCache:     imageCache,
 	})
 
 	var sshProxySrv *sshproxy.Server
@@ -188,6 +191,7 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		handler:       router,
 		expiryScanner: expiryScanner,
 		reconciler:    reconciler,
+		imageCache:    imageCache,
 		sshProxy:      sshProxySrv,
 	}, nil
 }
@@ -247,6 +251,15 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	if a.reconciler != nil {
 		jobs = append(jobs, scheduler.Job{Name: "reconcile", Interval: reconcileInterval, Fn: a.reconciler.Run})
+	}
+	if a.imageCache != nil {
+		jobs = append(jobs, scheduler.Job{Name: "image-cache-refresh", Interval: 30 * time.Minute, Fn: a.imageCache.Refresh})
+		// 启动时立即执行一次刷新，使前端立即可获取镜像状态
+		go func() {
+			if err := a.imageCache.Refresh(ctx); err != nil {
+				a.logger.Warn("initial image cache refresh failed", "error", err)
+			}
+		}()
 	}
 	sched := scheduler.New(a.logger, jobs)
 

@@ -54,6 +54,7 @@ type Dependencies struct {
 	ImageLockPath   string
 	UserHosts       UserHostStore
 	SSHKeys         SSHKeyStore
+	ImageCache      ImageCacheManager
 }
 
 type HealthChecker interface {
@@ -266,6 +267,12 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			claudeHandler := NewAdminClaudeAccountsHandler(deps.Logger, deps.AdminClaudeAccounts, deps.AgentClient, deps.EventRecorder)
 			mux.Handle("DELETE /v1/admin/claude-accounts/{accountID}", adminGuard(claudeHandler.Delete()))
 		}
+
+			if deps.ImageCache != nil {
+				imageHandler := NewAdminImageHandler(deps.Logger, deps.ImageCache)
+				mux.Handle("GET /v1/admin/image/status", adminGuard(imageHandler.Status()))
+				mux.Handle("POST /v1/admin/image/refresh", adminGuard(imageHandler.Refresh()))
+			}
 
 		if deps.AdminEvents != nil {
 			eventsHandler := NewAdminEventsHandler(deps.Logger, deps.AdminEvents)
