@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v3.2.4 - 2026-05-02
+## What's Changed
+
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v3.2.4...v3.2.4
+
+
 ## v3.2.5 - 2026-05-02
 ## What's Changed
 
