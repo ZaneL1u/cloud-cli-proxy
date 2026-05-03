@@ -156,7 +156,7 @@ func (s *Service) QueueHostAction(ctx context.Context, hostID string, action age
 		MemoryLimitMB: defaultIntIfZero(host.MemoryLimitMB, 4096),
 		CPULimit:      defaultFloatIfZero(host.CPULimit, 2.0),
 		Username:        owner.Username,
-		EntryPassword:   host.EntryPassword,
+		EntryPassword:   owner.EntryPassword,
 		SSHPublicKey:    "",
 		SSHPrivateKey:   "",
 		SSHKeys:         keyEntries,

@@ -36,7 +36,6 @@ type Host struct {
 	UserID           string    `json:"user_id"`
 	Status           string    `json:"status"`
 	ShortID          string    `json:"short_id"`
-	EntryPassword    string    `json:"entry_password,omitempty"`
 	TemplateImageRef string    `json:"template_image_ref"`
 	HomeVolumeName   string    `json:"home_volume_name"`
 	SlotKey          string    `json:"slot_key"`
@@ -281,7 +280,6 @@ type UpsertHostParams struct {
 	UserID           string
 	Status           string
 	ShortID          string
-	EntryPassword    string
 	TemplateImageRef string
 	HomeVolumeName   string
 	SlotKey          string

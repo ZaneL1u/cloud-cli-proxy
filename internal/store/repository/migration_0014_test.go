@@ -125,14 +125,6 @@ func TestResolveClaudeAccountQueries_MatchD05(t *testing.T) {
 	}
 }
 
-// TestGetHostByShortID_QueryIncludesTemplateImageRef 保证 GetHostByShortID
-// 已经把 template_image_ref 纳入 SELECT 列，供 Wave 2 Entry API 消费。
-func TestGetHostByShortID_QueryIncludesTemplateImageRef(t *testing.T) {
-	if !strings.Contains(getHostByShortIDSQL, "template_image_ref") {
-		t.Errorf("GetHostByShortID 查询必须选择 template_image_ref；实际:\n%s", getHostByShortIDSQL)
-	}
-}
-
 // TestResolveClaudeAccountIDForEntry_Signature 使用反射确认 Repository 暴露
 // ResolveClaudeAccountIDForEntry(ctx, userID, hostID) (string, bool, error) 签名，
 // 以契约形式让 Wave 2 的 Entry API 可直接消费。
@@ -185,7 +177,6 @@ func TestWave1_DataLayerBoundary(t *testing.T) {
 	sqls := map[string]string{
 		"resolveClaudeAccountByHostSQL":         resolveClaudeAccountByHostSQL,
 		"resolveClaudeAccountByUserFallbackSQL": resolveClaudeAccountByUserFallbackSQL,
-		"getHostByShortIDSQL":                   getHostByShortIDSQL,
 	}
 	for name, q := range sqls {
 		if strings.Contains(q, "fmt.Sprintf") || strings.Contains(q, "||") {

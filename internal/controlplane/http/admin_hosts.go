@@ -31,7 +31,7 @@ type AdminHostStore interface {
 	GetUser(context.Context, string) (repository.User, error)
 	BindEgressIPToHost(context.Context, string, string) (repository.HostBinding, error)
 	DeleteHost(context.Context, string) error
-	UpdateHostEntryPassword(context.Context, string, string) error
+	ListHostsByUserID(context.Context, string) ([]repository.Host, error)
 	ListRunningHosts(ctx context.Context) ([]repository.Host, error)
 	GetHostWithClaudeAccount(ctx context.Context, hostID string) (repository.HostWithClaudeAccount, error) // Phase 33 D-22
 	UpdateHostMounts(ctx context.Context, hostID string, mounts repository.HostMounts) error
@@ -67,7 +67,6 @@ func (h *AdminHostsHandler) List() nethttp.Handler {
 			} else {
 				hosts[i].DockerStatus = "not found"
 			}
-			hosts[i].EntryPassword = ""
 		}
 
 		writeJSON(w, nethttp.StatusOK, map[string]any{"hosts": hosts})
@@ -125,7 +124,6 @@ func (h *AdminHostsHandler) Get() nethttp.Handler {
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			h.logger.Warn("get host with claude_account failed (degraded)", "host_id", hostID, "error", err)
 		}
-		resp.Host.EntryPassword = ""
 		resp.User.PasswordHash = ""
 		resp.User.EntryPassword = ""
 		sshTarget := detail.User.Username
@@ -179,7 +177,6 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 		}
 		hostname := generateHostname()
 		hostShortID := generateShortID()
-		hostEntryPassword := generateEntryPassword()
 
 		imageLockPath := h.imageLockPath
 		if imageLockPath == "" {
@@ -207,15 +204,28 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 			return
 		}
 
+		// 一用户一主机硬约束（与 0018 迁移的 partial unique index 对齐）：
+		// 同一 user 已存在 status 不在 deleted/archived 的主机时拒绝创建，避免迁移期 race。
+		existing, err := h.store.ListHostsByUserID(r.Context(), body.UserID)
+		if err != nil {
+			h.logger.Error("list hosts for active host check failed", "user_id", body.UserID, "error", err)
+			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "check existing hosts failed"})
+			return
+		}
+		for i := range existing {
+			if existing[i].Status != "deleted" && existing[i].Status != "archived" {
+				writeJSON(w, nethttp.StatusConflict, map[string]string{"error": "user already has an active host"})
+				return
+			}
+		}
+
 		const maxRetries = 5
 		var host repository.Host
-		var err error
 		for attempt := 0; attempt < maxRetries; attempt++ {
 			host, err = h.store.UpsertHost(r.Context(), repository.UpsertHostParams{
 				UserID:           body.UserID,
 				Status:           "pending",
 				ShortID:          hostShortID,
-				EntryPassword:    hostEntryPassword,
 				TemplateImageRef: runtimeSpec.ImageName,
 				HomeVolumeName:   "",
 				SlotKey:          "primary",
@@ -271,13 +281,10 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 			}
 		}
 
-		host.EntryPassword = ""
 		writeJSON(w, nethttp.StatusAccepted, map[string]any{
-			"host":           host,
-			"task_id":        task.ID,
-			"short_id":       hostShortID,
-			"entry_password": hostEntryPassword,
-			"status":         "202 Accepted",
+			"host":    host,
+			"task_id": task.ID,
+			"status":  "202 Accepted",
 		})
 	})
 }
@@ -388,154 +395,6 @@ func (h *AdminHostsHandler) Delete() nethttp.Handler {
 		}
 
 		writeJSON(w, nethttp.StatusOK, map[string]string{"status": "deleted"})
-	})
-}
-
-func (h *AdminHostsHandler) RotateSSHPassword() nethttp.Handler {
-	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
-		hostID := r.PathValue("hostID")
-		newPassword := generateEntryPassword()
-
-		host, err := h.store.GetHost(r.Context(), hostID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
-				return
-			}
-			h.logger.Error("get host for password rotation failed", "host_id", hostID, "error", err)
-			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "get host failed"})
-			return
-		}
-
-		if err := h.store.UpdateHostEntryPassword(r.Context(), hostID, newPassword); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
-				return
-			}
-			h.logger.Error("rotate host ssh password failed", "host_id", hostID, "error", err)
-			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "rotate ssh password failed"})
-			return
-		}
-
-		if host.Status == "running" {
-			containerName := "cloudproxy-" + hostID
-			// 与 host-agent create 时 CONTAINER_USER 一致（managed-user 镜像默认为 workspace）。
-			containerUser := "workspace"
-			if syncErr := syncContainerPassword(containerName, containerUser, newPassword); syncErr != nil {
-				h.logger.Warn("sync password to running container failed (will take effect on next rebuild)",
-					"host_id", hostID, "container", containerName, "error", syncErr)
-			}
-		}
-
-		if h.events != nil {
-			if _, err := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
-				HostID:   &hostID,
-				Level:    "info",
-				Type:     "admin.host.ssh_password_rotated",
-				Message:  "管理员重置主机 SSH 密码",
-				Metadata: map[string]any{"operator": "admin"},
-			}); err != nil {
-				h.logger.Error("record event failed", "type", "admin.host.ssh_password_rotated", "error", err)
-			}
-		}
-
-		writeJSON(w, nethttp.StatusOK, map[string]any{"new_password": newPassword})
-	})
-}
-
-// ResyncPasswords 遍历所有 running host，把容器内 Linux 用户密码按 DB
-// hosts.entry_password 同步一遍；单 host 失败不影响整体返回。
-// Phase 29.1 存量修复入口。
-func (h *AdminHostsHandler) ResyncPasswords() nethttp.Handler {
-	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
-		hosts, err := h.store.ListRunningHosts(r.Context())
-		if err != nil {
-			h.logger.Error("list running hosts failed", "error", err)
-			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "list running hosts failed"})
-			return
-		}
-
-		var (
-			succeeded    int
-			failed       int
-			skippedEmpty int
-			results      = make([]map[string]any, 0, len(hosts))
-		)
-		const containerUser = "workspace"
-
-		for i := range hosts {
-			hostID := hosts[i].ID
-			containerName := "cloudproxy-" + hostID
-
-			if hosts[i].EntryPassword == "" {
-				if h.events != nil {
-					if _, evErr := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
-						HostID:   &hostID,
-						Level:    "error",
-						Type:     "runtime.entry_password_missing",
-						Message:  "host entry_password is empty during resync; skipping",
-						Metadata: map[string]any{"host_id": hostID, "container": containerName, "source": "resync"},
-					}); evErr != nil {
-						h.logger.Error("record event failed", "type", "runtime.entry_password_missing", "error", evErr)
-					}
-				}
-				skippedEmpty++
-				results = append(results, map[string]any{"host_id": hostID, "status": "skipped_empty_password"})
-				continue
-			}
-
-			if syncErr := syncContainerPassword(containerName, containerUser, hosts[i].EntryPassword); syncErr != nil {
-				h.logger.Warn("resync password to running container failed",
-					"host_id", hostID, "container", containerName, "error", syncErr)
-				if h.events != nil {
-					if _, evErr := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
-						HostID:   &hostID,
-						Level:    "warn",
-						Type:     "runtime.entry_password_resync_failed",
-						Message:  "docker exec chpasswd failed during admin batch resync",
-						Metadata: map[string]any{"host_id": hostID, "container": containerName, "error": syncErr.Error()},
-					}); evErr != nil {
-						h.logger.Error("record event failed", "type", "runtime.entry_password_resync_failed", "error", evErr)
-					}
-				}
-				failed++
-				results = append(results, map[string]any{"host_id": hostID, "status": "failed", "error": syncErr.Error()})
-				continue
-			}
-
-			if h.events != nil {
-				if _, evErr := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
-					HostID:   &hostID,
-					Level:    "info",
-					Type:     "runtime.entry_password_resynced",
-					Message:  "container entry password resynced from DB",
-					Metadata: map[string]any{"host_id": hostID, "container": containerName, "source": "admin_batch"},
-				}); evErr != nil {
-					h.logger.Error("record event failed", "type", "runtime.entry_password_resynced", "error", evErr)
-				}
-			}
-			succeeded++
-			results = append(results, map[string]any{"host_id": hostID, "status": "ok"})
-		}
-
-		if h.events != nil {
-			if _, evErr := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
-				Level:    "info",
-				Type:     "admin.hosts.password_resync_triggered",
-				Message:  "管理员批量同步主机 SSH 密码",
-				Metadata: map[string]any{"operator": "admin", "target_count": len(hosts)},
-			}); evErr != nil {
-				h.logger.Error("record event failed", "type", "admin.hosts.password_resync_triggered", "error", evErr)
-			}
-		}
-
-		writeJSON(w, nethttp.StatusOK, map[string]any{
-			"total":                  len(hosts),
-			"succeeded":              succeeded,
-			"failed":                 failed,
-			"skipped_empty_password": skippedEmpty,
-			"results":                results,
-		})
 	})
 }
 

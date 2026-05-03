@@ -15,7 +15,6 @@ func TestSQLConstants_NonEmpty(t *testing.T) {
 		"listRunningHostsSQL":                  listRunningHostsSQL,
 		"listRunningHostsByUserIDSQL":          listRunningHostsByUserIDSQL,
 		"getHostByUsernameSQL":                 getHostByUsernameSQL,
-		"getHostByShortIDSQL":                  getHostByShortIDSQL,
 		"getHostWithClaudeAccountSQL":          getHostWithClaudeAccountSQL,
 		"resolveClaudeAccountByHostSQL":        resolveClaudeAccountByHostSQL,
 		"resolveClaudeAccountByUserFallbackSQL": resolveClaudeAccountByUserFallbackSQL,
@@ -32,6 +31,7 @@ func TestSQLConstants_NonEmpty(t *testing.T) {
 }
 
 // TestHostQueries_IncludeRequiredColumns 验证所有读 Host 的 SQL 包含必要列。
+// 0018 迁移后 hosts.entry_password 已删除，凭据归 users 表所有。
 func TestHostQueries_IncludeRequiredColumns(t *testing.T) {
 	hostReadQueries := map[string]string{
 		"getHostSQL":                  getHostSQL,
@@ -44,7 +44,7 @@ func TestHostQueries_IncludeRequiredColumns(t *testing.T) {
 
 	required := []string{
 		"id", "user_id", "status", "short_id",
-		"entry_password", "template_image_ref",
+		"template_image_ref",
 		"home_volume_name", "slot_key", "timezone", "hostname",
 	}
 
@@ -53,6 +53,9 @@ func TestHostQueries_IncludeRequiredColumns(t *testing.T) {
 			if !strings.Contains(q, col) {
 				t.Errorf("%s 缺少必要列 %q", name, col)
 			}
+		}
+		if strings.Contains(q, "entry_password") {
+			t.Errorf("%s 不应再 SELECT entry_password（0018 迁移后该列已迁至 users）", name)
 		}
 	}
 }
@@ -75,22 +78,11 @@ func TestGetHostByUsernameSQL_Shape(t *testing.T) {
 	if strings.Contains(q, "h.short_id = $1") {
 		t.Error("getHostByUsernameSQL 不应再按 short_id 查询")
 	}
-}
-
-// TestGetHostByShortIDSQL_Shape 验证旧 short_id fallback SQL 结构正确。
-func TestGetHostByShortIDSQL_Shape(t *testing.T) {
-	q := getHostByShortIDSQL
-	if !strings.Contains(q, "JOIN users u") {
-		t.Error("getHostByShortIDSQL 应 JOIN users 表")
+	if !strings.Contains(q, "u.entry_password") {
+		t.Error("getHostByUsernameSQL 应从 users 表读取 entry_password（0018 迁移后）")
 	}
-	if !strings.Contains(q, "h.short_id = $1") {
-		t.Error("getHostByShortIDSQL 应按 h.short_id 查询")
-	}
-	if !strings.Contains(q, "ssh_private_key") {
-		t.Error("getHostByShortIDSQL 应包含 ssh_private_key 列")
-	}
-	if !strings.Contains(q, "'workspace'") {
-		t.Error("getHostByShortIDSQL 应硬编码 ContainerUser = 'workspace'")
+	if strings.Contains(q, "h.entry_password") {
+		t.Error("getHostByUsernameSQL 不应再读 hosts.entry_password（0018 迁移后该列已被删除）")
 	}
 }
 
@@ -150,12 +142,11 @@ var sqlConstants = map[string]string{
 }
 
 // TestGetHostSQL_NoLeakOfSensitiveFields 验证敏感字段不出现在默认查询中。
+// 0018 迁移后 hosts.entry_password 列已不存在，凭据归 users 所有，仅 GetHostByUsername 返回。
 func TestGetHostSQL_NoLeakOfSensitiveFields(t *testing.T) {
 	q := getHostSQL
-	// entry_password 不应在 getHostSQL 中直接暴露（由 GetHostByUsername/GetHostByShortID 返回）
-	// getHostSQL 是通用查询，应该包含 entry_password 供内部使用
-	if !strings.Contains(q, "entry_password") {
-		t.Error("getHostSQL 应包含 entry_password（内部查询需要）")
+	if strings.Contains(q, "entry_password") {
+		t.Error("getHostSQL 不应再 SELECT entry_password（0018 迁移后该列已迁至 users）")
 	}
 }
 

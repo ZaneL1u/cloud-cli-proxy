@@ -112,10 +112,9 @@ func (r *Repository) UpdateUserPassword(ctx context.Context, userID string, pass
 	return nil
 }
 
-// listHostsByUserIDSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言
-// 必含 entry_password 列（Phase 29.1 根因修复，避免 host.EntryPassword 退化为空串）。
+// listHostsByUserIDSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言。
 const listHostsByUserIDSQL = `
-	SELECT id::text, user_id::text, status, COALESCE(short_id, ''), COALESCE(entry_password, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, created_at, updated_at
+	SELECT id::text, user_id::text, status, COALESCE(short_id, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, created_at, updated_at
 	FROM hosts WHERE user_id = $1
 	ORDER BY created_at ASC
 `
@@ -132,7 +131,7 @@ func (r *Repository) ListHostsByUserID(ctx context.Context, userID string) ([]Ho
 		var item Host
 		var rawMounts json.RawMessage
 		if err := rows.Scan(
-			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.EntryPassword, &item.TemplateImageRef,
+			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.TemplateImageRef,
 			&item.HomeVolumeName, &item.SlotKey, &item.Timezone, &item.Hostname,
 			&item.MemoryLimitMB, &item.CPULimit, &item.DiskLimitGB,
 			&rawMounts,
@@ -193,10 +192,9 @@ func (r *Repository) GetDashboardStats(ctx context.Context) (DashboardStats, err
 	return stats, nil
 }
 
-// listHostsSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言
-// 必含 entry_password 列（Phase 29.1 根因修复，避免 host.EntryPassword 退化为空串）。
+// listHostsSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言。
 const listHostsSQL = `
-	SELECT id::text, user_id::text, status, COALESCE(short_id, ''), COALESCE(entry_password, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, created_at, updated_at
+	SELECT id::text, user_id::text, status, COALESCE(short_id, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, created_at, updated_at
 	FROM hosts
 	ORDER BY updated_at DESC
 `
@@ -217,7 +215,6 @@ func (r *Repository) ListHosts(ctx context.Context) ([]Host, error) {
 			&item.UserID,
 			&item.Status,
 			&item.ShortID,
-			&item.EntryPassword,
 			&item.TemplateImageRef,
 			&item.HomeVolumeName,
 			&item.SlotKey,
@@ -268,7 +265,7 @@ func (r *Repository) GetPrimaryHostByUserID(ctx context.Context, userID string) 
 	var item Host
 	var rawMounts json.RawMessage
 	if err := r.db.QueryRow(ctx, `
-		SELECT id::text, user_id::text, status, COALESCE(short_id, ''), COALESCE(entry_password, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, created_at, updated_at
+		SELECT id::text, user_id::text, status, COALESCE(short_id, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, created_at, updated_at
 		FROM hosts
 		WHERE user_id = $1 AND slot_key = 'primary'
 		LIMIT 1
@@ -277,7 +274,6 @@ func (r *Repository) GetPrimaryHostByUserID(ctx context.Context, userID string) 
 		&item.UserID,
 		&item.Status,
 		&item.ShortID,
-		&item.EntryPassword,
 		&item.TemplateImageRef,
 		&item.HomeVolumeName,
 		&item.SlotKey,
@@ -388,8 +384,8 @@ func (r *Repository) UpsertHost(ctx context.Context, params UpsertHostParams) (H
 	var rawMounts json.RawMessage
 	var rawPorts json.RawMessage
 	if err := r.db.QueryRow(ctx, `
-		INSERT INTO hosts (user_id, status, short_id, entry_password, template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, host_ports)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		INSERT INTO hosts (user_id, status, short_id, template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, host_ports)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (user_id, slot_key)
 		DO UPDATE SET
 			status = EXCLUDED.status,
@@ -403,14 +399,13 @@ func (r *Repository) UpsertHost(ctx context.Context, params UpsertHostParams) (H
 			host_mounts = EXCLUDED.host_mounts,
 			host_ports = EXCLUDED.host_ports,
 			updated_at = NOW()
-		RETURNING id::text, user_id::text, status, COALESCE(short_id, ''), COALESCE(entry_password, ''),
+		RETURNING id::text, user_id::text, status, COALESCE(short_id, ''),
 		          template_image_ref, home_volume_name, slot_key, timezone, hostname,
 		          memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, host_ports, created_at, updated_at
 	`,
 		params.UserID,
 		params.Status,
 		params.ShortID,
-		params.EntryPassword,
 		params.TemplateImageRef,
 		params.HomeVolumeName,
 		params.SlotKey,
@@ -426,7 +421,6 @@ func (r *Repository) UpsertHost(ctx context.Context, params UpsertHostParams) (H
 		&item.UserID,
 		&item.Status,
 		&item.ShortID,
-		&item.EntryPassword,
 		&item.TemplateImageRef,
 		&item.HomeVolumeName,
 		&item.SlotKey,
@@ -640,10 +634,9 @@ func (r *Repository) GetHostDetail(ctx context.Context, hostID string) (HostDeta
 	return HostDetail{Host: host, User: user, Bindings: bindings}, nil
 }
 
-// listHostsWithUsernameSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言
-// 必含 entry_password 列（Phase 29.1 根因修复，避免 host.EntryPassword 退化为空串）。
+// listHostsWithUsernameSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言。
 const listHostsWithUsernameSQL = `
-	SELECT h.id::text, h.user_id::text, h.status, COALESCE(h.short_id, ''), COALESCE(h.entry_password, ''), h.template_image_ref,
+	SELECT h.id::text, h.user_id::text, h.status, COALESCE(h.short_id, ''), h.template_image_ref,
 	       h.home_volume_name, h.slot_key, h.timezone, h.hostname,
 	       h.memory_limit_mb, h.cpu_limit, h.disk_limit_gb,
 	       h.host_mounts, h.created_at, h.updated_at, u.username,
@@ -670,7 +663,7 @@ func (r *Repository) ListHostsWithUsername(ctx context.Context) ([]HostWithUsern
 		var item HostWithUsername
 		var rawMounts json.RawMessage
 		if err := rows.Scan(
-			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.EntryPassword, &item.TemplateImageRef,
+			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.TemplateImageRef,
 			&item.HomeVolumeName, &item.SlotKey, &item.Timezone, &item.Hostname,
 			&item.MemoryLimitMB, &item.CPULimit, &item.DiskLimitGB,
 			&rawMounts,
@@ -740,11 +733,9 @@ func (r *Repository) GetEgressIPByHost(ctx context.Context, hostID string) (Egre
 	return item, nil
 }
 
-// getHostSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言
-// 必含 entry_password 列（Phase 29.1 根因修复，避免 host.EntryPassword 退化为空串
-// 进而导致 worker fallback 把容器密码写成 "workspace"）。
+// getHostSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言。
 const getHostSQL = `
-	SELECT id::text, user_id::text, status, COALESCE(short_id, ''), COALESCE(entry_password, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, host_ports, created_at, updated_at
+	SELECT id::text, user_id::text, status, COALESCE(short_id, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, host_ports, created_at, updated_at
 	FROM hosts
 	WHERE id = $1
 `
@@ -758,7 +749,6 @@ func (r *Repository) GetHost(ctx context.Context, hostID string) (Host, error) {
 		&item.UserID,
 		&item.Status,
 		&item.ShortID,
-		&item.EntryPassword,
 		&item.TemplateImageRef,
 		&item.HomeVolumeName,
 		&item.SlotKey,
@@ -983,10 +973,9 @@ func (r *Repository) UpdateUserExpiry(ctx context.Context, userID string, expire
 	return item, nil
 }
 
-// listRunningHostsByUserIDSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言
-// 必含 entry_password 列（Phase 29.1 根因修复，避免 host.EntryPassword 退化为空串）。
+// listRunningHostsByUserIDSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言。
 const listRunningHostsByUserIDSQL = `
-	SELECT id::text, user_id::text, status, COALESCE(short_id, ''), COALESCE(entry_password, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, created_at, updated_at
+	SELECT id::text, user_id::text, status, COALESCE(short_id, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, created_at, updated_at
 	FROM hosts
 	WHERE user_id = $1 AND status = 'running'
 `
@@ -1003,7 +992,7 @@ func (r *Repository) ListRunningHostsByUserID(ctx context.Context, userID string
 		var item Host
 		var rawMounts json.RawMessage
 		if err := rows.Scan(
-			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.EntryPassword, &item.TemplateImageRef,
+			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.TemplateImageRef,
 			&item.HomeVolumeName, &item.SlotKey, &item.Timezone, &item.Hostname,
 			&item.MemoryLimitMB, &item.CPULimit, &item.DiskLimitGB,
 			&rawMounts,
@@ -1022,11 +1011,10 @@ func (r *Repository) ListRunningHostsByUserID(ctx context.Context, userID string
 	return hosts, nil
 }
 
-// listRunningHostsSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言
-// 必含 entry_password 列（Phase 29.1 根因修复，避免 host.EntryPassword 退化为空串；
-// 也是 Phase 29.1 Plan 04 批量 resync 链路的事实数据源）。
+// listRunningHostsSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言；
+// 也是 Phase 29.1 Plan 04 批量 resync 链路的事实数据源。
 const listRunningHostsSQL = `
-	SELECT id::text, user_id::text, status, COALESCE(short_id, ''), COALESCE(entry_password, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, created_at, updated_at
+	SELECT id::text, user_id::text, status, COALESCE(short_id, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, created_at, updated_at
 	FROM hosts
 	WHERE status = 'running'
 	ORDER BY updated_at ASC
@@ -1044,7 +1032,7 @@ func (r *Repository) ListRunningHosts(ctx context.Context) ([]Host, error) {
 		var item Host
 		var rawMounts json.RawMessage
 		if err := rows.Scan(
-			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.EntryPassword, &item.TemplateImageRef,
+			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.TemplateImageRef,
 			&item.HomeVolumeName, &item.SlotKey, &item.Timezone, &item.Hostname,
 			&item.MemoryLimitMB, &item.CPULimit, &item.DiskLimitGB,
 			&rawMounts,
@@ -1166,19 +1154,6 @@ func (r *Repository) GetUserByUsername(ctx context.Context, username string) (Us
 	return item, nil
 }
 
-// GetUserByShortID 保留一期兼容。
-// 二期计划移除本方法。
-func (r *Repository) GetUserByShortID(ctx context.Context, shortID string) (User, error) {
-	var item User
-	if err := r.db.QueryRow(ctx, `
-		SELECT id::text, username, status, role, COALESCE(short_id, ''), COALESCE(password_hash, ''), COALESCE(entry_password, ''), COALESCE(ssh_public_key, ''), COALESCE(ssh_private_key, ''), COALESCE(ssh_key_type, ''), expires_at, created_at, updated_at
-		FROM users WHERE short_id = $1
-	`, shortID).Scan(&item.ID, &item.Username, &item.Status, &item.Role, &item.ShortID, &item.PasswordHash, &item.EntryPassword, &item.SSHPublicKey, &item.SSHPrivateKey, &item.SSHKeyType, &item.ExpiresAt, &item.CreatedAt, &item.UpdatedAt); err != nil {
-		return User{}, fmt.Errorf("get user by short_id: %w", err)
-	}
-	return item, nil
-}
-
 func (r *Repository) UpdateHostStatus(ctx context.Context, hostID string, status string) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE hosts SET status = $2, updated_at = NOW() WHERE id = $1
@@ -1269,8 +1244,9 @@ func (r *Repository) CreateUserWithRole(ctx context.Context, params CreateUserWi
 // getHostByUsernameSQL 将 SQL 文本提升为包级常量，方便数据层回归测试断言。
 // 按 username 查 host，同时 SELECT ssh_private_key 供控制面私钥认证容器。
 // ContainerUser 硬编码为 'workspace'，与容器镜像 entrypoint 的 CONTAINER_USER 默认值一致。
+// entry_password 现归用户所有（0018 迁移后），故从 users 表读取。
 const getHostByUsernameSQL = `
-	SELECT h.id::text, h.entry_password, h.status,
+	SELECT h.id::text, COALESCE(u.entry_password, ''), h.status,
 	       h.user_id::text, u.status, u.username,
 	       'workspace',
 	       COALESCE(h.template_image_ref, ''),
@@ -1278,18 +1254,6 @@ const getHostByUsernameSQL = `
 	FROM hosts h
 	JOIN users u ON u.id = h.user_id
 	WHERE u.username = $1
-`
-
-// getHostByShortIDSQL 保留一期兼容：旧 short_id 仍可作为 fallback 查询。
-const getHostByShortIDSQL = `
-	SELECT h.id::text, h.entry_password, h.status,
-	       h.user_id::text, u.status, u.username,
-	       'workspace',
-	       COALESCE(h.template_image_ref, ''),
-	       COALESCE(u.ssh_private_key, '')
-	FROM hosts h
-	JOIN users u ON u.id = h.user_id
-	WHERE h.short_id = $1
 `
 
 func (r *Repository) GetHostByUsername(ctx context.Context, username string) (HostSSHAuth, error) {
@@ -1301,21 +1265,6 @@ func (r *Repository) GetHostByUsername(ctx context.Context, username string) (Ho
 		&item.TemplateImageRef, &item.SSHPrivateKey,
 	); err != nil {
 		return HostSSHAuth{}, fmt.Errorf("get host by username: %w", err)
-	}
-	return item, nil
-}
-
-// GetHostByShortID 保留一期兼容，内部改调 GetHostByUsername 的 fallback 逻辑。
-// 二期计划移除本方法。
-func (r *Repository) GetHostByShortID(ctx context.Context, shortID string) (HostSSHAuth, error) {
-	var item HostSSHAuth
-	if err := r.db.QueryRow(ctx, getHostByShortIDSQL, shortID).Scan(
-		&item.HostID, &item.EntryPassword,
-		&item.HostStatus, &item.UserID, &item.UserStatus, &item.Username,
-		&item.ContainerUser,
-		&item.TemplateImageRef, &item.SSHPrivateKey,
-	); err != nil {
-		return HostSSHAuth{}, fmt.Errorf("get host by short_id: %w", err)
 	}
 	return item, nil
 }
@@ -1377,19 +1326,6 @@ func (r *Repository) ResolveClaudeAccountIDForEntry(ctx context.Context, userID,
 	}
 }
 
-func (r *Repository) UpdateHostEntryPassword(ctx context.Context, hostID, password string) error {
-	tag, err := r.db.Exec(ctx, `
-		UPDATE hosts SET entry_password = $2, updated_at = NOW() WHERE id = $1
-	`, hostID, password)
-	if err != nil {
-		return fmt.Errorf("update host entry password: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
-}
-
 func (r *Repository) UpdateUserSSHKeys(ctx context.Context, userID, publicKey, privateKey, keyType string) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE users SET ssh_public_key = $2, ssh_private_key = $3, ssh_key_type = $4, updated_at = NOW()
@@ -1397,6 +1333,20 @@ func (r *Repository) UpdateUserSSHKeys(ctx context.Context, userID, publicKey, p
 	`, userID, publicKey, privateKey, keyType)
 	if err != nil {
 		return fmt.Errorf("update user ssh keys: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+func (r *Repository) UpdateUserEntryPassword(ctx context.Context, userID, entryPassword string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE users SET entry_password = $2, updated_at = NOW()
+		WHERE id = $1
+	`, userID, entryPassword)
+	if err != nil {
+		return fmt.Errorf("update user entry password: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return pgx.ErrNoRows
@@ -1529,6 +1479,19 @@ func (r *Repository) DeleteSSHKey(ctx context.Context, keyID, userID string) err
 	return nil
 }
 
+// DeleteAutoGeneratedInboundSSHKeys 删除 user 的自动生成入站密钥（label='auto-generated'）。
+// 用于凭据重生路径：覆盖旧 auto-generated 行，但保留用户手动添加的入站密钥。
+func (r *Repository) DeleteAutoGeneratedInboundSSHKeys(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx, `
+		DELETE FROM ssh_keys
+		WHERE user_id = $1 AND purpose = 'inbound' AND label = 'auto-generated'
+	`, userID)
+	if err != nil {
+		return fmt.Errorf("delete auto-generated inbound ssh keys: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) UpdateHostMounts(ctx context.Context, hostID string, mounts HostMounts) error {
 	data, err := json.Marshal(mounts)
 	if err != nil {
@@ -1600,7 +1563,7 @@ func (r *Repository) UpsertClaudeAccountPersistentVolumeName(ctx context.Context
 const getHostWithClaudeAccountSQL = `
 	SELECT
 		h.id::text, h.user_id::text, h.status, COALESCE(h.short_id, ''),
-		COALESCE(h.entry_password, ''), h.template_image_ref, h.home_volume_name,
+		h.template_image_ref, h.home_volume_name,
 		h.slot_key, h.timezone, h.hostname, h.memory_limit_mb, h.cpu_limit,
 		h.disk_limit_gb, h.host_mounts, h.created_at, h.updated_at,
 		COALESCE(ca.persistent_volume_name, '')
@@ -1618,7 +1581,7 @@ func (r *Repository) GetHostWithClaudeAccount(ctx context.Context, hostID string
 	var rawMounts json.RawMessage
 	if err := r.db.QueryRow(ctx, getHostWithClaudeAccountSQL, hostID).Scan(
 		&item.ID, &item.UserID, &item.Status, &item.ShortID,
-		&item.EntryPassword, &item.TemplateImageRef, &item.HomeVolumeName,
+		&item.TemplateImageRef, &item.HomeVolumeName,
 		&item.SlotKey, &item.Timezone, &item.Hostname,
 		&item.MemoryLimitMB, &item.CPULimit, &item.DiskLimitGB,
 		&rawMounts,

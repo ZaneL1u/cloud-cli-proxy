@@ -130,14 +130,13 @@ func newTestService(t *testing.T, repo *stubQueueRepo) (*Service, *captureDispat
 func TestQueueHostAction_InjectsClaudeAccountID(t *testing.T) {
 	repo := &stubQueueRepo{
 		host: repository.Host{
-			ID:            "h1",
-			UserID:        "u1",
-			Status:        "running",
-			EntryPassword: "secret",
-			SlotKey:       "primary",
-			Hostname:      "test-host",
+			ID:       "h1",
+			UserID:   "u1",
+			Status:   "running",
+			SlotKey:  "primary",
+			Hostname: "test-host",
 		},
-		user:             repository.User{ID: "u1", Username: "alice"},
+		user:             repository.User{ID: "u1", Username: "alice", EntryPassword: "secret"},
 		resolveAccountID: "acct-42",
 		resolveFound:     true,
 	}
@@ -160,8 +159,8 @@ func TestQueueHostAction_InjectsClaudeAccountID(t *testing.T) {
 // 不阻塞容器启动（v2.0 旧 host 重建路径）。
 func TestQueueHostAction_NoClaudeAccount_FallsBack(t *testing.T) {
 	repo := &stubQueueRepo{
-		host:         repository.Host{ID: "h1", UserID: "u1", EntryPassword: "secret", Hostname: "h1"},
-		user:         repository.User{ID: "u1", Username: "alice"},
+		host:         repository.Host{ID: "h1", UserID: "u1", Hostname: "h1"},
+		user:         repository.User{ID: "u1", Username: "alice", EntryPassword: "secret"},
 		resolveFound: false,
 	}
 	svc, disp := newTestService(t, repo)
@@ -179,8 +178,8 @@ func TestQueueHostAction_NoClaudeAccount_FallsBack(t *testing.T) {
 // resolve 抛错时只 log warn，不阻塞排队（运维侧由 audit event + log 兜底）。
 func TestQueueHostAction_ResolveError_DoesNotBlockQueue(t *testing.T) {
 	repo := &stubQueueRepo{
-		host:       repository.Host{ID: "h1", UserID: "u1", EntryPassword: "secret", Hostname: "h1"},
-		user:       repository.User{ID: "u1", Username: "alice"},
+		host:       repository.Host{ID: "h1", UserID: "u1", Hostname: "h1"},
+		user:       repository.User{ID: "u1", Username: "alice", EntryPassword: "secret"},
 		resolveErr: errors.New("simulated db error"),
 	}
 	svc, disp := newTestService(t, repo)

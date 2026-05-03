@@ -214,6 +214,7 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			mux.Handle("PATCH /v1/admin/users/{userID}", adminGuard(usersHandler.UpdateStatus()))
 			mux.Handle("DELETE /v1/admin/users/{userID}", adminGuard(usersHandler.Delete()))
 			mux.Handle("POST /v1/admin/users/{userID}/rotate-password", adminGuard(usersHandler.RotatePassword()))
+			mux.Handle("POST /v1/admin/users/{userID}/credentials/regenerate", adminGuard(usersHandler.RegenerateCredentials()))
 			mux.Handle("PUT /v1/admin/users/{userID}/expiry", adminGuard(usersHandler.UpdateExpiry()))
 		}
 
@@ -237,13 +238,11 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			hostsHandler := NewAdminHostsHandler(deps.Logger, deps.AdminHosts, deps.HostActions, deps.EventRecorder, deps.ImageLockPath)
 			mux.Handle("GET /v1/admin/hosts", adminGuard(hostsHandler.List()))
 			mux.Handle("POST /v1/admin/hosts", adminGuard(hostsHandler.Create()))
-			mux.Handle("POST /v1/admin/hosts/resync-passwords", adminGuard(hostsHandler.ResyncPasswords()))
 			mux.Handle("GET /v1/admin/hosts/{hostID}", adminGuard(hostsHandler.Get()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/start", adminGuard(hostsHandler.Start()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/stop", adminGuard(hostsHandler.Stop()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/rebuild", adminGuard(hostsHandler.Rebuild()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/vnc/restart", adminGuard(hostsHandler.RestartVNC()))
-			mux.Handle("POST /v1/admin/hosts/{hostID}/rotate-ssh-password", adminGuard(hostsHandler.RotateSSHPassword()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/change-root-password", adminGuard(hostsHandler.ChangeRootPassword()))
 			mux.Handle("GET /v1/admin/hosts/{hostID}/claude/settings", adminGuard(hostsHandler.GetClaudeSettings()))
 			mux.Handle("PUT /v1/admin/hosts/{hostID}/claude/settings", adminGuard(hostsHandler.UpdateClaudeSettings()))

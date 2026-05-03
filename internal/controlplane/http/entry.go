@@ -176,7 +176,7 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 			h.logger.Info("entry auth: resolved by username (fallback to primary host)",
 				"username", username, "host_id", primaryHost.ID, "host_status", primaryHost.Status)
 			hostID = primaryHost.ID
-			hostEntryPassword = primaryHost.EntryPassword
+			hostEntryPassword = user.EntryPassword
 			hostStatus = primaryHost.Status
 			templateImageRef = primaryHost.TemplateImageRef
 		}

@@ -156,10 +156,11 @@ func TestEntryAuth_Ready_ViaUsernameFallback_V3Image(t *testing.T) {
 		hostAuthErr: pgx.ErrNoRows,
 		userByUsername: repository.User{
 			ID: "u-99", Username: "bob", Status: "active", Role: "user", PasswordHash: hash,
+			EntryPassword: "host-pwd",
 		},
 		primaryHost: repository.Host{
 			ID: "h-99", UserID: "u-99", Status: "running", ShortID: "h-short",
-			EntryPassword: "host-pwd", TemplateImageRef: "registry.internal:5000/cloud-claude:v3.0.0",
+			TemplateImageRef: "registry.internal:5000/cloud-claude:v3.0.0",
 		},
 		resolveAccountID: "claude-acct-7",
 		resolveAccountOK: true,
