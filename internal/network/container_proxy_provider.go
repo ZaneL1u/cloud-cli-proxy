@@ -76,7 +76,7 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 		return fmt.Errorf("gateway: create network: %w", err)
 	}
 
-	img := gatewayImage()
+	img := GatewayImage()
 	if err := dockerRunGateway(ctx, gwName, netName, gwIP, serverIP, configPath, img); err != nil {
 		p.teardownGateway(ctx, hostID)
 		return fmt.Errorf("gateway: start gateway container: %w", err)
@@ -152,7 +152,7 @@ func (p *ContainerProxyProvider) teardownGateway(ctx context.Context, hostID str
 	_ = os.RemoveAll(gatewayConfigDir(hostID))
 }
 
-func gatewayImage() string {
+func GatewayImage() string {
 	if v := os.Getenv("CLOUD_CLI_PROXY_GATEWAY_IMAGE"); v != "" {
 		return v
 	}

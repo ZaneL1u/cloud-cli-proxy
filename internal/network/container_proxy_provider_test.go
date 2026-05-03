@@ -103,19 +103,19 @@ func TestGatewayImage_Custom(t *testing.T) {
 	os.Setenv("CLOUD_CLI_PROXY_GATEWAY_IMAGE", "my-custom-image:v2")
 	defer os.Unsetenv("CLOUD_CLI_PROXY_GATEWAY_IMAGE")
 
-	got := gatewayImage()
+	got := GatewayImage()
 	if got != "my-custom-image:v2" {
-		t.Errorf("gatewayImage = %q, want %q", got, "my-custom-image:v2")
+		t.Errorf("GatewayImage = %q, want %q", got, "my-custom-image:v2")
 	}
 }
 
 func TestGatewayImage_Default(t *testing.T) {
 	os.Unsetenv("CLOUD_CLI_PROXY_GATEWAY_IMAGE")
 
-	got := gatewayImage()
+	got := GatewayImage()
 	want := "cloud-cli-proxy-sing-gateway:local"
 	if got != want {
-		t.Errorf("gatewayImage = %q, want %q", got, want)
+		t.Errorf("GatewayImage = %q, want %q", got, want)
 	}
 }
 
