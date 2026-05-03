@@ -285,6 +285,7 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			mux.Handle("DELETE /v1/admin/users/{userID}/ssh-keys/{keyID}", adminGuard(sshKeyHandler.Delete()))
 		}
 
+		mux.Handle("GET /v1/admin/host-files", adminGuard(NewAdminHostFilesHandler(deps.Logger).List()))
 		mux.Handle("GET /v1/admin/tasks", adminGuard(tasksHandler))
 
 		// User self-service endpoints (D-01: /v1/user/ prefix, D-02: user+admin roles)
