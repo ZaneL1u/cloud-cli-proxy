@@ -8,11 +8,18 @@ import {
   ChevronDown,
   Copy,
   KeyRound,
+  RotateCcw,
   Server,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useUser, useUpdateUserStatus, useUpdateUserExpiry } from "@/hooks/use-users";
+import {
+  useUser,
+  useUpdateUserStatus,
+  useUpdateUserExpiry,
+  useRegenerateCredentials,
+  type RegenerateCredentialsResponse,
+} from "@/hooks/use-users";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,11 +78,14 @@ function UserDetailPage() {
   const { data, isLoading } = useUser(userId);
   const updateStatus = useUpdateUserStatus();
   const updateExpiry = useUpdateUserExpiry();
+  const regenerateCreds = useRegenerateCredentials();
   const [rotateOpen, setRotateOpen] = useState(false);
   const [shortIdCopied, setShortIdCopied] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [expiryOpen, setExpiryOpen] = useState(false);
   const [expiryValue, setExpiryValue] = useState("");
+  const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
+  const [regeneratedCreds, setRegeneratedCreds] = useState<RegenerateCredentialsResponse | null>(null);
   const sshKeysQuery = useAdminSSHKeys(userId);
   const createSSHKey = useAdminCreateSSHKey();
   const deleteSSHKey = useAdminDeleteSSHKey();
@@ -152,6 +162,17 @@ function UserDetailPage() {
       setExpiryValue("");
     }
     setExpiryOpen(true);
+  }
+
+  function handleRegenerateCreds() {
+    regenerateCreds.mutate(userId, {
+      onSuccess: (data) => {
+        setRegenerateConfirmOpen(false);
+        setRegeneratedCreds(data);
+        toast.success("SSH 凭据已重新生成");
+      },
+      onError: () => toast.error("重新生成失败"),
+    });
   }
 
   return (
@@ -248,6 +269,10 @@ function UserDetailPage() {
             <DropdownMenuItem onClick={() => setRotateOpen(true)}>
               <KeyRound className="mr-2 h-4 w-4" />
               轮换登录密码
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setRegenerateConfirmOpen(true)}>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              重新生成 SSH 凭据
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -444,6 +469,121 @@ function UserDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={regenerateConfirmOpen}
+        onOpenChange={(open) => {
+          if (!regenerateCreds.isPending) setRegenerateConfirmOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>重新生成 SSH 凭据</DialogTitle>
+            <DialogDescription>
+              将覆盖该用户的 SSH 密码与 ed25519 入站密钥对（label=auto-generated 行将被替换）。
+              生效后用户的旧 SSH 私钥与 sshpass 密码立即失效。请确认后再继续。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRegenerateConfirmOpen(false)}
+              disabled={regenerateCreds.isPending}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleRegenerateCreds}
+              disabled={regenerateCreds.isPending}
+            >
+              {regenerateCreds.isPending ? "生成中…" : "确认重新生成"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!regeneratedCreds}
+        onOpenChange={(open) => {
+          if (!open) setRegeneratedCreds(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>SSH 凭据已生成</DialogTitle>
+            <DialogDescription>
+              请妥善保存以下凭据，关闭后无法再次查看。
+            </DialogDescription>
+          </DialogHeader>
+          {regeneratedCreds && (
+            <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+              <CredentialRow label="SSH 密码" value={regeneratedCreds.entry_password} />
+              <CredentialBlock label="SSH 公钥" value={regeneratedCreds.ssh_public_key} />
+              <CredentialBlock label="SSH 私钥（仅一次）" value={regeneratedCreds.ssh_private_key} />
+              <CredentialRow label="SSH 公钥指纹" value={regeneratedCreds.ssh_key_fingerprint} />
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setRegeneratedCreds(null)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function CredentialRow({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 truncate rounded bg-muted px-3 py-2 text-sm font-mono">
+          {value}
+        </code>
+        <Button type="button" variant="ghost" size="icon" onClick={copy}>
+          {copied ? (
+            <Check className="h-4 w-4 text-green-500" />
+          ) : (
+            <Copy className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CredentialBlock({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs text-muted-foreground">{label}</Label>
+        <Button type="button" variant="ghost" size="sm" className="h-6 gap-1 px-2" onClick={copy}>
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-green-500" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+          复制
+        </Button>
+      </div>
+      <pre className="max-h-40 overflow-auto rounded bg-muted px-3 py-2 text-xs font-mono whitespace-pre-wrap break-all">
+        {value}
+      </pre>
     </div>
   );
 }

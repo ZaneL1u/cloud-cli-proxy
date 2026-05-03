@@ -41,6 +41,10 @@ interface CreateUserResponse {
   user: User;
   password: string;
   short_id: string;
+  entry_password: string;
+  ssh_public_key: string;
+  ssh_private_key: string;
+  ssh_key_fingerprint: string;
 }
 
 export function useCreateUser() {
@@ -52,6 +56,28 @@ export function useCreateUser() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+
+export interface RegenerateCredentialsResponse {
+  entry_password: string;
+  ssh_public_key: string;
+  ssh_private_key: string;
+  ssh_key_fingerprint: string;
+}
+
+export function useRegenerateCredentials() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) =>
+      apiFetch<RegenerateCredentialsResponse>(
+        `/users/${userId}/credentials/regenerate`,
+        { method: "POST" },
+      ),
+    onSuccess: (_data, userId) => {
+      qc.invalidateQueries({ queryKey: ["users", userId] });
+      qc.invalidateQueries({ queryKey: ["ssh-keys", userId] });
+    },
   });
 }
 

@@ -76,10 +76,6 @@ export function CreateHostDialog({
   const [newContainerPort, setNewContainerPort] = useState("");
   const [newProtocol, setNewProtocol] = useState("tcp");
   const [taskId, setTaskId] = useState<string | null>(null);
-  const [hostAccess, setHostAccess] = useState<{
-    shortId: string;
-    entryPassword: string;
-  } | null>(null);
   const { data: usersData, isLoading: loadingUsers } = useUsers();
   const { data: egressData, isLoading: loadingEgress } = useEgressIPs();
   const createMutation = useCreateHost();
@@ -123,12 +119,8 @@ export function CreateHostDialog({
     createMutation.mutate(
       { user_id: userId, egress_ip_id: egressIpId, timezone, host_mounts: hostMounts.length > 0 ? hostMounts : undefined, host_ports: hostPorts.length > 0 ? hostPorts : undefined },
       {
-        onSuccess: (data: any) => {
+        onSuccess: (data) => {
           setTaskId(data.task_id);
-          setHostAccess({
-            shortId: data.short_id,
-            entryPassword: data.entry_password,
-          });
         },
         onError: () => toast.error("提交失败"),
       },
@@ -148,7 +140,6 @@ export function CreateHostDialog({
     setNewContainerPort("");
     setNewProtocol("tcp");
     setTaskId(null);
-    setHostAccess(null);
     onOpenChange(false);
   }
 
@@ -423,16 +414,6 @@ export function CreateHostDialog({
                     className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
                     style={{ width: `${task?.progress_percent}%` }}
                   />
-                </div>
-              </div>
-            )}
-
-            {hostAccess && (
-              <div className="rounded-md border bg-muted/50 p-3 text-sm">
-                <p className="font-medium">主机 SSH 凭据（仅展示一次）</p>
-                <div className="mt-2 space-y-1 font-mono text-xs">
-                  <p>主机短 ID：{hostAccess.shortId}</p>
-                  <p>SSH 密码：{hostAccess.entryPassword}</p>
                 </div>
               </div>
             )}

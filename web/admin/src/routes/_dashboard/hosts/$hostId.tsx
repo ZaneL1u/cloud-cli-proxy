@@ -34,7 +34,6 @@ import { MountManager } from "@/components/hosts/mount-manager";
 import { PortManager } from "@/components/hosts/port-manager";
 import { HostLifecycleActions } from "@/components/hosts/host-lifecycle-actions";
 import { RotatePasswordDialog } from "@/components/users/rotate-password-dialog";
-import { RotateHostSSHPasswordDialog } from "@/components/hosts/rotate-host-ssh-password-dialog";
 import { ChangeRootPasswordDialog } from "@/components/hosts/change-root-password-dialog";
 import { ClaudeSettingsDialog } from "@/components/hosts/claude-settings-dialog";
 import { ClaudeStatusCard } from "@/components/hosts/claude-status-card";
@@ -87,7 +86,6 @@ function HostDetailPage() {
   const importConfigMutation = useImportHostConfig();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [rotateLoginOpen, setRotateLoginOpen] = useState(false);
-  const [rotateSSHOpen, setRotateSSHOpen] = useState(false);
   const [changeRootPwOpen, setChangeRootPwOpen] = useState(false);
   const [claudeSettingsOpen, setClaudeSettingsOpen] = useState(false);
 
@@ -389,17 +387,6 @@ function HostDetailPage() {
                   <Button
                     type="button"
                     variant="secondary"
-                    className="h-11 justify-start gap-2 px-4 sm:col-span-1"
-                    onClick={() => setRotateSSHOpen(true)}
-                  >
-                    <KeyRound className="h-4 w-4 shrink-0" />
-                    <span className="text-left text-sm leading-snug">
-                      重置主机 SSH 密码
-                    </span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
                     className="h-11 justify-start gap-2 px-4"
                     onClick={() => setRotateLoginOpen(true)}
                   >
@@ -514,11 +501,6 @@ function HostDetailPage() {
         userId={user.id}
         open={rotateLoginOpen}
         onOpenChange={setRotateLoginOpen}
-      />
-      <RotateHostSSHPasswordDialog
-        hostId={host.id}
-        open={rotateSSHOpen}
-        onOpenChange={setRotateSSHOpen}
       />
       <ChangeRootPasswordDialog
         hostId={host.id}
