@@ -244,9 +244,9 @@ export function CreateHostDialog({
                 <Label>挂载路径（可选）</Label>
                 {hostMounts.map((m, i) => (
                   <div key={i} className="flex items-center gap-2 text-sm">
-                    <span className="truncate font-mono" title={m.source}>{m.source}</span>
+                    <span className="flex-1 min-w-0 truncate font-mono" title={m.source}>{m.source}</span>
                     <span className="text-muted-foreground">-&gt;</span>
-                    <span className="truncate font-mono" title={m.target}>{m.target}</span>
+                    <span className="flex-1 min-w-0 truncate font-mono" title={m.target}>{m.target}</span>
                     <Button
                       type="button"
                       variant="ghost"
