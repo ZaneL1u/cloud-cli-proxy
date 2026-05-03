@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: "映射语义补齐与懒加载"
 status: complete
-last_updated: "2026-04-30T13:30:00.000Z"
-last_activity: 2026-04-30
+last_updated: "2026-05-03T17:59:30.000Z"
+last_activity: 2026-05-03
 progress:
   total_phases: 5
   completed_phases: 5
@@ -28,7 +28,7 @@ Milestone: v3.1 映射语义补齐与懒加载 — ✅ SHIPPED (2026-04-24)
 Phase: 37 (e2e-uat) — COMPLETE
 Plan: 5 of 5 (全部完成)
 Status: Phase complete — ready for verification
-Last activity: 2026-04-30 - 完成 quick task 260425: 修复 AuthResponse.Status 字段无法解析 JSON 数字类型的问题
+Last activity: 2026-05-03 - 完成 quick task 260504-2n4: 修复挂载路径在长路径下撑爆容器（create-host-dialog flex min-w-0 + mount-manager truncate）
 
 Progress: [██████████] 100% (11/11 plans across v3.1 phases)
 
@@ -116,6 +116,7 @@ v3.1 milestone 已启动；等待 ROADMAP.md 写入后进入 Phase 36 执行：
 | 260424 | 为 cloud-claude 添加外层信息面板（出口IP、账号、文件状态等） | 2026-04-30 | 77aee4d, 64cfcc9, 224bb08 | [260424-cloud-claude-ip](./quick/260424-cloud-claude-ip/) |
 | 260425 | 修复 AuthResponse.Status 字段无法解析 JSON 数字类型的问题 | 2026-04-30 | 7b49af3 | [260425-authresponse-status-json-json-cannot-unm](./quick/260425-authresponse-status-json-json-cannot-unm/) |
 | 260502-ni0 | 用户中心化凭据重构（DB/后端/前端）+ 容器自启动 + 删除 claude wrapper + 修复 IP 探测镜像 | 2026-05-02 | 6ed9cdc, 9a5db98, b0e6791, f24e3d1, 1b23a18, f744ec0 | [260502-ni0-user-centric-creds](./quick/260502-ni0-user-centric-creds/) |
+| 260504-2n4 | 修复挂载路径在长路径下撑爆创建主机对话框与挂载管理卡片 | 2026-05-03 | e208501, bf1c526 | [260504-2n4-fix-mount-path-overflow](./quick/260504-2n4-fix-mount-path-overflow/) |
 
 ### Roadmap Evolution
 
@@ -128,7 +129,7 @@ v3.1 milestone 已启动；等待 ROADMAP.md 写入后进入 Phase 36 执行：
 
 ## Session Continuity
 
-Last session: 2026-05-03T02:00:00.000Z
+Last session: 2026-05-03T17:59:30.000Z
 
 ## Deferred Items
 
