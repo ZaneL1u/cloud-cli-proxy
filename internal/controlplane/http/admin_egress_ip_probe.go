@@ -250,6 +250,37 @@ func CleanupOrphanProbes(logger *slog.Logger) {
 	}
 }
 
+// hostnameProvider 抽象 os.Hostname，便于测试注入。
+var hostnameProvider = os.Hostname
+
+// dockerInspectRunner 抽象 `docker inspect` 调用，便于测试注入。
+// 真实实现使用 2s 超时的 exec.CommandContext，输出为容器 ID（或错误）。
+var dockerInspectRunner = func(ctx context.Context, name string) ([]byte, error) {
+	ctx2, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx2, "docker", "inspect", "--format", "{{.Id}}", name).Output()
+}
+
+// resolveProbeNetworking 根据控制面运行环境（容器内 vs 宿主机直跑）选择
+// docker run 时使用的网络参数。
+//
+// 决策规则：
+//   - 当 hostname 非空且 `docker inspect <hostname>` 成功并返回非空容器 ID 时，
+//     说明控制面就跑在该容器里，复用其 namespace（in-container 模式）。
+//   - 其它情况（hostname 为空 / inspect 失败 / 输出为空）一律 fallback
+//     到宿主机直跑模式：用 bridge 网络 + 端口映射，让控制面通过
+//     127.0.0.1:<port> 访问 sing-box 探针。
+func resolveProbeNetworking(ctx context.Context, port int) []string {
+	hostname, _ := hostnameProvider()
+	if hostname != "" {
+		out, err := dockerInspectRunner(ctx, hostname)
+		if err == nil && len(strings.TrimSpace(string(out))) > 0 {
+			return []string{"--network", "container:" + hostname}
+		}
+	}
+	return []string{"--network", "bridge", "-p", fmt.Sprintf("127.0.0.1:%d:%d", port, port)}
+}
+
 func startSingBoxDocker(ctx context.Context, proxyConfig json.RawMessage, port int) (int, func(), error) {
 	configJSON, err := buildSingBoxConfig(proxyConfig, "0.0.0.0", port)
 	if err != nil {
@@ -273,17 +304,12 @@ func startSingBoxDocker(ctx context.Context, proxyConfig json.RawMessage, port i
 
 	containerName := fmt.Sprintf("singbox-probe-%d", port)
 
-	networkArg := "host"
-	if cpID, _ := os.Hostname(); cpID != "" {
-		networkArg = "container:" + cpID
-	}
+	netArgs := resolveProbeNetworking(ctx, port)
 
-	cmd := exec.CommandContext(ctx, "docker", "run", "-d",
-		"--name", containerName,
-		"--network", networkArg,
-		"-v", tmpFile.Name()+":/etc/sing-box/config.json:ro",
-		network.GatewayImage(),
-	)
+	args := []string{"run", "-d", "--name", containerName}
+	args = append(args, netArgs...)
+	args = append(args, "-v", tmpFile.Name()+":/etc/sing-box/config.json:ro", network.GatewayImage())
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		os.Remove(tmpFile.Name())
