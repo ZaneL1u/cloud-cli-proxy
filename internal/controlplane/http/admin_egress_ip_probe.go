@@ -326,11 +326,18 @@ func startSingBoxDocker(ctx context.Context, proxyConfig json.RawMessage, port i
 	// 如果镜像已在本地，跳过 docker pull（避免不必要的网络等待）
 	inspectCmd := exec.CommandContext(ctx, "docker", "inspect", "--type=image", probeImage)
 	if inspectCmd.Run() != nil {
-		pullCmd := exec.CommandContext(ctx, "docker", "pull", probeImage)
+		// docker pull 单独限 30 秒，避免网络不通时无限卡死
+		pullCtx, pullCancel := context.WithTimeout(ctx, 30*time.Second)
+		pullCmd := exec.CommandContext(pullCtx, "docker", "pull", probeImage)
 		pullOutput, pullErr := pullCmd.CombinedOutput()
+		pullCancel()
 		if pullErr != nil {
 			os.Remove(tmpFile.Name())
-			return 0, nil, fmt.Errorf("拉取探针镜像失败: %s: %w", strings.TrimSpace(string(pullOutput)), pullErr)
+			msg := strings.TrimSpace(string(pullOutput))
+			if pullCtx.Err() == context.DeadlineExceeded {
+				return 0, nil, fmt.Errorf("拉取探针镜像超时（30s），请检查 docker 是否能访问 ghcr.io（如配置 docker 代理或手动运行 `docker pull %s`）", probeImage)
+			}
+			return 0, nil, fmt.Errorf("拉取探针镜像失败: %s: %w", msg, pullErr)
 		}
 	}
 
