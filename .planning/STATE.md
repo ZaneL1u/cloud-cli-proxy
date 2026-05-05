@@ -28,7 +28,7 @@ Milestone: v3.1 映射语义补齐与懒加载 — ✅ SHIPPED (2026-04-24)
 Phase: 37 (e2e-uat) — COMPLETE
 Plan: 5 of 5 (全部完成)
 Status: Phase complete — ready for verification
-Last activity: 2026-05-04 - 完成 quick task 260504-elo: 修复 image.lock v3.3.0 tag 不存在 + rejoinHostNetworks macOS 误报
+Last activity: 2026-05-05 - 完成 quick task 260505-fjq: Dockerfile 添加 tzdata + 前端时区选择改为固定标准偏移
 
 Progress: [██████████] 100% (11/11 plans across v3.1 phases)
 
@@ -120,6 +120,7 @@ v3.1 milestone 已启动；等待 ROADMAP.md 写入后进入 Phase 36 执行：
 | 260504-414 | 为新建主机对话框的挂载路径添加宿主机目录联想功能 | 2026-05-03 | 9754c3e, da36a2b, 4c482a1 | [260504-414-1-get-v1-admin-host-files-path-xxx-api-2](./quick/260504-414-1-get-v1-admin-host-files-path-xxx-api-2/) |
 | 260504-dtd | 修复 IP 测试 macOS 报 No such container + 让 docker compose pull 默认拉 sing-box-gateway | 2026-05-04 | a309ab5 | [260504-dtd-ip-macos-no-such-container-docker-compos](./quick/260504-dtd-ip-macos-no-such-container-docker-compos/) |
 | 260504-elo | 修复 image.lock v3.3.0 tag 在 ghcr.io 不存在 + 修复 rejoinHostNetworks macOS 误报 | 2026-05-04 | d1cbdf9, 5596353 | [260504-elo-image-lock-v3-3-0-tag-ghcr-io-app-go-rej](./quick/260504-elo-image-lock-v3-3-0-tag-ghcr-io-app-go-rej/) |
+| 260505-fjq | Dockerfile 添加 tzdata + 前端时区选择改为固定标准偏移 | 2026-05-05 | c794309, ed0f63d, 8ff12a0 | [260505-fjq-1-dockerfile-tzdata-tz-2](./quick/260505-fjq-1-dockerfile-tzdata-tz-2/) |
 
 ### Roadmap Evolution
 
