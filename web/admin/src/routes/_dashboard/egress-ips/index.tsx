@@ -156,14 +156,11 @@ function EgressIPsPage() {
     });
   }
 
+  // 弹窗只在点击已有结果时打开，检测过程中不自动弹窗
   const dialogOpen =
-    sseTest.isRunning ||
-    sseTest.stage === "error" ||
-    (sseTest.result !== null && sseTest.stage === "done") ||
-    (testDialogIpId !== null &&
-      !sseTest.isRunning &&
-      sseTest.stage !== "done" &&
-      sseTest.stage !== "error");
+    testDialogIpId !== null &&
+    !sseTest.isRunning &&
+    testResults.get(testDialogIpId) != null;
 
   return (
     <div className="space-y-6">
@@ -239,9 +236,8 @@ function EgressIPsPage() {
                     </TableCell>
                     <TableCell>
                       {isTestingThis ? (
-                        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          {stageLabel(sseTest.stage)}
+                        <span className="text-sm text-muted-foreground">
+                          —
                         </span>
                       ) : actualIP ? (
                         <span className="flex items-center gap-1.5">
@@ -268,10 +264,11 @@ function EgressIPsPage() {
                       <StatusCell
                         ip={ip}
                         result={result}
+                        isTesting={isTestingThis}
+                        stage={sseTest.stage}
                         onClickResult={() => {
                           if (result) {
                             setTestDialogIpId(ip.id);
-                            // 用已有结果直接展示，不触发 SSE
                           }
                         }}
                       />
@@ -289,13 +286,16 @@ function EgressIPsPage() {
                             disabled={isTestingThis}
                           >
                             {isTestingThis ? (
-                              <Loader2 className="animate-spin" />
+                              <>
+                                <Loader2 className="animate-spin" />
+                                检测中…
+                              </>
                             ) : (
-                              <FlaskConical />
+                              <>
+                                <FlaskConical />
+                                测试
+                              </>
                             )}
-                            {isTestingThis
-                              ? stageLabel(sseTest.stage)
-                              : "测试"}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => {
@@ -398,14 +398,27 @@ function EgressIPsPage() {
 function StatusCell({
   ip,
   result,
+  isTesting,
+  stage,
   onClickResult,
 }: {
   ip: EgressIP;
   result: TestResult | undefined;
+  isTesting?: boolean;
+  stage?: ProbeStage | null;
   onClickResult: () => void;
 }) {
   if (ip.status === "disabled") {
     return <Badge variant="secondary">已禁用</Badge>;
+  }
+
+  if (isTesting) {
+    return (
+      <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        {stageLabel(stage)}
+      </span>
+    );
   }
 
   if (!result) {
