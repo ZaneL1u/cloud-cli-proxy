@@ -4,6 +4,37 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v3.3.2 - 2026-05-05
+## What's Changed
+
+### Backend (Go / API)
+- refactor(admin): 重构挂载和端口映射输入交互 (ff1a8b4)
+- fix(probe): docker pull 超时从 30s 放宽到 3 分钟 (e3ff822)
+- fix(probe): docker pull 单独限 30 秒，超时给明确引导 (8a848fa)
+- fix(probe): 保留 ghcr.io 镜像，本地存在时跳过 docker pull (6819211)
+- fix(probe): 探针改回本地 gateway 镜像，去掉 ghcr.io pull (d33c835)
+- fix(probe): SSE 探测超时延长至 5 分钟，增加心跳保活 (1211155)
+- feat(quick-260505-gjs-01): 后端 SSE 流式探测 endpoint (4ae4948)
+- fix(probe): 探针 sing-box 镜像固定为 v1.13.3 版本 (e82a8d8)
+- feat(probe): 探针启动前显式拉取 sing-box 镜像，失败报错更清晰 (b89d44d)
+- revert(probe): 换回 ghcr.io/sagernet/sing-box 作为 IP 探测镜像 (a1b625e)
+- fix(quick-260504-elo-02): rejoinHostNetworks 加容器存在性探测，避免 macOS 误报 (5596353)
+- feat(quick-260504-dtd-01): add resolveProbeNetworking helper for host-binary mode (07c4a36)
+- test(quick-260504-dtd-01): add failing tests for resolveProbeNetworking (de904f7)
+
+### Frontend (Admin Web)
+- refactor(admin): 重构挂载和端口映射输入交互 (ff1a8b4)
+- feat(quick-260505-gjs): 探测阶段移到状态列，去掉检测中自动弹窗 (a75e8eb)
+- feat(quick-260505-gjs-02): 前端 SSE hook 与阶段性弹窗 (a1b8654)
+- fix(quick-260505-fjq-02): 前端时区选择改为固定标准偏移 (ed0f63d)
+
+### Runtime & Deployment
+- fix(quick-260504-elo-01): image.lock 中 managed-user 镜像 tag 改为 latest (d1cbdf9)
+- feat(quick-260504-dtd-02): default-pull sing-box-gateway and avoid restart loop (97d59a6)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v3.3.1...v3.3.2
+
+
 ## v3.3.1 - 2026-05-03
 ## What's Changed
 
