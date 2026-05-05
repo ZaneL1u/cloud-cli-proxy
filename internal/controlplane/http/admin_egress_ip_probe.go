@@ -22,6 +22,8 @@ import (
 	"golang.org/x/net/proxy"
 )
 
+const probeImage = "ghcr.io/sagernet/sing-box"
+
 type ProbeResult struct {
 	Status   string    `json:"status"`
 	TestedAt time.Time `json:"tested_at"`
@@ -302,11 +304,19 @@ func startSingBoxDocker(ctx context.Context, proxyConfig json.RawMessage, port i
 
 	containerName := fmt.Sprintf("singbox-probe-%d", port)
 
+	// 确保探针镜像已拉取，避免 docker run 隐式拉取导致超时或报错不清
+	pullCmd := exec.CommandContext(ctx, "docker", "pull", probeImage)
+	pullOutput, pullErr := pullCmd.CombinedOutput()
+	if pullErr != nil {
+		os.Remove(tmpFile.Name())
+		return 0, nil, fmt.Errorf("拉取探针镜像失败: %s: %w", strings.TrimSpace(string(pullOutput)), pullErr)
+	}
+
 	netArgs := resolveProbeNetworking(ctx, port)
 
 	args := []string{"run", "-d", "--name", containerName}
 	args = append(args, netArgs...)
-	args = append(args, "-v", tmpFile.Name()+":/etc/sing-box/config.json:ro", "ghcr.io/sagernet/sing-box", "run", "-c", "/etc/sing-box/config.json")
+	args = append(args, "-v", tmpFile.Name()+":/etc/sing-box/config.json:ro", probeImage, "run", "-c", "/etc/sing-box/config.json")
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
