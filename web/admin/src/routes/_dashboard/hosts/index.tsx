@@ -11,15 +11,14 @@ import {
   RotateCcw,
   Globe,
   Server,
-  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getToken } from "@/lib/auth";
 import { useHosts, useDeleteHost, useHostAction } from "@/hooks/use-hosts";
 import { useTasks } from "@/hooks/use-tasks";
 import { CreateHostDialog } from "@/components/hosts/create-host-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StatusDot } from "@/components/ui/status-dot";
 import {
   Tooltip,
   TooltipContent,
@@ -90,12 +89,12 @@ function getHostStatus(
 
   // 以 DB status 为唯一数据源
   const db = host.status;
-  if (db === "failed") return { type: "badge" as const, label: "失败", variant: "destructive" as const };
-  if (db === "pending") return { type: "badge" as const, label: "等待中", variant: "outline" as const };
-  if (db === "running") return { type: "badge" as const, label: "运行中", variant: "default" as const };
-  if (db === "stopped") return { type: "badge" as const, label: "已停止", variant: "secondary" as const };
+  if (db === "failed") return { type: "dot" as const, label: "失败", tone: "danger" as const };
+  if (db === "pending") return { type: "dot" as const, label: "等待中", tone: "muted" as const };
+  if (db === "running") return { type: "dot" as const, label: "运行中", tone: "success" as const };
+  if (db === "stopped") return { type: "dot" as const, label: "已停止", tone: "muted" as const };
 
-  return { type: "badge" as const, label: db || "未知", variant: "outline" as const };
+  return { type: "dot" as const, label: db || "未知", tone: "muted" as const };
 }
 
 function HostsPage() {
@@ -245,8 +244,8 @@ function HostsPage() {
                         <TooltipProvider delayDuration={100}>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="inline-flex items-center gap-1.5 text-sm text-primary cursor-help">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <span className="inline-flex items-center gap-2 text-sm text-info cursor-help">
+                                <StatusDot variant="info" pulse />
                                 {status.label}
                               </span>
                             </TooltipTrigger>
@@ -273,12 +272,15 @@ function HostsPage() {
                           </Tooltip>
                         </TooltipProvider>
                       ) : status.type === "loading" ? (
-                        <span className="inline-flex items-center gap-1.5 text-sm text-primary">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span className="inline-flex items-center gap-2 text-sm text-info">
+                          <StatusDot variant="info" pulse />
                           {status.label}
                         </span>
                       ) : (
-                        <Badge variant={status.variant}>{status.label}</Badge>
+                        <span className="inline-flex items-center gap-2 text-sm">
+                          <StatusDot variant={status.tone} />
+                          {status.label}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
@@ -299,7 +301,7 @@ function HostsPage() {
                                     handleAction(host.id, "start", "启动")
                                   }
                                 >
-                                  <Play className="h-4 w-4 text-green-600" />
+                                  <Play className="h-4 w-4 text-success" />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>启动</TooltipContent>
@@ -320,7 +322,7 @@ function HostsPage() {
                                       handleAction(host.id, "stop", "停止")
                                     }
                                   >
-                                    <Square className="h-4 w-4 text-red-500" />
+                                    <Square className="h-4 w-4 text-destructive" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>停止</TooltipContent>
@@ -338,7 +340,7 @@ function HostsPage() {
                                       handleAction(host.id, "rebuild", "重建")
                                     }
                                   >
-                                    <RotateCcw className="h-4 w-4 text-blue-500" />
+                                    <RotateCcw className="h-4 w-4 text-info" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>重建</TooltipContent>

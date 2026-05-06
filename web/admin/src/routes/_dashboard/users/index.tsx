@@ -3,8 +3,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { MoreHorizontal, Plus, Eye, Ban, CheckCircle, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useUsers, useUpdateUserStatus, type User } from "@/hooks/use-users";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StatusDot } from "@/components/ui/status-dot";
 import {
   Table,
   TableBody,
@@ -138,26 +138,27 @@ function UsersPage() {
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        user.status === "active"
-                          ? "default"
-                          : user.status === "expired"
-                            ? "destructive"
-                            : "secondary"
-                      }
-                    >
+                    <span className="inline-flex items-center gap-2 text-sm">
+                      <StatusDot
+                        variant={
+                          user.status === "active"
+                            ? "success"
+                            : user.status === "expired"
+                              ? "danger"
+                              : "muted"
+                        }
+                      />
                       {user.status === "active"
                         ? "活跃"
                         : user.status === "expired"
                           ? "已过期"
                           : "已禁用"}
-                    </Badge>
+                    </span>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="text-muted-foreground tabular-nums">
                     {user.expires_at ? formatDate(user.expires_at) : "永不过期"}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="text-muted-foreground tabular-nums">
                     {formatDate(user.created_at)}
                   </TableCell>
                   <TableCell>

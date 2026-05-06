@@ -8,9 +8,6 @@ import {
   FlaskConical,
   Loader2,
   RefreshCw,
-  Check,
-  X,
-  Minus,
   Globe,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,8 +19,8 @@ import {
   type TestResult,
   type ProbeStage,
 } from "@/hooks/use-egress-ips";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StatusDot } from "@/components/ui/status-dot";
 import {
   Table,
   TableBody,
@@ -426,12 +423,17 @@ function StatusCell({
   onClickResult: () => void;
 }) {
   if (ip.status === "disabled") {
-    return <Badge variant="secondary">已禁用</Badge>;
+    return (
+      <span className="flex items-center gap-2 text-sm text-muted-foreground">
+        <StatusDot variant="muted" />
+        已禁用
+      </span>
+    );
   }
 
   if (isTesting) {
     return (
-      <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+      <span className="flex items-center gap-1.5 text-sm text-info">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         {stageLabel(stage)}
       </span>
@@ -440,8 +442,8 @@ function StatusCell({
 
   if (!result) {
     return (
-      <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Minus className="h-3.5 w-3.5" />
+      <span className="flex items-center gap-2 text-sm text-muted-foreground">
+        <StatusDot variant="muted" />
         待测试
       </span>
     );
@@ -456,9 +458,9 @@ function StatusCell({
           <TooltipTrigger asChild>
             <button
               onClick={onClickResult}
-              className="flex items-center gap-1.5 text-sm text-green-600 hover:underline"
+              className="flex items-center gap-2 text-sm text-success hover:underline"
             >
-              <Check className="h-3.5 w-3.5" />
+              <StatusDot variant="success" />
               正常
             </button>
           </TooltipTrigger>
@@ -475,9 +477,9 @@ function StatusCell({
           <TooltipTrigger asChild>
             <button
               onClick={onClickResult}
-              className="flex items-center gap-1.5 text-sm text-yellow-600 hover:underline"
+              className="flex items-center gap-2 text-sm text-warning hover:underline"
             >
-              <X className="h-3.5 w-3.5" />
+              <StatusDot variant="warning" />
               部分异常
             </button>
           </TooltipTrigger>
@@ -493,9 +495,9 @@ function StatusCell({
         <TooltipTrigger asChild>
           <button
             onClick={onClickResult}
-            className="flex items-center gap-1.5 text-sm text-destructive hover:underline"
+            className="flex items-center gap-2 text-sm text-destructive hover:underline"
           >
-            <X className="h-3.5 w-3.5" />
+            <StatusDot variant="danger" />
             异常
           </button>
         </TooltipTrigger>
