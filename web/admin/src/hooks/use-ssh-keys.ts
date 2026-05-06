@@ -53,8 +53,8 @@ export function useAdminCreateSSHKey() {
           private_key: privateKey,
         }),
       }),
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({
+    onSuccess: async (_data, variables) => {
+      await qc.refetchQueries({
         queryKey: ["admin", "ssh-keys", variables.userId],
       });
     },
@@ -66,8 +66,8 @@ export function useAdminDeleteSSHKey() {
   return useMutation({
     mutationFn: ({ userId, keyId }: { userId: string; keyId: string }) =>
       apiFetch(`/users/${userId}/ssh-keys/${keyId}`, { method: "DELETE" }),
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({
+    onSuccess: async (_data, variables) => {
+      await qc.refetchQueries({
         queryKey: ["admin", "ssh-keys", variables.userId],
       });
     },
@@ -108,8 +108,8 @@ export function useMyCreateSSHKey() {
           private_key: privateKey,
         }),
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["portal", "ssh-keys"] });
+    onSuccess: async () => {
+      await qc.refetchQueries({ queryKey: ["portal", "ssh-keys"] });
     },
   });
 }
@@ -119,8 +119,8 @@ export function useMyDeleteSSHKey() {
   return useMutation({
     mutationFn: (keyId: string) =>
       portalApiFetch(`/ssh-keys/${keyId}`, { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["portal", "ssh-keys"] });
+    onSuccess: async () => {
+      await qc.refetchQueries({ queryKey: ["portal", "ssh-keys"] });
     },
   });
 }
