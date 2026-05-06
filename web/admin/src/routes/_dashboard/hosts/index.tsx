@@ -87,17 +87,7 @@ function getHostStatus(
     return { type: "loading" as const, label: `${kind}中...` };
   }
 
-  // 按 docker_status 判断
-  const docker = host.docker_status;
-  if (docker === "running") return { type: "badge" as const, label: "运行中", variant: "default" as const };
-  if (docker === "exited") return { type: "badge" as const, label: "已停止", variant: "secondary" as const };
-  if (docker === "not found") return { type: "badge" as const, label: "未创建", variant: "outline" as const };
-  if (docker === "created") return { type: "badge" as const, label: "已创建", variant: "outline" as const };
-  if (docker === "restarting") return { type: "badge" as const, label: "重启中", variant: "outline" as const };
-  if (docker === "paused") return { type: "badge" as const, label: "已暂停", variant: "outline" as const };
-  if (docker === "dead") return { type: "badge" as const, label: "已死亡", variant: "destructive" as const };
-
-  // 回退到 DB status
+  // 以 DB status 为唯一数据源
   const db = host.status;
   if (db === "failed") return { type: "badge" as const, label: "失败", variant: "destructive" as const };
   if (db === "pending") return { type: "badge" as const, label: "等待中", variant: "outline" as const };
@@ -196,11 +186,11 @@ function HostsPage() {
               hosts.map((host) => {
                 const latestTask = getLatestTask(host.id);
                 const status = getHostStatus(host, latestTask);
-                const isRunning = host.docker_status === "running";
+                const isRunning = host.status === "running";
                 const isStopped =
-                  host.docker_status === "exited" ||
-                  host.docker_status === "not found" ||
-                  host.status === "stopped";
+                  host.status === "stopped" ||
+                  host.status === "failed" ||
+                  host.status === "not found";
 
                 return (
                   <TableRow key={host.id}>

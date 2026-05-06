@@ -63,16 +63,6 @@ func (h *AdminHostsHandler) List() nethttp.Handler {
 			return
 		}
 
-		dockerStatuses := getDockerStatuses()
-		for i := range hosts {
-			containerName := "cloudproxy-" + hosts[i].ID
-			if ds, ok := dockerStatuses[containerName]; ok {
-				hosts[i].DockerStatus = ds
-			} else {
-				hosts[i].DockerStatus = "not found"
-			}
-		}
-
 		writeJSON(w, nethttp.StatusOK, map[string]any{"hosts": hosts})
 	})
 }

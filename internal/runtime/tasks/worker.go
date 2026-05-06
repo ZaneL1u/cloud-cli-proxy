@@ -102,6 +102,10 @@ func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest
 	}
 
 	if err != nil {
+		// 失败路径：先停止容器，避免 DB=failed 但 docker=running 的分裂
+		containerName := firstNonEmpty(request.ContainerName, containerNameForHost(request.HostID))
+		_ = w.runDocker(ctx, "stop", containerName)
+
 		errorCode := "host_action_failed"
 		if strings.HasPrefix(err.Error(), "volume_in_use:") {
 			errorCode = "volume_in_use"

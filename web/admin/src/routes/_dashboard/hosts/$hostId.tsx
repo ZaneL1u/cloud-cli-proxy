@@ -72,9 +72,13 @@ const dockerStatusConfig: Record<string, { label: string; variant: "default" | "
 };
 
 function getHostStatus(host: { status: string; docker_status?: string }) {
-  const docker = host.docker_status;
-  if (docker && dockerStatusConfig[docker]) return dockerStatusConfig[docker];
-  return statusConfig[host.status] ?? { label: host.status, variant: "outline" as const };
+  // 优先 DB status
+  if (statusConfig[host.status]) return statusConfig[host.status];
+  // docker_status 仅作为降级辅助
+  if (host.docker_status && dockerStatusConfig[host.docker_status]) {
+    return dockerStatusConfig[host.docker_status];
+  }
+  return { label: host.status, variant: "outline" as const };
 }
 
 function HostDetailPage() {
