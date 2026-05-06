@@ -28,7 +28,7 @@ Milestone: v3.1 映射语义补齐与懒加载 — ✅ SHIPPED (2026-04-24)
 Phase: 37 (e2e-uat) — COMPLETE
 Plan: 5 of 5 (全部完成)
 Status: Phase complete — ready for verification
-Last activity: 2026-05-05 - 完成 quick task 260505-gjs: 出口 IP 探测改造为 SSE 实时推送
+Last activity: 2026-05-06 - 完成 quick task 260506: 修复管理后台 stop→start 后 IP 泄漏 + list/detail 状态不一致
 
 Progress: [██████████] 100% (11/11 plans across v3.1 phases)
 
@@ -117,6 +117,7 @@ v3.1 milestone 已启动；等待 ROADMAP.md 写入后进入 Phase 36 执行：
 | 260425 | 修复 AuthResponse.Status 字段无法解析 JSON 数字类型的问题 | 2026-04-30 | 7b49af3 | [260425-authresponse-status-json-json-cannot-unm](./quick/260425-authresponse-status-json-json-cannot-unm/) |
 | 260502-ni0 | 用户中心化凭据重构（DB/后端/前端）+ 容器自启动 + 删除 claude wrapper + 修复 IP 探测镜像 | 2026-05-02 | 6ed9cdc, 9a5db98, b0e6791, f24e3d1, 1b23a18, f744ec0 | [260502-ni0-user-centric-creds](./quick/260502-ni0-user-centric-creds/) |
 | 260504-2n4 | 修复挂载路径在长路径下撑爆创建主机对话框与挂载管理卡片 | 2026-05-03 | e208501, bf1c526 | [260504-2n4-fix-mount-path-overflow](./quick/260504-2n4-fix-mount-path-overflow/) |
+| 260506 | 修复管理后台 stop→start 后 IP 泄漏 + list/detail 状态不一致 | 2026-05-06 | d43b2c8, 5ac4163 | [260506-stop-start-ip-list-detail](./quick/260506-stop-start-ip-list-detail/) |
 | 260504-414 | 为新建主机对话框的挂载路径添加宿主机目录联想功能 | 2026-05-03 | 9754c3e, da36a2b, 4c482a1 | [260504-414-1-get-v1-admin-host-files-path-xxx-api-2](./quick/260504-414-1-get-v1-admin-host-files-path-xxx-api-2/) |
 | 260504-dtd | 修复 IP 测试 macOS 报 No such container + 让 docker compose pull 默认拉 sing-box-gateway | 2026-05-04 | a309ab5 | [260504-dtd-ip-macos-no-such-container-docker-compos](./quick/260504-dtd-ip-macos-no-such-container-docker-compos/) |
 | 260504-elo | 修复 image.lock v3.3.0 tag 在 ghcr.io 不存在 + 修复 rejoinHostNetworks macOS 误报 | 2026-05-04 | d1cbdf9, 5596353 | [260504-elo-image-lock-v3-3-0-tag-ghcr-io-app-go-rej](./quick/260504-elo-image-lock-v3-3-0-tag-ghcr-io-app-go-rej/) |
