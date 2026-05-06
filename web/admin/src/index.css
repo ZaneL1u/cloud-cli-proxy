@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "tailwindcss-animate";
 
 @theme {
   --color-background: var(--background);
@@ -16,6 +17,12 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -43,6 +50,12 @@
   --accent: oklch(0.955 0.012 264);
   --accent-foreground: oklch(0.35 0.08 264);
   --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.62 0.17 145);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.72 0.17 75);
+  --warning-foreground: oklch(0.18 0 0);
+  --info: oklch(0.58 0.16 220);
+  --info-foreground: oklch(0.985 0 0);
   --border: oklch(0.915 0.006 264);
   --input: oklch(0.915 0.006 264);
   --popover: oklch(1 0 0);
