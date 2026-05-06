@@ -28,7 +28,7 @@ Milestone: v3.1 映射语义补齐与懒加载 — ✅ SHIPPED (2026-04-24)
 Phase: 37 (e2e-uat) — COMPLETE
 Plan: 5 of 5 (全部完成)
 Status: Phase complete — ready for verification
-Last activity: 2026-05-06 - 完成 quick task 260506-ty7: 修复种子 admin 凭据缺口
+Last activity: 2026-05-06 - 完成 quick task 260506-urq: 修复 Dockerfile 中 claude 安装产物为软链导致容器重建后断裂
 
 Progress: [██████████] 100% (11/11 plans across v3.1 phases)
 
@@ -124,6 +124,7 @@ v3.1 milestone 已启动；等待 ROADMAP.md 写入后进入 Phase 36 执行：
 | 260505-fjq | Dockerfile 添加 tzdata + 前端时区选择改为固定标准偏移 | 2026-05-05 | c794309, ed0f63d, 8ff12a0 | [260505-fjq-1-dockerfile-tzdata-tz-2](./quick/260505-fjq-1-dockerfile-tzdata-tz-2/) |
 | 260505-gjs | 出口 IP 探测改造为 SSE 实时推送（后端 SSE endpoint + 前端 EventSource） | 2026-05-05 | 4ae4948, a1b8654, aa458b4 | [260505-gjs-ip-sse-sse-endpoint-eventsource-sse-post](./quick/260505-gjs-ip-sse-sse-endpoint-eventsource-sse-post/) |
 | 260506-ty7 | 修复种子 admin 凭据缺口（主机创建卡在创建中） | 2026-05-06 | 5b0105b, 7bfc626, 55dec86 | [260506-ty7-admin](./quick/260506-ty7-admin/) |
+| 260506-urq | 修复 Dockerfile 中 claude 安装产物为软链导致容器重建后断裂 | 2026-05-06 | 28d18e7 | [260506-urq-dockerfile-claude](./quick/260506-urq-dockerfile-claude/) |
 
 ### Roadmap Evolution
 
