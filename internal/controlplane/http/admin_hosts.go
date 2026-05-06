@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
+	"github.com/zanel1u/cloud-cli-proxy/internal/controlplane/credgen"
 	"github.com/zanel1u/cloud-cli-proxy/internal/runtime"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -170,7 +171,7 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 			timezone = "America/Los_Angeles"
 		}
 		hostname := generateHostname()
-		hostShortID := generateShortID()
+		hostShortID := credgen.GenerateShortID()
 
 		imageLockPath := h.imageLockPath
 		if imageLockPath == "" {
@@ -235,7 +236,7 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 				break
 			}
 			if strings.Contains(err.Error(), "short_id") && (strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate")) {
-				hostShortID = generateShortID()
+				hostShortID = credgen.GenerateShortID()
 				continue
 			}
 			break

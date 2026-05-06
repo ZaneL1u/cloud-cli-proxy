@@ -5,11 +5,8 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -22,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/ssh"
 
+	"github.com/zanel1u/cloud-cli-proxy/internal/controlplane/credgen"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
 
@@ -179,7 +177,7 @@ func (h *SSHKeyHandler) Create() nethttp.Handler {
 		}
 
 		if req.Purpose == "outbound" && req.PublicKey == "" {
-			pubKeyStr, privKeyStr, err := generateSSHKeyPair(req.KeyType, req.Label)
+			pubKeyStr, privKeyStr, err := credgen.GenerateSSHKeyPair(req.KeyType, req.Label)
 			if err != nil {
 				h.logger.Error("generate ssh key pair failed", "user_id", userID, "error", err)
 				writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "生成密钥对失败"})
@@ -189,7 +187,7 @@ func (h *SSHKeyHandler) Create() nethttp.Handler {
 			req.PrivateKey = privKeyStr
 		}
 
-		if computeFingerprint(req.PublicKey) == "" {
+		if credgen.ComputeFingerprint(req.PublicKey) == "" {
 			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "public_key 格式错误"})
 			return
 		}
@@ -200,7 +198,7 @@ func (h *SSHKeyHandler) Create() nethttp.Handler {
 			}
 		}
 
-		fingerprint := computeFingerprint(req.PublicKey)
+		fingerprint := credgen.ComputeFingerprint(req.PublicKey)
 
 		key, err := h.store.CreateSSHKey(r.Context(), userID, req.Purpose, req.Label, req.PublicKey, req.PrivateKey, req.KeyType, fingerprint)
 		if err != nil {
@@ -403,7 +401,7 @@ func readContainerAuthorizedKeys(ctx context.Context, hosts []repository.Host) [
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		fp := computeFingerprint(line)
+		fp := credgen.ComputeFingerprint(line)
 		if fp == "" {
 			continue
 		}
@@ -428,7 +426,7 @@ func readContainerAuthorizedKeyFingerprints(ctx context.Context, containerName s
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		fp := computeFingerprint(line)
+		fp := credgen.ComputeFingerprint(line)
 		if fp != "" {
 			result[fp] = true
 		}
@@ -447,72 +445,6 @@ func loadProxyPublicKey() string {
 		return ""
 	}
 	return strings.TrimSpace(string(data))
-}
-
-func computeFingerprint(pubKeyStr string) string {
-	pubKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(pubKeyStr))
-	if err != nil {
-		return ""
-	}
-	return ssh.FingerprintSHA256(pubKey)
-}
-
-func generateSSHKeyPair(keyType, comment string) (publicKey, privateKey string, err error) {
-	switch keyType {
-	case "ed25519":
-		return generateEd25519KeyPair(comment)
-	case "rsa":
-		return generateRSAKeyPair(comment)
-	default:
-		return "", "", fmt.Errorf("unsupported key type: %s", keyType)
-	}
-}
-
-func generateEd25519KeyPair(comment string) (string, string, error) {
-	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return "", "", fmt.Errorf("generate ed25519 key: %w", err)
-	}
-
-	sshPubKey, err := ssh.NewPublicKey(pubKey)
-	if err != nil {
-		return "", "", fmt.Errorf("convert ed25519 public key: %w", err)
-	}
-	pubKeyStr := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPubKey)))
-	if comment != "" {
-		pubKeyStr += " " + comment
-	}
-
-	privKeyBlock, err := ssh.MarshalPrivateKey(privKey, comment)
-	if err != nil {
-		return "", "", fmt.Errorf("marshal ed25519 private key: %w", err)
-	}
-	privKeyPEM := pem.EncodeToMemory(privKeyBlock)
-
-	return pubKeyStr, string(privKeyPEM), nil
-}
-
-func generateRSAKeyPair(comment string) (string, string, error) {
-	privKey, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
-		return "", "", fmt.Errorf("generate rsa key: %w", err)
-	}
-
-	sshPubKey, err := ssh.NewPublicKey(&privKey.PublicKey)
-	if err != nil {
-		return "", "", fmt.Errorf("convert rsa public key: %w", err)
-	}
-	pubKeyStr := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPubKey)))
-	if comment != "" {
-		pubKeyStr += " " + comment
-	}
-
-	privKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(privKey),
-	})
-
-	return pubKeyStr, string(privKeyPEM), nil
 }
 
 func validateSSHKeyPair(publicKeyStr, privateKeyStr string) error {

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/zanel1u/cloud-cli-proxy/internal/controlplane/credgen"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
 
@@ -91,27 +92,6 @@ type createUserRequest struct {
 	Username string `json:"username"`
 }
 
-func generateRandomString(length int, charset string) string {
-	b := make([]byte, length)
-	for i := range b {
-		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		b[i] = charset[n.Int64()]
-	}
-	return string(b)
-}
-
-func generateShortID() string {
-	return generateRandomString(6, "abcdefghijklmnopqrstuvwxyz0123456789")
-}
-
-func generateEntryPassword() string {
-	return generateRandomString(8, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-}
-
-func generateLoginPassword() string {
-	return generateRandomString(16, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*")
-}
-
 func (h *AdminUsersHandler) Create() nethttp.Handler {
 	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		var req createUserRequest
@@ -126,7 +106,7 @@ func (h *AdminUsersHandler) Create() nethttp.Handler {
 			return
 		}
 
-		plainPassword := generateLoginPassword()
+		plainPassword := credgen.GenerateLoginPassword()
 		hash, err := bcrypt.GenerateFromPassword([]byte(plainPassword), bcrypt.DefaultCost)
 		if err != nil {
 			h.logger.Error("hash password failed", "error", err)
@@ -134,21 +114,21 @@ func (h *AdminUsersHandler) Create() nethttp.Handler {
 			return
 		}
 
-		entryPassword := generateEntryPassword()
-		sshPublicKey, sshPrivateKey, keyErr := generateSSHKeyPair("ed25519", req.Username)
+		entryPassword := credgen.GenerateEntryPassword()
+		sshPublicKey, sshPrivateKey, keyErr := credgen.GenerateSSHKeyPair("ed25519", req.Username)
 		if keyErr != nil {
 			h.logger.Error("generate ssh key pair failed", "error", keyErr)
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "generate ssh key failed"})
 			return
 		}
-		fingerprint := computeFingerprint(sshPublicKey)
+		fingerprint := credgen.ComputeFingerprint(sshPublicKey)
 		if fingerprint == "" {
 			h.logger.Error("compute ssh fingerprint failed (empty)")
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "compute ssh fingerprint failed"})
 			return
 		}
 
-		shortID := generateShortID()
+		shortID := credgen.GenerateShortID()
 
 		const maxRetries = 5
 		var user repository.User
@@ -163,7 +143,7 @@ func (h *AdminUsersHandler) Create() nethttp.Handler {
 				break
 			}
 			if strings.Contains(err.Error(), "short_id") && (strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate")) {
-				shortID = generateShortID()
+				shortID = credgen.GenerateShortID()
 				continue
 			}
 			break
@@ -235,14 +215,14 @@ func (h *AdminUsersHandler) RegenerateCredentials() nethttp.Handler {
 			return
 		}
 
-		entryPassword := generateEntryPassword()
-		sshPublicKey, sshPrivateKey, keyErr := generateSSHKeyPair("ed25519", user.Username)
+		entryPassword := credgen.GenerateEntryPassword()
+		sshPublicKey, sshPrivateKey, keyErr := credgen.GenerateSSHKeyPair("ed25519", user.Username)
 		if keyErr != nil {
 			h.logger.Error("generate ssh key pair failed", "user_id", userID, "error", keyErr)
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "generate ssh key failed"})
 			return
 		}
-		fingerprint := computeFingerprint(sshPublicKey)
+		fingerprint := credgen.ComputeFingerprint(sshPublicKey)
 		if fingerprint == "" {
 			h.logger.Error("compute ssh fingerprint failed (empty)", "user_id", userID)
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "compute ssh fingerprint failed"})

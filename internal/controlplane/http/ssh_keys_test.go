@@ -3,12 +3,14 @@ package http
 import (
 	"strings"
 	"testing"
+
+	"github.com/zanel1u/cloud-cli-proxy/internal/controlplane/credgen"
 )
 
 func TestGenerateEd25519KeyPairProducesOpenSSHPrivateKey(t *testing.T) {
-	publicKey, privateKey, err := generateEd25519KeyPair("test@example")
+	publicKey, privateKey, err := credgen.GenerateSSHKeyPair("ed25519", "test@example")
 	if err != nil {
-		t.Fatalf("generateEd25519KeyPair() error = %v", err)
+		t.Fatalf("credgen.GenerateSSHKeyPair() error = %v", err)
 	}
 
 	if !strings.Contains(privateKey, "BEGIN OPENSSH PRIVATE KEY") {
@@ -21,12 +23,12 @@ func TestGenerateEd25519KeyPairProducesOpenSSHPrivateKey(t *testing.T) {
 }
 
 func TestValidateSSHKeyPairRejectsMismatch(t *testing.T) {
-	publicKey, _, err := generateEd25519KeyPair("pub-only")
+	publicKey, _, err := credgen.GenerateSSHKeyPair("ed25519", "pub-only")
 	if err != nil {
 		t.Fatalf("generate first ed25519 key pair: %v", err)
 	}
 
-	_, otherPrivateKey, err := generateEd25519KeyPair("priv-only")
+	_, otherPrivateKey, err := credgen.GenerateSSHKeyPair("ed25519", "priv-only")
 	if err != nil {
 		t.Fatalf("generate second ed25519 key pair: %v", err)
 	}
