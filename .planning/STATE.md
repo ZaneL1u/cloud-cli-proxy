@@ -4,7 +4,7 @@ milestone: v3.1
 milestone_name: "映射语义补齐与懒加载"
 status: complete
 last_updated: "2026-05-04T12:42:00.000Z"
-last_activity: 2026-05-04
+last_activity: 2026-05-07
 progress:
   total_phases: 5
   completed_phases: 5
@@ -125,6 +125,7 @@ v3.1 milestone 已启动；等待 ROADMAP.md 写入后进入 Phase 36 执行：
 | 260505-gjs | 出口 IP 探测改造为 SSE 实时推送（后端 SSE endpoint + 前端 EventSource） | 2026-05-05 | 4ae4948, a1b8654, aa458b4 | [260505-gjs-ip-sse-sse-endpoint-eventsource-sse-post](./quick/260505-gjs-ip-sse-sse-endpoint-eventsource-sse-post/) |
 | 260506-ty7 | 修复种子 admin 凭据缺口（主机创建卡在创建中） | 2026-05-06 | 5b0105b, 7bfc626, 55dec86 | [260506-ty7-admin](./quick/260506-ty7-admin/) |
 | 260506-urq | 修复 Dockerfile 中 claude 安装产物为软链导致容器重建后断裂 | 2026-05-06 | 28d18e7 | [260506-urq-dockerfile-claude](./quick/260506-urq-dockerfile-claude/) |
+| 260507 | Docker 重启后出口 IP 泄漏修复：restart=no + Reconciler 自动恢复 | 2026-05-07 | 67e8d21, 03e7dcb | [260507-docker-ip-user-gw-restart-no-db-running](./quick/260507-docker-ip-user-gw-restart-no-db-running/) |
 
 ### Roadmap Evolution
 
