@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v3.3.7 - 2026-05-07
+## What's Changed
+
+### Backend (Go / API)
+- fix(app): embedded 模式下也启用 Reconciler 自动恢复 — 新增 dockerInspector 直接调用 docker inspect (16fd02f)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v3.3.6...v3.3.7
+
+
 ## v3.3.6 - 2026-05-07
 ## What's Changed
 
