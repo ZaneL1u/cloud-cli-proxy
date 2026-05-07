@@ -142,7 +142,10 @@
   3. 本地容器 entrypoint 在 `MODE=local` 下跳过 KasmVNC 和 control-plane 心跳，但仍启动 sshd 和 sing-box
   4. 用户可以通过 `--egress-config` 注入 sing-box outbound JSON，容器内自动启动 tun 模式；macOS 宿主机上支持 SOCKS/HTTP 代理兜底
   5. `cloud-claude local down` 可以停止并清理本地容器，`cloud-claude local status` 显示容器运行状态和端口映射
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 039-01-PLAN.md — CLI local up 子命令 + internal/local 包 + entrypoint MODE=local（LOCAL-01, LOCAL-04）
+- [ ] 039-02-PLAN.md — local down/status 子命令 + --egress-config 注入（UX-02, LOCAL-03）
+- [ ] 039-03-PLAN.md — devcontainer.json 更新 + sing-box 启动逻辑（LOCAL-02, LOCAL-03）
 **UI hint**: yes
 
 ### Phase 40: VS Code Remote-SSH E2E 验证
