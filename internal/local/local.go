@@ -106,6 +106,21 @@ func (m *LocalManager) Up(ctx context.Context) (SSHInfo, error) {
 	// Build create args
 	args := m.buildCreateArgs(containerName, projectDir, password)
 
+	// Inject egress config if provided
+	if m.opts.EgressConfig != "" {
+		_, egressMode, err := ValidateEgressConfig(m.opts.EgressConfig)
+		if err != nil {
+			return SSHInfo{}, fmt.Errorf("validate egress config: %w", err)
+		}
+		// Add egress-specific capabilities for tun mode
+		if egressMode == EgressModeTun {
+			args = append(args, "--cap-add", "NET_ADMIN", "--device", "/dev/net/tun")
+		}
+		// Mount outbound config into container
+		args = append(args, "-v", egressMountArg(m.opts.EgressConfig))
+		args = append(args, "-e", "SING_BOX_MODE="+string(egressMode))
+	}
+
 	// Create container
 	if err := m.runDocker(ctx, args...); err != nil {
 		return SSHInfo{}, fmt.Errorf("create container: %w", err)

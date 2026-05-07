@@ -3,6 +3,8 @@ package local
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"unicode"
@@ -225,4 +227,126 @@ func TestInspectContainerStatus(t *testing.T) {
 			t.Errorf("status = %q, want %q", status, "not_found")
 		}
 	})
+}
+
+func TestDetectEgressMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		json     string
+		expected EgressMode
+		wantErr  bool
+	}{
+		{"socks", `{"type":"socks","server":"1.2.3.4","server_port":1080}`, EgressModeProxy, false},
+		{"http", `{"type":"http","server":"1.2.3.4","server_port":8080}`, EgressModeProxy, false},
+		{"vmess", `{"type":"vmess","server":"1.2.3.4","server_port":443}`, EgressModeTun, false},
+		{"vless", `{"type":"vless","server":"1.2.3.4","server_port":443}`, EgressModeTun, false},
+		{"shadowsocks", `{"type":"shadowsocks","server":"1.2.3.4","server_port":8388}`, EgressModeTun, false},
+		{"trojan", `{"type":"trojan","server":"1.2.3.4","server_port":443}`, EgressModeTun, false},
+		{"no type", `{"server":"1.2.3.4"}`, "", true},
+		{"invalid json", `not json`, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mode, err := DetectEgressMode([]byte(tt.json))
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if mode != tt.expected {
+				t.Errorf("mode = %q, want %q", mode, tt.expected)
+			}
+		})
+	}
+}
+
+func TestValidateEgressConfig(t *testing.T) {
+	t.Run("valid file", func(t *testing.T) {
+		dir := t.TempDir()
+		file := filepath.Join(dir, "outbound.json")
+		os.WriteFile(file, []byte(`{"type":"socks","server":"1.2.3.4","server_port":1080}`), 0644)
+
+		data, mode, err := ValidateEgressConfig(file)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(data) == 0 {
+			t.Error("expected non-empty data")
+		}
+		if mode != EgressModeProxy {
+			t.Errorf("mode = %q, want %q", mode, EgressModeProxy)
+		}
+	})
+
+	t.Run("missing file", func(t *testing.T) {
+		_, _, err := ValidateEgressConfig("/nonexistent/path/outbound.json")
+		if err == nil {
+			t.Error("expected error for missing file")
+		}
+		if !strings.Contains(err.Error(), "不存在") {
+			t.Errorf("error should mention '不存在', got: %v", err)
+		}
+	})
+
+	t.Run("empty file", func(t *testing.T) {
+		dir := t.TempDir()
+		file := filepath.Join(dir, "empty.json")
+		os.WriteFile(file, []byte(""), 0644)
+
+		_, _, err := ValidateEgressConfig(file)
+		if err == nil {
+			t.Error("expected error for empty file")
+		}
+	})
+
+	t.Run("invalid json", func(t *testing.T) {
+		dir := t.TempDir()
+		file := filepath.Join(dir, "bad.json")
+		os.WriteFile(file, []byte("not json"), 0644)
+
+		_, _, err := ValidateEgressConfig(file)
+		if err == nil {
+			t.Error("expected error for invalid JSON")
+		}
+		if !strings.Contains(err.Error(), "JSON") {
+			t.Errorf("error should mention JSON, got: %v", err)
+		}
+	})
+}
+
+func TestEgressMountArg(t *testing.T) {
+	arg := egressMountArg("/path/to/outbound.json")
+	if !strings.Contains(arg, ":/etc/cloud-claude/sing-box-outbound.json:ro") {
+		t.Errorf("mount arg should contain target path, got: %s", arg)
+	}
+}
+
+func TestBuildCreateArgsWithEgress(t *testing.T) {
+	// Test tun mode (vmess)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "outbound.json")
+	os.WriteFile(file, []byte(`{"type":"vmess","server":"1.2.3.4","server_port":443}`), 0644)
+
+	_, mode, _ := ValidateEgressConfig(file)
+	if mode != EgressModeTun {
+		t.Errorf("expected tun mode, got %q", mode)
+	}
+}
+
+func TestBuildCreateArgsWithProxyEgress(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "outbound.json")
+	os.WriteFile(file, []byte(`{"type":"socks","server":"1.2.3.4","server_port":1080}`), 0644)
+
+	_, mode, err := ValidateEgressConfig(file)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mode != EgressModeProxy {
+		t.Errorf("expected proxy mode, got %q", mode)
+	}
 }
