@@ -1,6 +1,7 @@
 package sshproxy
 
 import (
+	"fmt"
 	"net"
 	"testing"
 
@@ -11,10 +12,10 @@ import (
 
 func TestDirectTCPIP_PayloadParse(t *testing.T) {
 	msg := channelOpenDirectMsg{
-		raddr: "127.0.0.1",
-		rport: 8080,
-		laddr: "0.0.0.0",
-		lport: 0,
+		Raddr: "127.0.0.1",
+		Rport: 8080,
+		Laddr: "0.0.0.0",
+		Lport: 0,
 	}
 
 	data := ssh.Marshal(&msg)
@@ -24,17 +25,17 @@ func TestDirectTCPIP_PayloadParse(t *testing.T) {
 		t.Fatalf("unexpected unmarshal error: %v", err)
 	}
 
-	if parsed.raddr != "127.0.0.1" {
-		t.Fatalf("raddr: got %q, want %q", parsed.raddr, "127.0.0.1")
+	if parsed.Raddr != "127.0.0.1" {
+		t.Fatalf("Raddr: got %q, want %q", parsed.Raddr, "127.0.0.1")
 	}
-	if parsed.rport != 8080 {
-		t.Fatalf("rport: got %d, want %d", parsed.rport, 8080)
+	if parsed.Rport != 8080 {
+		t.Fatalf("Rport: got %d, want %d", parsed.Rport, 8080)
 	}
-	if parsed.laddr != "0.0.0.0" {
-		t.Fatalf("laddr: got %q, want %q", parsed.laddr, "0.0.0.0")
+	if parsed.Laddr != "0.0.0.0" {
+		t.Fatalf("Laddr: got %q, want %q", parsed.Laddr, "0.0.0.0")
 	}
-	if parsed.lport != 0 {
-		t.Fatalf("lport: got %d, want %d", parsed.lport, 0)
+	if parsed.Lport != 0 {
+		t.Fatalf("Lport: got %d, want %d", parsed.Lport, 0)
 	}
 }
 
@@ -109,7 +110,7 @@ func TestIsForbiddenTarget_DockerSocket(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		desc := net.JoinHostPort(tt.host, itoa(tt.port))
+		desc := net.JoinHostPort(tt.host, fmt.Sprintf("%d", tt.port))
 		t.Run(desc, func(t *testing.T) {
 			if !isForbiddenTarget(tt.host, tt.port) {
 				t.Errorf("expected forbidden for %s:%d", tt.host, tt.port)
@@ -137,20 +138,4 @@ func TestIsForbiddenTarget_PublicIPAllowed(t *testing.T) {
 	if isForbiddenTarget("8.8.8.8", 53) {
 		t.Error("expected allowed for 8.8.8.8:53")
 	}
-}
-
-// itoa is a simple int-to-string helper for test descriptions.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	if n < 0 {
-		return "-" + itoa(-n)
-	}
-	digits := make([]byte, 0, 10)
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
-	}
-	return string(digits)
 }
