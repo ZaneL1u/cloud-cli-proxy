@@ -191,7 +191,7 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 		"create",
 		"--name", containerName,
 		"--network", "bridge",
-		"--restart", "unless-stopped",
+		"--restart", "no",
 		"--cap-add", "NET_ADMIN",
 		"--cap-add", "SYS_ADMIN",
 		"--device", "/dev/fuse",

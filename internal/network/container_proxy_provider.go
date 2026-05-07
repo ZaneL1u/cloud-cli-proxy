@@ -207,7 +207,7 @@ func dockerRunGateway(ctx context.Context, gwName, netName, gwIP, proxyServerIP,
 		"-v", configPath + ":/etc/sing-box/config.json:ro",
 		"--label", "cloud-cli-proxy.role=gateway",
 		"--label", "cloud-cli-proxy.managed=true",
-		"--restart", "unless-stopped",
+		"--restart", "no",
 		image,
 	}
 	cmd := exec.CommandContext(ctx, "docker", args...)
