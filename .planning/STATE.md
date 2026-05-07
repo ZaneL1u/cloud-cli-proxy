@@ -1,16 +1,14 @@
 ---
 gsd_state_version: 1.0
 milestone: v3.2
-milestone_name: "多形态容器接入"
-status: executing
-last_updated: "2026-05-07T11:55:00Z"
-last_activity: 2026-05-07
+milestone_name: 多形态容器接入
+status: unknown
+last_updated: "2026-05-07T12:10:08.841Z"
 progress:
-  total_phases: 4
-  completed_phases: 1
-  total_plans: 13
-  completed_plans: 3
-  percent: 23
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 21
+  completed_plans: 21
 ---
 
 # Project State
