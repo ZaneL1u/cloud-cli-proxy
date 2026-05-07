@@ -110,7 +110,7 @@
 
 **Milestone Goal:** 扩展容器接入方式，让 Cloud 版支持 VS Code Remote SSH，让本地版支持 VS Code Dev Containers，同时研究两套产品形态的最佳拆分/复用边界。
 
-- [ ] **Phase 38: SSH Proxy 端口转发支持** — 2/2 plans complete: direct-tcpip + 安全校验 + tcpip-forward/forwarded-tcpip 透传 — completed 2026-05-07
+- [x] **Phase 38: SSH Proxy 端口转发支持** — 2/2 plans complete: direct-tcpip + 安全校验 + tcpip-forward/forwarded-tcpip 透传 — completed 2026-05-07
 - [ ] **Phase 39: 本地 Dev Containers 支持** — cloud-claude local 子命令 + devcontainer.json + entrypoint MODE 分支 + local down/status
 - [ ] **Phase 40: VS Code Remote-SSH E2E 验证** — VS Code 端到端连接验证 + 安全流量校验
 - [ ] **Phase 41: Doctor 扩展与收尾** — doctor remote-ssh 诊断维度 + 里程碑收尾
