@@ -204,11 +204,14 @@ func (s *Server) handleConnection(netConn net.Conn, config *ssh.ServerConfig) {
 	go ssh.DiscardRequests(globalReqs)
 
 	for newChan := range chans {
-		if newChan.ChannelType() != "session" {
-			newChan.Reject(ssh.UnknownChannelType, "only session channels supported")
-			continue
+		switch newChan.ChannelType() {
+		case "session":
+			go s.handleChannel(newChan, targetAddr, targetUser, targetPassword, targetPrivateKey)
+		case "direct-tcpip":
+			go s.handleDirectTCPIP(newChan, targetAddr, targetUser, targetPassword, targetPrivateKey)
+		default:
+			newChan.Reject(ssh.UnknownChannelType, fmt.Sprintf("channel type %s not supported", newChan.ChannelType()))
 		}
-		go s.handleChannel(newChan, targetAddr, targetUser, targetPassword, targetPrivateKey)
 	}
 }
 
@@ -220,39 +223,9 @@ func (s *Server) handleChannel(newChan ssh.NewChannel, targetAddr, targetUser, t
 	}
 	defer clientChan.Close()
 
-	user := targetUser
-	if user == "" {
-		user = s.containerUser
-	}
-
-	pass := targetPassword
-	if pass == "" {
-		pass = s.containerPassword
-	}
-
-	var authMethods []ssh.AuthMethod
-	if targetPrivateKey != "" && (strings.Contains(targetPrivateKey, "BEGIN OPENSSH PRIVATE KEY") || strings.Contains(targetPrivateKey, "BEGIN RSA PRIVATE KEY") || strings.Contains(targetPrivateKey, "BEGIN EC PRIVATE KEY") || strings.Contains(targetPrivateKey, "BEGIN DSA PRIVATE KEY")) {
-		signer, err := ssh.ParsePrivateKey([]byte(targetPrivateKey))
-		if err == nil {
-			authMethods = append(authMethods, ssh.PublicKeys(signer))
-			s.logger.Debug("SSH proxy using private key auth for container", "addr", targetAddr, "user", user)
-		} else {
-			s.logger.Warn("SSH proxy failed to parse target private key, falling back to password", "error", err)
-		}
-	}
-	// 密码 fallback：始终追加，确保私钥失败后仍有退路
-	authMethods = append(authMethods, ssh.Password(pass), passwordKeyboardInteractive(pass), ssh.PublicKeys(s.hostKey))
-
-	targetConfig := &ssh.ClientConfig{
-		User:            user,
-		Auth:            authMethods,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second,
-	}
-
-	targetClient, err := ssh.Dial("tcp", targetAddr, targetConfig)
+	targetClient, err := s.dialContainer(targetAddr, targetUser, targetPassword, targetPrivateKey)
 	if err != nil {
-		s.logger.Error("dial container SSH failed", "addr", targetAddr, "user", user, "error", err)
+		s.logger.Error("dial container SSH failed", "addr", targetAddr, "user", targetUser, "error", err)
 		fmt.Fprintf(clientChan.Stderr(), "Failed to connect to container: %s\r\n", err.Error())
 		return
 	}
