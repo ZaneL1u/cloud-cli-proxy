@@ -635,6 +635,7 @@ func startTestTargetSSH(t *testing.T, targetPassword string) (string, func()) {
 }
 
 // handleTargetConn handles a single SSH connection as a target container.
+// Supports both session and direct-tcpip channels.
 func handleTargetConn(conn net.Conn, config *ssh.ServerConfig) {
 	sshConn, chans, reqs, err := ssh.NewServerConn(conn, config)
 	if err != nil {
@@ -644,19 +645,27 @@ func handleTargetConn(conn net.Conn, config *ssh.ServerConfig) {
 	go ssh.DiscardRequests(reqs)
 
 	for newChan := range chans {
-		if newChan.ChannelType() != "session" {
-			newChan.Reject(ssh.UnknownChannelType, "only session supported")
-			continue
+		switch newChan.ChannelType() {
+		case "session":
+			ch, reqs, err := newChan.Accept()
+			if err != nil {
+				return
+			}
+			go ssh.DiscardRequests(reqs)
+			// Send exit-status 0 to signal clean completion.
+			ch.SendRequest("exit-status", false, ssh.Marshal(&struct{ ExitStatus uint32 }{0}))
+			ch.Close()
+		case "direct-tcpip":
+			ch, reqs, err := newChan.Accept()
+			if err != nil {
+				return
+			}
+			go ssh.DiscardRequests(reqs)
+			// Accept and immediately close — enough to verify the channel opened.
+			ch.Close()
+		default:
+			newChan.Reject(ssh.UnknownChannelType, "unsupported")
 		}
-		ch, reqs, err := newChan.Accept()
-		if err != nil {
-			return
-		}
-		go ssh.DiscardRequests(reqs)
-
-		// Send exit-status 0 to signal clean completion.
-		ch.SendRequest("exit-status", false, ssh.Marshal(&struct{ ExitStatus uint32 }{0}))
-		ch.Close()
 	}
 }
 
@@ -707,6 +716,151 @@ func TestHandleConnection_AndChannel_WithTarget(t *testing.T) {
 	}
 	defer ch.Close()
 	go ssh.DiscardRequests(chReqs)
+
+	cc.Close()
+	<-done
+}
+
+// ---- direct-tcpip channel dispatch through proxy ----
+
+func TestHandleConnection_DirectTCPIP_ChannelDispatch(t *testing.T) {
+	// Start a TCP listener on "localhost:18080" that the direct-tcpip can connect to.
+	tcpLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen TCP: %v", err)
+	}
+	defer tcpLn.Close()
+	tcpAddr := tcpLn.Addr().String()
+
+	// Accept one TCP connection and echo data back (for the direct-tcpip test).
+	go func() {
+		conn, err := tcpLn.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		buf := make([]byte, 1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			return
+		}
+		conn.Write(buf[:n])
+	}()
+
+	// Start target SSH server that also handles direct-tcpip channels.
+	targetPassword := "targetpass"
+	targetAddr, cleanup := startTestTargetSSH(t, targetPassword)
+	defer cleanup()
+
+	resolver := &stubResolverRepo{
+		hostAuth: repository.HostSSHAuth{
+			EntryPassword: targetPassword,
+			ContainerUser: "workspace",
+		},
+		targetAddr: targetAddr,
+	}
+	logger := slog.New(slog.DiscardHandler)
+	s, err := NewServer(":0", "workspace", "targetpass", "", resolver, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config := buildServerConfig(s, resolver)
+	proxyAddr, done := startServerAndConnect(t, s, config)
+
+	clientConfig := &ssh.ClientConfig{
+		User:            "alice",
+		Auth:            []ssh.AuthMethod{ssh.Password("proxy-entry-pass")},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}
+
+	cc, clientErr := ssh.Dial("tcp", proxyAddr, clientConfig)
+	if clientErr != nil {
+		t.Fatalf("client connection failed: %v", clientErr)
+	}
+	defer cc.Close()
+
+	// Build the direct-tcpip payload targeting the TCP listener.
+	_, portStr, _ := net.SplitHostPort(tcpAddr)
+	var port uint32
+	fmt.Sscanf(portStr, "%d", &port)
+	payload := ssh.Marshal(&channelOpenDirectMsg{
+		Raddr: "127.0.0.1",
+		Rport: port,
+		Laddr: "0.0.0.0",
+		Lport: 0,
+	})
+
+	ch, chReqs, openErr := cc.OpenChannel("direct-tcpip", payload)
+	if openErr != nil {
+		t.Fatalf("OpenChannel direct-tcpip failed: %v", openErr)
+	}
+	defer ch.Close()
+	go ssh.DiscardRequests(chReqs)
+
+	// Write data through the direct-tcpip channel and read it back.
+	testData := []byte("hello direct-tcpip")
+	_, writeErr := ch.Write(testData)
+	if writeErr != nil {
+		t.Fatalf("write to direct-tcpip channel failed: %v", writeErr)
+	}
+
+	buf := make([]byte, 1024)
+	n, readErr := ch.Read(buf)
+	if readErr != nil {
+		t.Fatalf("read from direct-tcpip channel failed: %v", readErr)
+	}
+	if string(buf[:n]) != string(testData) {
+		t.Fatalf("data mismatch: got %q, want %q", string(buf[:n]), string(testData))
+	}
+
+	ch.Close()
+	cc.Close()
+	<-done
+}
+
+func TestHandleConnection_UnknownChannelType_Rejected(t *testing.T) {
+	// Start a target SSH server for auth resolution.
+	targetPassword := "targetpass"
+	targetAddr, cleanup := startTestTargetSSH(t, targetPassword)
+	defer cleanup()
+
+	resolver := &stubResolverRepo{
+		hostAuth: repository.HostSSHAuth{
+			EntryPassword: targetPassword,
+			ContainerUser: "workspace",
+		},
+		targetAddr: targetAddr,
+	}
+	logger := slog.New(slog.DiscardHandler)
+	s, err := NewServer(":0", "workspace", "targetpass", "", resolver, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config := buildServerConfig(s, resolver)
+	proxyAddr, done := startServerAndConnect(t, s, config)
+
+	clientConfig := &ssh.ClientConfig{
+		User:            "alice",
+		Auth:            []ssh.AuthMethod{ssh.Password("proxy-entry-pass")},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}
+
+	cc, clientErr := ssh.Dial("tcp", proxyAddr, clientConfig)
+	if clientErr != nil {
+		t.Fatalf("client connection failed: %v", clientErr)
+	}
+	defer cc.Close()
+
+	// Open an unsupported channel type — should be rejected.
+	ch, _, openErr := cc.OpenChannel("my-custom-type", nil)
+	if openErr == nil {
+		ch.Close()
+		t.Fatal("expected rejection for unknown channel type, but OpenChannel succeeded")
+	}
 
 	cc.Close()
 	<-done
