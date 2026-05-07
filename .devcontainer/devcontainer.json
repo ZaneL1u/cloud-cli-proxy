@@ -3,15 +3,20 @@
   "image": "ghcr.io/zanel1u/cloud-cli-proxy/managed-user:latest",
   "workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "containerEnv": {
+    "MODE": "local"
+  },
   "runArgs": [
     "--cap-add", "SYS_ADMIN",
     "--device", "/dev/fuse",
     "--security-opt", "apparmor=unconfined",
-    "--shm-size", "1g"
+    "--shm-size", "1g",
+    "--env", "MODE=local"
   ],
+  "forwardPorts": [22],
   "remoteUser": "workspace",
   "features": {},
-  "postCreateCommand": "echo 'Dev Container ready. Run claude to start Claude Code.'",
+  "postCreateCommand": "echo 'Dev Container ready (MODE=local). Run claude to start Claude Code.'",
   "customizations": {
     "vscode": {
       "extensions": []

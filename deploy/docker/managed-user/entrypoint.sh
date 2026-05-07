@@ -307,7 +307,73 @@ fi # end MODE != "local"
 
 # sing-box 启动（MODE=local + 有 egress 配置时）
 if [ "$MODE" = "local" ] && [ -f /etc/cloud-claude/sing-box-outbound.json ]; then
-  echo "[entrypoint] local mode: sing-box egress config detected"
+  SING_BOX_CONFIG="/etc/sing-box/config.json"
+  SING_BOX_OUTBOUND="/etc/cloud-claude/sing-box-outbound.json"
+  SING_BOX_MODE="${SING_BOX_MODE:-tun}"
+
+  echo "[entrypoint] local mode: starting sing-box (${SING_BOX_MODE} mode)"
+
+  if [ "$SING_BOX_MODE" = "tun" ]; then
+    # tun 模式：需要 NET_ADMIN 权限，由 docker create --cap-add NET_ADMIN 提供
+    if [ ! -f "$SING_BOX_CONFIG" ]; then
+      echo "[entrypoint] WARNING: sing-box tun mode requires /etc/sing-box/config.json" >&2
+      echo "[entrypoint] Falling back to proxy mode" >&2
+      SING_BOX_MODE="proxy"
+    fi
+  fi
+
+  if [ "$SING_BOX_MODE" = "proxy" ]; then
+    # proxy 模式：从 outbound JSON 构建最小 sing-box 配置
+    PROXY_SOCKS_PORT="${PROXY_SOCKS_PORT:-1080}"
+    PROXY_HTTP_PORT="${PROXY_HTTP_PORT:-1081}"
+
+    mkdir -p /etc/sing-box
+    cat > "$SING_BOX_CONFIG" <<SINGCFG
+{
+  "log": {"level": "warn"},
+  "inbounds": [
+    {"type": "socks", "tag": "socks-in", "listen": "127.0.0.1", "listen_port": ${PROXY_SOCKS_PORT}},
+    {"type": "http", "tag": "http-in", "listen": "127.0.0.1", "listen_port": ${PROXY_HTTP_PORT}}
+  ],
+  "outbounds": [
+    $(cat "$SING_BOX_OUTBOUND"),
+    {"type": "direct", "tag": "direct"}
+  ],
+  "route": {
+    "rules": [{"action": "sniff"}],
+    "auto_detect_interface": true
+  }
+}
+SINGCFG
+
+    # 设置代理环境变量（供所有用户 session 继承）
+    export ALL_PROXY="socks5://127.0.0.1:${PROXY_SOCKS_PORT}"
+    export HTTP_PROXY="http://127.0.0.1:${PROXY_HTTP_PORT}"
+    export HTTPS_PROXY="http://127.0.0.1:${PROXY_HTTP_PORT}"
+    export NO_PROXY="localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+    cat >> /etc/environment <<PROXYENV
+ALL_PROXY=${ALL_PROXY}
+HTTP_PROXY=${HTTP_PROXY}
+HTTPS_PROXY=${HTTPS_PROXY}
+NO_PROXY=${NO_PROXY}
+PROXYENV
+
+    echo "[entrypoint] local mode: proxy env vars set (socks5://127.0.0.1:${PROXY_SOCKS_PORT})"
+  fi
+
+  # 启动 sing-box（后台）
+  if command -v sing-box >/dev/null 2>&1; then
+    sing-box run -c "$SING_BOX_CONFIG" &
+    sleep 1
+    if kill -0 $! 2>/dev/null; then
+      echo "[entrypoint] sing-box started (mode=${SING_BOX_MODE})"
+    else
+      echo "[entrypoint] WARNING: sing-box failed to start" >&2
+    fi
+  else
+    echo "[entrypoint] WARNING: sing-box binary not found, egress tunnel disabled" >&2
+  fi
 fi
 
 # Foreground: sshd
