@@ -15,4 +15,7 @@ ClientAliveInterval 15
 ClientAliveCountMax 8
 MaxSessions 30
 MaxStartups 60:30:120
+AllowTcpForwarding yes
+AllowStreamLocalForwarding yes
+GatewayPorts no
 Subsystem sftp /usr/lib/openssh/sftp-server

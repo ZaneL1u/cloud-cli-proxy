@@ -1,0 +1,20 @@
+{
+  "name": "Cloud CLI Proxy Dev Container",
+  "image": "ghcr.io/zanel1u/cloud-cli-proxy/managed-user:latest",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "runArgs": [
+    "--cap-add", "SYS_ADMIN",
+    "--device", "/dev/fuse",
+    "--security-opt", "apparmor=unconfined",
+    "--shm-size", "1g"
+  ],
+  "remoteUser": "workspace",
+  "features": {},
+  "postCreateCommand": "echo 'Dev Container ready. Run claude to start Claude Code.'",
+  "customizations": {
+    "vscode": {
+      "extensions": []
+    }
+  }
+}
