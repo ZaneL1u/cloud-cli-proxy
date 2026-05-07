@@ -127,7 +127,10 @@
   3. 容器内 sshd 显式开启 `AllowTcpForwarding yes` 和 `AllowStreamLocalForwarding yes`，同时 `GatewayPorts no` 防止外部暴露
   4. 转发到管理网段 (10.99.x.x)、Docker socket、metadata 端点的请求被明确拒绝并记录
   5. 同一 SSH 连接支持多个并发 forwarding channel 而不互相干扰
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 038-01-PLAN.md — direct-tcpip channel 转发 + 安全校验（SSH-01, SSH-04）
+- [ ] 038-02-PLAN.md — tcpip-forward 全局请求透传 + forwarded-tcpip 回传（SSH-02）
+- [ ] 038-03-PLAN.md — sshd_config 验证 + forwarding 集成测试补充（SSH-03）
 
 ### Phase 39: 本地 Dev Containers 支持
 **Goal**: 用户可以在本地机器上通过 `cloud-claude local` 一键启动独立容器，支持 VS Code Dev Containers 工作流，无需连接 control-plane
