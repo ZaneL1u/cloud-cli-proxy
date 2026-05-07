@@ -111,7 +111,7 @@
 **Milestone Goal:** 扩展容器接入方式，让 Cloud 版支持 VS Code Remote SSH，让本地版支持 VS Code Dev Containers，同时研究两套产品形态的最佳拆分/复用边界。
 
 - [x] **Phase 38: SSH Proxy 端口转发支持** — 3/3 plans complete: direct-tcpip + 安全校验 + tcpip-forward/forwarded-tcpip 透传 + sshd_config 验证 — completed 2026-05-07
-- [ ] **Phase 39: 本地 Dev Containers 支持** — cloud-claude local 子命令 + devcontainer.json + entrypoint MODE 分支 + local down/status
+- [x] **Phase 39: 本地 Dev Containers 支持** — cloud-claude local 子命令 + devcontainer.json + entrypoint MODE 分支 + local down/status (completed 2026-05-07)
 - [ ] **Phase 40: VS Code Remote-SSH E2E 验证** — VS Code 端到端连接验证 + 安全流量校验
 - [ ] **Phase 41: Doctor 扩展与收尾** — doctor remote-ssh 诊断维度 + 里程碑收尾
 
@@ -143,9 +143,9 @@
   4. 用户可以通过 `--egress-config` 注入 sing-box outbound JSON，容器内自动启动 tun 模式；macOS 宿主机上支持 SOCKS/HTTP 代理兜底
   5. `cloud-claude local down` 可以停止并清理本地容器，`cloud-claude local status` 显示容器运行状态和端口映射
 **Plans**: 3 plans
-- [ ] 039-01-PLAN.md — CLI local up 子命令 + internal/local 包 + entrypoint MODE=local（LOCAL-01, LOCAL-04）
-- [ ] 039-02-PLAN.md — local down/status 子命令 + --egress-config 注入（UX-02, LOCAL-03）
-- [ ] 039-03-PLAN.md — devcontainer.json 更新 + sing-box 启动逻辑（LOCAL-02, LOCAL-03）
+- [x] 039-01-PLAN.md — CLI local up 子命令 + internal/local 包 + entrypoint MODE=local（LOCAL-01, LOCAL-04） — completed 2026-05-07
+- [x] 039-02-PLAN.md — local down/status 子命令 + --egress-config 注入（UX-02, LOCAL-03） — completed 2026-05-07
+- [x] 039-03-PLAN.md — devcontainer.json 更新 + sing-box 启动逻辑（LOCAL-02, LOCAL-03） — completed 2026-05-07
 **UI hint**: yes
 
 ### Phase 40: VS Code Remote-SSH E2E 验证
@@ -185,7 +185,7 @@ Phases execute in numeric order: 38 → 39 → 40 → 41
 | 29-35. v3.0 远端开发体验升级 | v3.0 | 30/30 | Complete | 2026-04-23 |
 | 36-37. v3.1 映射语义补齐与懒加载 | v3.1 | 11/11 | Complete | 2026-04-24 |
 | 38. SSH Proxy 端口转发支持 | v3.2 | 3/3 | Complete | 2026-05-07 |
-| 39. 本地 Dev Containers 支持 | v3.2 | 0/TBD | Not started | — |
+| 39. 本地 Dev Containers 支持 | v3.2 | Complete    | 2026-05-07 | — |
 | 40. VS Code Remote-SSH E2E 验证 | v3.2 | 0/TBD | Not started | — |
 | 41. Doctor 扩展与收尾 | v3.2 | 0/TBD | Not started | — |
 
