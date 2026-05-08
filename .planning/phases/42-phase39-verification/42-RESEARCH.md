@@ -6,7 +6,7 @@
 
 ## Summary
 
-Phase 39（本地 Dev Containers）的 3 个 plan（39-01、39-02、39-03）全部标记 complete，代码已实现并提交（commits c41735a、bdb6904、295d558），30 个单元测试全部通过，但缺少正式的 VERIFICATION.md 文件。本次 Phase 42 的目标是为 Phase 39 的 5 个需求（LOCAL-01、LOCAL-02、LOCAL-03、LOCAL-04、UX-02）补充正式验证文档，消除 v3.2 里程碑审计中 "unverified phase" 的 blocker。
+Phase 39（本地 Dev Containers）的 3 个 plan（39-01、39-02、39-03）全部标记 complete，代码已实现并提交（commits c41735a、bdb6904、295d558），30 个单元测试全部通过，但缺少正式的 VERIFICATION.md 文件。本次 Phase 42 的目标是为 Phase 39 的 5 个需求（LOCAL-01、LOCAL-02、LOCAL-03、LOCAL-04、UX-02）补充正式验证文档，消除 v3.4 里程碑审计中 "unverified phase" 的 blocker。
 
 这是一个纯验证/文档补齐阶段，不需要新增功能代码。所有需要验证的代码和测试已经存在。Phase 40 的手动测试（40-VERIFICATION-REPORT.md）已确认 `cloud-claude local up` 能真实启动容器并提供 SSH 连接，提供了额外的端到端验证证据。
 
@@ -134,7 +134,7 @@ Followed by these sections:
 | Phase 39 code | Complete (3 plans, 3 commits) | All 30 unit tests pass |
 | Phase 39 verification | MISSING | No VERIFICATION.md exists |
 | Phase 40 integration evidence | Partial | 40-VERIFICATION-REPORT.md confirms local up + SSH works |
-| v3.2 audit status | gaps_found | 5 Phase 39 requirements marked "partial" due to missing VERIFICATION |
+| v3.4 audit status | gaps_found | 5 Phase 39 requirements marked "partial" due to missing VERIFICATION |
 
 ## Verification Architecture
 
@@ -189,7 +189,7 @@ grep -rn "TODO\|FIXME\|HACK\|PLACEHOLDER" internal/local/ cmd/cloud-claude/local
 ### Primary (HIGH confidence)
 - `.planning/phases/38-ssh-proxy-port-forwarding/38-VERIFICATION.md` — VERIFICATION.md 格式模板
 - `.planning/phases/41-doctor/41-VERIFICATION.md` — 较新的 VERIFICATION.md 格式参考
-- `.planning/v3.2-MILESTONE-AUDIT.md` — 审计发现的具体 gap 详情
+- `.planning/v3.4-MILESTONE-AUDIT.md` — 审计发现的具体 gap 详情
 
 ### Secondary (MEDIUM confidence)
 - Phase 39 plan files (39-01-PLAN.md, 39-02-PLAN.md, 39-03-PLAN.md) — 原始需求和 success criteria

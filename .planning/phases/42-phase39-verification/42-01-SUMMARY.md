@@ -14,7 +14,7 @@ provides:
   - "Phase 39 正式 VERIFICATION.md，5 个需求全部 SATISFIED"
   - "12 个 Observable Truths 全部 VERIFIED/CODE-VERIFIED"
   - "6 条 Key Links 全部 WIRED"
-affects: [v3.2-audit, milestone-completion]
+affects: [v3.4-audit, milestone-completion]
 
 # Tech tracking
 tech-stack:
@@ -82,7 +82,7 @@ None
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- Phase 39 验证完成，v3.2 里程碑审计的 "unverified phase" blocker 已消除
+- Phase 39 验证完成，v3.4 里程碑审计的 "unverified phase" blocker 已消除
 - 人工 Docker 集成测试场景已记录，待有 Docker 环境时执行
 
 ---

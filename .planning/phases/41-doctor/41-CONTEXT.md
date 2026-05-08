@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-`cloud-claude doctor` 新增 remote-ssh 诊断维度，覆盖 VS Code Remote-SSH 场景的三项检查；同时补齐 v3.2 所有需求对应的错误码注册和 explain 长说明。不涉及新功能，只扩展诊断覆盖范围。
+`cloud-claude doctor` 新增 remote-ssh 诊断维度，覆盖 VS Code Remote-SSH 场景的三项检查；同时补齐 v3.4 所有需求对应的错误码注册和 explain 长说明。不涉及新功能，只扩展诊断覆盖范围。
 
 </domain>
 
@@ -40,7 +40,7 @@
 - 仅在 VS Code Server 进程存在时执行（依赖 `vscode_server_process` 结果）
 - forwarding socket 不存在 → Skip；socket 存在但有 DROP 规则 → Warn
 
-### 错误码注册（v3.2 闭合）
+### 错误码注册（v3.4 闭合）
 - 新增 `SSH_*` 域错误码（沿用现有 SSH_ 前缀）：
   - `SSH_VSCODE_SERVER_NOT_RUNNING` — VS Code Server 进程不存在（Severity: Info）
   - `SSH_VSCODE_PORT_NOT_LISTENING` — VS Code Server 进程存在但端口未监听（Severity: Warn）

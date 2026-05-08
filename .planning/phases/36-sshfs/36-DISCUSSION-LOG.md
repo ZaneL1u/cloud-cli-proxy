@@ -194,10 +194,10 @@
 ## Deferred Ideas
 
 - Phase 37 配套（cold-promoter / PromotionEngine / runbook / e2e UAT 脚本）— 全部 REQ-MOUNT-V31-07..16
-- `cloud-claude init` 文案优化（hot_sync_max_file_mb 引导）— v3.2
-- 错误码英文 i18n — v3.2
-- `--fix` 自动修复 5 项新 check — v3.2 视用户反馈
-- doctor `oversized_files_count` 跨会话历史聚合 — v3.2 metrics
+- `cloud-claude init` 文案优化（hot_sync_max_file_mb 引导）— v3.4
+- 错误码英文 i18n — v3.4
+- `--fix` 自动修复 5 项新 check — v3.4 视用户反馈
+- doctor `oversized_files_count` 跨会话历史聚合 — v3.4 metrics
 - Windows 客户端支持 — 与 PROJECT.md OOS 一致
 - `hot_sync_max_file_mb` 上限校验 — 由 doctor disk 维度间接发现
-- per-file size 与 du 整目录双重熔断 UX 文案统一 — v3.2 docs runbook
+- per-file size 与 du 整目录双重熔断 UX 文案统一 — v3.4 docs runbook

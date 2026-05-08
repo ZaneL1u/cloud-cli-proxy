@@ -1,7 +1,7 @@
-# v3.2 多形态容器接入 · 研究综述（SUMMARY）
+# v3.4 多形态容器接入 · 研究综述（SUMMARY）
 
 **Project:** Cloud CLI Proxy
-**Milestone:** v3.2 多形态容器接入
+**Milestone:** v3.4 多形态容器接入
 **Domain:** 扩展容器接入方式 — Cloud 版 VS Code Remote SSH + 本地版 VS Code Dev Containers
 **Researched:** 2026-05-08
 **Confidence:** HIGH（PITFALLS 基于官方 VS Code 文档、gliderlabs/ssh 源码、sing-box issue tracker 交叉验证）
@@ -13,13 +13,13 @@
 
 ## 1. Executive Summary
 
-v3.2 在 v3.0/v3.1 已交付的三层文件系统 + 会话可靠性基础上，**扩展容器接入方式**，让同一套受管镜像同时支持两种新形态：**Cloud 版 VS Code Remote SSH**（通过 SSH Proxy 直接连接）和**本地版 VS Code Dev Containers**（通过 `.devcontainer.json` 配置本地 Docker 启动）。核心目标不是替换现有 `cloud-claude` CLI 体验，而是让同一容器平台兼容开发者已有的 IDE 工作流。
+v3.4 在 v3.0/v3.1 已交付的三层文件系统 + 会话可靠性基础上，**扩展容器接入方式**，让同一套受管镜像同时支持两种新形态：**Cloud 版 VS Code Remote SSH**（通过 SSH Proxy 直接连接）和**本地版 VS Code Dev Containers**（通过 `.devcontainer.json` 配置本地 Docker 启动）。核心目标不是替换现有 `cloud-claude` CLI 体验，而是让同一容器平台兼容开发者已有的 IDE 工作流。
 
 **唯一关键的技术决策：SSH Proxy 必须扩展 `direct-tcpip` 通道支持。** 当前 `internal/sshproxy/proxy.go:206-210` 硬编码拒绝所有非 `session` 通道，这导致 VS Code Remote SSH 完全无法工作（其架构依赖 `direct-tcpip` 做端口转发）。扩展方案推荐在现有 proxy 上直接增加 handler（约 100-150 行），而非引入新组件。扩展时必须配套**严格的目的地校验**（只放行容器自身管理 veth IP 和 127.0.0.1，阻断管理子网、Docker 网桥、云元数据端点），否则等同于打开内网穿透后门。
 
 **Cloud 版与本地版共享同一受管镜像**，通过 `MODE=cloud|local` 环境变量在 entrypoint.sh 分支。本地版独立入口 `cloud-claude local`（或新子命令）不连接 control-plane/PostgreSQL，直接通过本地 Docker 启动容器。这种设计让 bug 修复和特性更新只需改一处镜像，同时保持本地版的零外部依赖。
 
-**v3.2 不引入任何新运行时依赖。** 不需要新数据库、新网络组件、新前端框架。改动集中在：Go SSH Proxy 扩展、Docker 镜像 entrypoint 分支、Shell 本地启动器、`.devcontainer.json` 模板。
+**v3.4 不引入任何新运行时依赖。** 不需要新数据库、新网络组件、新前端框架。改动集中在：Go SSH Proxy 扩展、Docker 镜像 entrypoint 分支、Shell 本地启动器、`.devcontainer.json` 模板。
 
 最大风险是 `direct-tcpip` 与 sing-box tun 全隧道的交互：如果 sing-box `strict_route: true` 把 127.0.0.0/8 也路由进隧道，VS Code Server 在容器内的内部 HTTP 服务将不可达。必须在 sing-box 配置中显式排除 127.0.0.0/8 和管理 veth 子网。
 
@@ -164,7 +164,7 @@ v3.2 在 v3.0/v3.1 已交付的三层文件系统 + 会话可靠性基础上，*
 
 | # | 不做的功能 | 理由 |
 |---|-----------|------|
-| 1 | 替换现有 `cloud-claude` CLI 主路径 | v3.2 是扩展，不是替换 |
+| 1 | 替换现有 `cloud-claude` CLI 主路径 | v3.4 是扩展，不是替换 |
 | 2 | 多宿主机编排 | 沿用 v1 单宿主机约束 |
 | 3 | Web Terminal / 浏览器 IDE | v1 范围明确不做 |
 | 4 | 本地版连接 Cloud 版容器 | 本地版是独立形态，不混合 |
@@ -188,7 +188,7 @@ v3.2 在 v3.0/v3.1 已交付的三层文件系统 + 会话可靠性基础上，*
 - Dev Containers Discussion #224：<https://github.com/orgs/devcontainers/discussions/224>
 
 ### 项目内部（HIGH）
-- `.planning/PROJECT.md` — v3.2 milestone 目标与约束
+- `.planning/PROJECT.md` — v3.4 milestone 目标与约束
 - `internal/sshproxy/proxy.go:206-210` — 当前硬编码 channel 拒绝逻辑
 - v3.0/v3.1 已交付基础设施（三层文件系统、tmux、会话可靠性）
 

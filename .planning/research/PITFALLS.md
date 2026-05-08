@@ -438,5 +438,5 @@ Phase 0 (架构边界分析) — BEFORE any implementation. This is an architect
 - [DevPod SSH-Based Dev Containers](https://fabiorehm.com/blog/2025/11/11/devpod-ssh-devcontainers/) — Alternative architecture for SSH-based containers
 
 ---
-*Pitfalls research for: Cloud CLI Proxy v3.2 — Remote SSH + Dev Containers milestone*
+*Pitfalls research for: Cloud CLI Proxy v3.4 — Remote SSH + Dev Containers milestone*
 *Researched: 2026-05-08*

@@ -108,10 +108,10 @@
 <deferred>
 ## Deferred Ideas
 
-- 跨会话持久缓存（hot 分支退出后保留）— v3.2 评估
-- hot_sync 主路径改 inotify/fsevents 替代轮询 — v3.2 评估
-- rename / move 检测优化 — v3.2 评估
-- LRU 驱逐策略（hot 分支无限增长保护）— v3.2 评估
+- 跨会话持久缓存（hot 分支退出后保留）— v3.4 评估
+- hot_sync 主路径改 inotify/fsevents 替代轮询 — v3.4 评估
+- rename / move 检测优化 — v3.4 评估
+- LRU 驱逐策略（hot 分支无限增长保护）— v3.4 评估
 </deferred>
 
 ---

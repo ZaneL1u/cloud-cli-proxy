@@ -5,11 +5,11 @@
 - ✅ **v1.0 MVP** — Phases 1-6 (shipped 2026-03-28) — [Archive](milestones/v1.0-ROADMAP.md)
 - ✅ **v1.1 支持代理协议出网** — Phases 7-10 (shipped 2026-03-28) — [Archive](milestones/v1.1-ROADMAP.md)
 - ⏸️ **v1.2 用户自助面板与 Bootstrap 重设计** — Phases 11-16 (partially shipped, remaining deferred)
-- 🗃️ **v1.3 claude-shell 本地透明代理** — Phases 17-23 (archived, capabilities merged into v3.2)
+- 🗃️ **v1.3 claude-shell 本地透明代理** — Phases 17-23 (archived, capabilities merged into v3.4)
 - ✅ **v2.0 cloud-claude 透明远程 CLI** — Phases 24-28 (shipped 2026-04-15) — [Archive](milestones/v2.0-ROADMAP.md)
 - ✅ **v3.0 远端开发体验升级** — Phases 29-35 (shipped 2026-04-23) — [Archive](milestones/v3.0-ROADMAP.md)
 - ✅ **v3.1 映射语义补齐与懒加载** — Phases 36-37 (shipped 2026-04-24) — [Archive](milestones/v3.1-ROADMAP.md)
-- ✅ **v3.2 多形态容器接入** — Phases 38-44 (shipped 2026-05-08) — [Archive](milestones/v3.2-ROADMAP.md)
+- ✅ **v3.4 多形态容器接入** — Phases 38-44 (shipped 2026-05-08) — [Archive](milestones/v3.4-ROADMAP.md)
 
 ## Phases
 
@@ -48,23 +48,23 @@
 </details>
 
 <details>
-<summary>🗃️ v1.3 claude-shell 本地透明代理 (Phases 17-23) — ARCHIVED, capabilities merged into v3.2</summary>
+<summary>🗃️ v1.3 claude-shell 本地透明代理 (Phases 17-23) — ARCHIVED, capabilities merged into v3.4</summary>
 
-**Archive reason:** v1.3 的"本地容器"和"指纹伪装"能力与 v3.2 的 `cloud-claude local` 目标重叠。为避免维护两套本地 Docker 编排逻辑，v1.3 能力拆分并入 v3.2：
+**Archive reason:** v1.3 的"本地容器"和"指纹伪装"能力与 v3.4 的 `cloud-claude local` 目标重叠。为避免维护两套本地 Docker 编排逻辑，v1.3 能力拆分并入 v3.4：
 - Phase 17 镜像基线 → 已并入 managed-user 镜像（v3.0+）
-- Phase 18 网络隔离 → 并入 v3.2 Phase 39（本地版 sing-box sidecar + veth 注入）
-- Phase 19 CLI 骨架 → 并入 v3.2 Phase 39（`cloud-claude local` 子命令）
+- Phase 18 网络隔离 → 并入 v3.4 Phase 39（本地版 sing-box sidecar + veth 注入）
+- Phase 19 CLI 骨架 → 并入 v3.4 Phase 39（`cloud-claude local` 子命令）
 - Phase 20 TTY 透传 → 不再需要（本地 publish 端口，SSH 用系统 OpenSSH）
 - Phase 21 指纹伪造 → entrypoint `MODE=local` 深度伪装分支（快速任务级别）
 - Phase 22 验证自检 → `cloud-claude local verify` / `doctor --local`
 - Phase 23 混淆构建 → Makefile 构建脚本，不单独成里程碑
 
 - [x] Phase 17: 镜像与 Entrypoint 基线 (17-01 + 17-02 gap closure 完成，已并入 v3.0+ 镜像)
-- [ ] Phase 18: 网络隔离与分流 → **merged into v3.2 Phase 39**
-- [ ] Phase 19: CLI 骨架与 Docker 编排 → **merged into v3.2 Phase 39**
+- [ ] Phase 18: 网络隔离与分流 → **merged into v3.4 Phase 39**
+- [ ] Phase 19: CLI 骨架与 Docker 编排 → **merged into v3.4 Phase 39**
 - [ ] Phase 20: TTY 透传与交互体验 → **obsolete**（本地直连端口，无需 TTY 透传）
-- [ ] Phase 21: 指纹伪造与反检测 → **merged into v3.2 entrypoint `MODE=local` 分支**
-- [ ] Phase 22: 验证与自检 → **merged into v3.2 doctor 扩展**
+- [ ] Phase 21: 指纹伪造与反检测 → **merged into v3.4 entrypoint `MODE=local` 分支**
+- [ ] Phase 22: 验证与自检 → **merged into v3.4 doctor 扩展**
 - [ ] Phase 23: 混淆构建与交付 → **deferred to build script**
 
 </details>
@@ -107,7 +107,7 @@
 </details>
 
 <details>
-<summary>✅ v3.2 多形态容器接入 (Phases 38-44) — SHIPPED 2026-05-08</summary>
+<summary>✅ v3.4 多形态容器接入 (Phases 38-44) — SHIPPED 2026-05-08</summary>
 
 - [x] Phase 38: SSH Proxy 端口转发支持 (3/3 plans) — completed 2026-05-07
 - [x] Phase 39: 本地 Dev Containers 支持 (3/3 plans) — completed 2026-05-07
@@ -117,7 +117,7 @@
 - [x] Phase 43: VS Code 端口转发 E2E 补齐 (2/2 plans, gap closure) — completed 2026-05-08
 - [x] Phase 44: doctor sshd_config 验证 (1/1 plan, gap closure) — completed 2026-05-08
 
-11 项人工验证 deferred-to-ship（Phase 38 x3 / Phase 39 x5 / Phase 43 x3），跟踪在 `milestones/v3.2-MILESTONE-AUDIT.md`。
+11 项人工验证 deferred-to-ship（Phase 38 x3 / Phase 39 x5 / Phase 43 x3），跟踪在 `milestones/v3.4-MILESTONE-AUDIT.md`。
 
 </details>
 
@@ -134,8 +134,8 @@
 | 24-28. v2.0 cloud-claude | v2.0 | 7/7 | Complete | 2026-04-15 |
 | 29-35. v3.0 远端开发体验升级 | v3.0 | 30/30 | Complete | 2026-04-23 |
 | 36-37. v3.1 映射语义补齐与懒加载 | v3.1 | 11/11 | Complete | 2026-04-24 |
-| 38-44. v3.2 多形态容器接入 | v3.2 | 14/14 | Complete | 2026-05-08 |
+| 38-44. v3.4 多形态容器接入 | v3.4 | 14/14 | Complete | 2026-05-08 |
 
 ---
 
-*Last updated: 2026-05-08 — v3.2 milestone shipped (tag v3.4.0). All 14 plans complete.*
+*Last updated: 2026-05-08 — v3.4 milestone shipped (tag v3.4.0). All 14 plans complete.*

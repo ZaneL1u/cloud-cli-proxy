@@ -1,6 +1,6 @@
 # Milestones
 
-## v3.2 多形态容器接入 (Shipped: 2026-05-08)
+## v3.4 多形态容器接入 (Shipped: 2026-05-08)
 
 **Phases completed:** 7 phases (38-44, 含 3 gap closure), 14 plans
 **Git range:** 61 commits, 84 files (+12,724/-968 lines)
@@ -27,13 +27,13 @@
 - 11 项人工验证场景待 Docker 环境执行（Phase 38 x3 / Phase 39 x5 / Phase 43 x3）
 - v2 deferred requirements（SSH-06~08 / LOCAL-05~07 / UX-03）
 
-**Audit:** `.planning/milestones/v3.2-MILESTONE-AUDIT.md` (status: tech_debt — 0 blocker)
+**Audit:** `.planning/milestones/v3.4-MILESTONE-AUDIT.md` (status: tech_debt — 0 blocker)
 **Tag:** v3.4.0
 **Archive:**
 
-- `.planning/milestones/v3.2-ROADMAP.md`
-- `.planning/milestones/v3.2-REQUIREMENTS.md`
-- `.planning/milestones/v3.2-MILESTONE-AUDIT.md`
+- `.planning/milestones/v3.4-ROADMAP.md`
+- `.planning/milestones/v3.4-REQUIREMENTS.md`
+- `.planning/milestones/v3.4-MILESTONE-AUDIT.md`
 
 ---
 

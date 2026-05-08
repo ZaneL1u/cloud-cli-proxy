@@ -305,7 +305,7 @@
 
 ---
 
-## Milestone: v3.2 — 多形态容器接入
+## Milestone: v3.4 — 多形态容器接入
 
 **Shipped:** 2026-05-08 (tag v3.4.0)
 **Phases:** 7 (含 3 gap closure) | **Plans:** 14 | **Timeline:** 2 days (2026-05-07 → 2026-05-08)
@@ -341,7 +341,7 @@
 ### Key Lessons
 
 1. Phase 实现时就生成 VERIFICATION.md，不要推到 gap closure 阶段
-2. UAT 脚本首版应覆盖所有已知场景类型（端口转发是 v3.2 核心，不应遗漏）
+2. UAT 脚本首版应覆盖所有已知场景类型（端口转发是 v3.4 核心，不应遗漏）
 3. REQUIREMENTS.md 正文和 traceability 表应自动同步校验
 4. `ssh.Conn` 接口比 `*ssh.Client` 更适合测试和抽象层次
 
@@ -365,7 +365,7 @@
 | v2.0 | 1 day | 5 | 7 | 最高效里程碑 — 平均每个计划 2.1 分钟，复用现有基础设施 |
 | v3.0 | 5 days | 8 (含 1 hotfix) | 30 | Critical Pitfalls 前置 + Gap-closure + post-fix + integration-checker |
 | v3.1 | ~1 day active | 2 | 11 | 纯配置/参数级改动 + 并发引擎 + e2e UAT；effective accessor 兜底模式 |
-| v3.2 | 2 days | 7 (含 3 gap) | 14 | 审计驱动 gap closure 闭环；SSH 端口转发 + 本地 Dev Containers |
+| v3.4 | 2 days | 7 (含 3 gap) | 14 | 审计驱动 gap closure 闭环；SSH 端口转发 + 本地 Dev Containers |
 
 ### Cumulative Quality
 
@@ -376,7 +376,7 @@
 | v2.0 | 76+ | ~28,877 | 7 | ~2.1 min |
 | v3.0 | 200+ | ~45,766 | 30 | ~10-30 min |
 | v3.1 | 230+ | ~48,953 | 11 | ~5-15 min |
-| v3.2 | 263+ | ~43,300 | 14 | ~2-10 min |
+| v3.4 | 263+ | ~43,300 | 14 | ~2-10 min |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -394,5 +394,5 @@
 12. **`effective*()` accessor 兜底防止零值静默关闭功能（v3.1 新）** — MountConfig / Config 层统一模式
 13. **plan 中代码示例需编译期验证（v3.1 新）** — 4 个 auto-fix 说明 plan-checker 应增加可编译性检查
 14. **macOS stub + Linux 真实实现的双平台分离（v3.1 新）** — 开发不阻塞，真机验证留到目标平台
-15. **审计→gap closure→再审计 三步闭环（v3.2 新）** — 精准修复比一次性修补更可靠，gap closure phase 应即开即关
-16. **VERIFICATION.md 应在实现阶段同步生成（v3.2 新）** — 推到审计阶段补齐会多浪费一个 gap closure phase
+15. **审计→gap closure→再审计 三步闭环（v3.4 新）** — 精准修复比一次性修补更可靠，gap closure phase 应即开即关
+16. **VERIFICATION.md 应在实现阶段同步生成（v3.4 新）** — 推到审计阶段补齐会多浪费一个 gap closure phase

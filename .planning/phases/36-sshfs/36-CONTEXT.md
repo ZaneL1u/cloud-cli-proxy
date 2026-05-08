@@ -67,7 +67,7 @@
 - **D-02**：检测函数封装在 `cmd/cloud-claude/git_check.go` 新文件（与 main.go 同包），导出 `requireGitRepo(cwd string) error`：
   1. 单一职责，便于 unit test mock `exec.Command`
   2. 错误返回类型为 `*errcodes.CodedError`（如已有；否则用 `errors.New(errcodes.Format(...))`），方便 main.go 统一 `os.Exit(exitConfigError)` 分支
-  3. 不依赖 viper / config — 在 LoadConfig 之前也能跑（虽然 D-01 选定在 LoadConfig 之后，留给后续 v3.2 如果想前移依然能用）
+  3. 不依赖 viper / config — 在 LoadConfig 之前也能跑（虽然 D-01 选定在 LoadConfig 之后，留给后续 v3.4 如果想前移依然能用）
 - **D-03**：「git 仓库」判定**包含 git worktree / submodule / detached HEAD**（`git rev-parse --show-toplevel` 在所有这些场景都返回 0）；不接受 `.git` 文件存在但 git 命令不可用的场景（环境破损按非 git 处理，引导用户 `git init`）
 
 ### F2 · 单文件大小熔断 实现
@@ -75,7 +75,7 @@
 - **D-04**：`Config` struct 新增字段 `HotSyncMaxFileMB int` （yaml tag `hot_sync_max_file_mb,omitempty`）：
   1. 默认值兜底：`Config.EffectiveHotSyncMaxFileMB() int { if c.HotSyncMaxFileMB <= 0 { return 50 }; return c.HotSyncMaxFileMB }`，与 `EffectiveProxyCommands()` 同模式
   2. `Validate()` 不强校验（允许零值走默认）；上限不设硬编码（用户配 1000 也允许，自负风险）
-  3. yaml 注释由 `cloud-claude init` 生成（非本阶段交付，留 v3.2 init 文案优化；本阶段直接编辑 config.yaml 即可）
+  3. yaml 注释由 `cloud-claude init` 生成（非本阶段交付，留 v3.4 init 文案优化；本阶段直接编辑 config.yaml 即可）
 - **D-05**：`HotSyncConfig` 新增字段 `MaxFileBytes int64`（由 mount_strategy 注入 `cfg.HotSyncMaxFileMB * 1024 * 1024`）：
   1. 选用 byte 而非 MB —— 与 `syncFileState.Size`（int64 byte）对齐，避免运行时换算
   2. 零值表示不熔断（向后兼容已有测试）
@@ -267,7 +267,7 @@
 ### 不在本阶段交付（明确边界）
 
 - 任何新 host-agent endpoint（OOS-A20 永久禁，沿用 v3.0 边界）
-- 错误码英文 i18n（沿用 Phase 31 D-22 / Phase 34 D-22 决策，留 v3.2 评估）
+- 错误码英文 i18n（沿用 Phase 31 D-22 / Phase 34 D-22 决策，留 v3.4 评估）
 - `--fix` 自动修复 5 项新 check（D-15，全部走 NextAction 提示）
 - inotify watcher / PromotionEngine / cold-promoter / e2e UAT 脚本 / runbook → 全部 Phase 37（REQ-MOUNT-V31-07..16）
 
@@ -325,13 +325,13 @@
 ### 阶段内确认但不交付的 follow-up
 
 - **Phase 37 配套**：cold-promoter inotify watcher / PromotionEngine 异步 SFTP 拉取 / 5s 防抖 + 1/2/4s 退避 + 3 次熔断 / `CLOUD_CLAUDE_NO_PROMOTION` 开关 / mergerfs hot 优先验证 / `promoter_alive` / `promotion_*` 4 个新 check / `docs/runbooks/v31-cold-promotion.md` 运维手册 / `tests/scripts/uat-v31-promotion.sh` e2e UAT 脚本 — 全部 REQ-MOUNT-V31-07..16，phase 37 集中交付
-- **`cloud-claude init` 文案优化**：D-04 新增的 `hot_sync_max_file_mb` 字段在 init 时不出现在 prompt（仅手动编辑 yaml 可配）；交互式引导留 v3.2
-- **错误码英文 i18n**：沿用 Phase 31 / 34 决策，本阶段 ExtendedExplanations 中文硬编码；i18n 框架留 v3.2（OOS 未明确禁止但 ROI 低）
-- **`--fix` 自动修复**：D-15 明确 5 项新 check 不提供自动修复；如 v3.2 用户反馈强烈，可考虑为 `default_ignore_loaded` 提供「unset 环境变量」修复（极简）
-- **doctor `oversized_files_count` 历史聚合**：本阶段只读 last-session.json 即「上次会话」的列表；跨会话累计 / 历史趋势留 v3.2 metrics
+- **`cloud-claude init` 文案优化**：D-04 新增的 `hot_sync_max_file_mb` 字段在 init 时不出现在 prompt（仅手动编辑 yaml 可配）；交互式引导留 v3.4
+- **错误码英文 i18n**：沿用 Phase 31 / 34 决策，本阶段 ExtendedExplanations 中文硬编码；i18n 框架留 v3.4（OOS 未明确禁止但 ROI 低）
+- **`--fix` 自动修复**：D-15 明确 5 项新 check 不提供自动修复；如 v3.4 用户反馈强烈，可考虑为 `default_ignore_loaded` 提供「unset 环境变量」修复（极简）
+- **doctor `oversized_files_count` 历史聚合**：本阶段只读 last-session.json 即「上次会话」的列表；跨会话累计 / 历史趋势留 v3.4 metrics
 - **Windows 客户端支持**：sshfs 在 Windows 缺少成熟客户端栈 + git rev-parse 路径大小写敏感性差异，本阶段不涵盖；与 PROJECT.md OOS 一致
 - **`hot_sync_max_file_mb` 上限校验**：D-04 不强校验上限；如用户配 1000 导致 daemon 内存爆炸，由 doctor `disk` 维度间接发现
-- **per-file size 与 du 整目录的双重熔断 UX**：Phase 31 D-11 整目录 >50MB 拒绝 vs 本阶段单文件 ≥50MB 跳过，错误信息可能让用户混淆「为何同样 50MB 一个被拒一个被跳」；UX 文案统一留 v3.2 docs runbook 集中说明
+- **per-file size 与 du 整目录的双重熔断 UX**：Phase 31 D-11 整目录 >50MB 拒绝 vs 本阶段单文件 ≥50MB 跳过，错误信息可能让用户混淆「为何同样 50MB 一个被拒一个被跳」；UX 文案统一留 v3.4 docs runbook 集中说明
 
 ### Reviewed Todos (not folded)
 
