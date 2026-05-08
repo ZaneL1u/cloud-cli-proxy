@@ -81,3 +81,25 @@ func TestLookup_Miss(t *testing.T) {
 		t.Errorf("Lookup 未注册 code 应返回 false")
 	}
 }
+
+func TestPhase41CodesRegistered(t *testing.T) {
+	// Phase 41 新增 6 个错误码必须全部已注册。
+	codes := []Code{
+		SSH_VSCODE_SERVER_NOT_RUNNING,
+		SSH_VSCODE_PORT_NOT_LISTENING,
+		SSH_FORWARDING_SOCKET_MISSING,
+		SSH_FORWARDING_BLOCKED,
+		DISK_VSCODE_SERVER_WARN,
+		DISK_VSCODE_SERVER_BLOAT,
+	}
+	for _, c := range codes {
+		e, ok := Lookup(c)
+		if !ok {
+			t.Errorf("Phase 41 code %q 未注册", c)
+			continue
+		}
+		if e.Code != c {
+			t.Errorf("Lookup(%q).Code = %q, want %q", c, e.Code, c)
+		}
+	}
+}

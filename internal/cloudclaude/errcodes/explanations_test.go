@@ -84,3 +84,34 @@ func TestExplainExemptOnlyInformational(t *testing.T) {
 		}
 	}
 }
+
+func TestPhase41ExplainCoverage(t *testing.T) {
+	// Phase 41 Warn/Error 码必须有 ≥ 200 字符的长说明。
+	nonInfoCodes := []Code{
+		SSH_VSCODE_PORT_NOT_LISTENING,
+		SSH_FORWARDING_BLOCKED,
+		DISK_VSCODE_SERVER_WARN,
+		DISK_VSCODE_SERVER_BLOAT,
+	}
+	for _, c := range nonInfoCodes {
+		exp, ok := ExtendedExplanations[c]
+		if !ok {
+			t.Errorf("Phase 41 code %q 缺 ExtendedExplanations", c)
+			continue
+		}
+		if n := utf8.RuneCountInString(exp); n < 200 {
+			t.Errorf("Phase 41 code %q ExtendedExplanations 长度 %d < 200", c, n)
+		}
+	}
+
+	// Phase 41 Info 码必须在 ExplainExempt 中。
+	infoCodes := []Code{
+		SSH_VSCODE_SERVER_NOT_RUNNING,
+		SSH_FORWARDING_SOCKET_MISSING,
+	}
+	for _, c := range infoCodes {
+		if _, ok := ExplainExempt[c]; !ok {
+			t.Errorf("Phase 41 Info code %q 应在 ExplainExempt 中", c)
+		}
+	}
+}
