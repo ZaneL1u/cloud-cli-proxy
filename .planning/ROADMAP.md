@@ -115,7 +115,7 @@
 - [x] **Phase 40: VS Code Remote-SSH E2E 验证** — VS Code 端到端连接验证 + 安全流量校验 (completed 2026-05-08)
 - [x] **Phase 41: Doctor 扩展与收尾** — doctor remote-ssh 诊断维度 + 里程碑收尾 (completed 2026-05-08)
 - [x] **Phase 42: Phase 39 验证补齐** — 为 LOCAL-01~04、UX-02 补充 VERIFICATION.md（gap closure）(completed 2026-05-08)
-- [ ] **Phase 43: VS Code Remote-SSH 端口转发 E2E 补齐** — 端口转发 + egress + 安全验证 + VERIFICATION.md（gap closure）
+- [x] **Phase 43: VS Code Remote-SSH 端口转发 E2E 补齐** — 端口转发 + egress + 安全验证 + VERIFICATION.md（gap closure） (completed 2026-05-08)
 - [ ] **Phase 44: doctor sshd_config 主动验证** — doctor 主动检查 AllowTcpForwarding + 集成测试（gap closure）
 
 ## Phase Details
@@ -232,7 +232,7 @@ Phases execute in numeric order: 38 → 39 → 40 → 41
 | 40. VS Code Remote-SSH E2E 验证 | v3.2 | 2/2 | Complete | 2026-05-08 |
 | 41. Doctor 扩展与收尾 | v3.2 | 2/2 | Complete | 2026-05-08 |
 | 42. Phase 39 验证补齐 | v3.2 | Complete    | 2026-05-08 | 2026-05-08 |
-| 43. VS Code 端口转发 E2E 补齐 | v3.2 | 0/? | In Progress | — |
+| 43. VS Code 端口转发 E2E 补齐 | v3.2 | 2/2 | Complete    | 2026-05-08 |
 | 44. doctor sshd_config 验证 | v3.2 | 0/? | In Progress | — |
 
 ---

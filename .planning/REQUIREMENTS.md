@@ -27,7 +27,7 @@
   - 拒绝转发到 Docker socket、metadata 端点
   - 只允许转发到容器 netns 内地址或用户显式白名单
 
-- [ ] **SSH-05**: VS Code Remote-SSH 端到端验证 → **Phase 43** gap closure (partial: SSH 连接通过，端口转发未验证)
+- [x] **SSH-05**: VS Code Remote-SSH 端到端验证 → **Phase 43** gap closure (partial: SSH 连接通过，端口转发未验证)
   - VS Code 能连接 SSH Proxy 2222 端口
   - VS Code Server 能在容器内自动下载并启动
   - 端口转发（语言服务器、调试器）正常工作
@@ -59,11 +59,11 @@
 
 ### 安全与验证（SEC）
 
-- [ ] **SEC-01**: 验证 `direct-tcpip` 转发流量走 sing-box tun → **Phase 43** gap closure
+- [x] **SEC-01**: 验证 `direct-tcpip` 转发流量走 sing-box tun → **Phase 43** gap closure
   - 通过 VS Code 端口转发访问外部服务时，出口 IP 必须是绑定的 egress IP
   - 不能出现绕过 tun 直接走宿主机路由的情况
 
-- [ ] **SEC-02**: VS Code Server 下载/扩展安装流量也走受控出口 → **Phase 43** gap closure
+- [x] **SEC-02**: VS Code Server 下载/扩展安装流量也走受控出口 → **Phase 43** gap closure
   - `update.code.visualstudio.com` 等域名通过 sing-box 出站
   - 不因为 VS Code 的流量破坏出口 IP 强约束
 
@@ -115,13 +115,13 @@
 | SSH-02 | Phase 38 | Complete (038-02) |
 | SSH-03 | Phase 38 | Complete (038-03) |
 | SSH-04 | Phase 38 | Complete (038-01) |
-| SSH-05 | Phase 43 (gap closure) | Pending |
+| SSH-05 | Phase 43 (gap closure) | Complete |
 | LOCAL-01 | Phase 42 (gap closure) | Complete (42-01) |
 | LOCAL-02 | Phase 42 (gap closure) | Complete (42-01) |
 | LOCAL-03 | Phase 42 (gap closure) | Complete (42-01) |
 | LOCAL-04 | Phase 42 (gap closure) | Complete (42-01) |
-| SEC-01 | Phase 43 (gap closure) | Pending |
-| SEC-02 | Phase 43 (gap closure) | Pending |
+| SEC-01 | Phase 43 (gap closure) | Complete |
+| SEC-02 | Phase 43 (gap closure) | Complete |
 | UX-01 | Phase 41 | Complete (41-VERIFICATION) |
 | UX-02 | Phase 42 (gap closure) | Complete (42-01) |
 
