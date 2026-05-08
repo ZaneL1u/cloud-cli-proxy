@@ -215,6 +215,11 @@ func (m *LocalManager) buildCreateArgs(containerName, projectDir, password strin
 		"-v", projectDir + ":/workspace",
 	}
 
+	// Inject user's SSH public key for key-based auth (required by VS Code Remote-SSH)
+	if key, err := findSSHPublicKey(); err == nil && key != "" {
+		args = append(args, "-e", "CONTAINER_SSH_AUTHORIZED_KEY="+key)
+	}
+
 	// macOS/Windows: expose SSH port via Docker -p
 	if runtime.GOOS != "linux" {
 		if m.opts.Port > 0 {
@@ -245,6 +250,21 @@ func localContainerName(projectDir string) string {
 	abs, _ := filepath.Abs(projectDir)
 	hash := md5.Sum([]byte(abs))
 	return fmt.Sprintf("%s%x", containerPrefix, hash[:4])
+}
+
+// findSSHPublicKey returns the contents of the first available SSH public key.
+func findSSHPublicKey() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	for _, name := range []string{"id_ed25519.pub", "id_rsa.pub", "id_ecdsa.pub"} {
+		data, err := os.ReadFile(filepath.Join(home, ".ssh", name))
+		if err == nil {
+			return strings.TrimSpace(string(data)), nil
+		}
+	}
+	return "", nil
 }
 
 func envOrDefault(key, fallback string) string {

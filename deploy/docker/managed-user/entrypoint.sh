@@ -185,6 +185,13 @@ mkdir -p /workspace/.ssh
 chown -R "${RUN_USER}:${RUN_USER}" /workspace
 chmod 0700 /workspace/.ssh
 
+# 注入 SSH 公钥（local 模式或显式传入时）
+if [ -n "${CONTAINER_SSH_AUTHORIZED_KEY:-}" ]; then
+  echo "${CONTAINER_SSH_AUTHORIZED_KEY}" > /workspace/.ssh/authorized_keys
+  chmod 0600 /workspace/.ssh/authorized_keys
+  chown "${RUN_USER}:${RUN_USER}" /workspace/.ssh/authorized_keys
+fi
+
 echo "${RUN_USER}:${CONTAINER_PASSWORD}" | chpasswd
 
 # Phase 29.1: 验证密码已被成功设置，避免"密码退化为 workspace"的静默失败复现。

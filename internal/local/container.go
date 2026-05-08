@@ -24,7 +24,7 @@ func DefaultDockerRunner(ctx context.Context, args ...string) ([]byte, error) {
 func containerExists(ctx context.Context, runner DockerRunner, name string) (bool, error) {
 	_, err := runner(ctx, "inspect", "--format={{.Id}}", name)
 	if err != nil {
-		if strings.Contains(err.Error(), "No such container") {
+		if strings.Contains(err.Error(), "No such container") || strings.Contains(err.Error(), "no such object") {
 			return false, nil
 		}
 		return false, fmt.Errorf("inspect container %s: %w", name, err)
@@ -51,7 +51,7 @@ func inspectSSHPort(ctx context.Context, runner DockerRunner, containerName stri
 func inspectContainerStatus(ctx context.Context, runner DockerRunner, name string) (string, error) {
 	out, err := runner(ctx, "inspect", "--format={{.State.Status}}", name)
 	if err != nil {
-		if strings.Contains(err.Error(), "No such container") {
+		if strings.Contains(err.Error(), "No such container") || strings.Contains(err.Error(), "no such object") {
 			return "not_found", nil
 		}
 		return "", fmt.Errorf("inspect status for %s: %w", name, err)
