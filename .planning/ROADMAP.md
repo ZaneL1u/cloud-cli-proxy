@@ -116,7 +116,7 @@
 - [x] **Phase 41: Doctor 扩展与收尾** — doctor remote-ssh 诊断维度 + 里程碑收尾 (completed 2026-05-08)
 - [x] **Phase 42: Phase 39 验证补齐** — 为 LOCAL-01~04、UX-02 补充 VERIFICATION.md（gap closure）(completed 2026-05-08)
 - [x] **Phase 43: VS Code Remote-SSH 端口转发 E2E 补齐** — 端口转发 + egress + 安全验证 + VERIFICATION.md（gap closure） (completed 2026-05-08)
-- [ ] **Phase 44: doctor sshd_config 主动验证** — doctor 主动检查 AllowTcpForwarding + 集成测试（gap closure）
+- [x] **Phase 44: doctor sshd_config 主动验证** — 1/1 plan complete: sshd 转发指令解析检查 + 3 个错误码 + 13 个单元测试 — completed 2026-05-08
 
 ## Phase Details
 
@@ -161,7 +161,7 @@
   3. 通过 VS Code 端口转发访问外部服务时，出口 IP 必须是绑定的 egress IP，不能绕过 tun 直接走宿主机路由
   4. VS Code Server 下载和扩展安装流量（`update.code.visualstudio.com` 等）全部通过 sing-box 出站，不破坏出口 IP 强约束
 **Plans**: 1 plan
-- [ ] 44-01-PLAN.md — sshd_config 转发指令解析检查 + 3 个错误码 + 单元测试 + doctor ssh 维度注册（SSH-03）
+- [x] 44-01-PLAN.md — sshd_config 转发指令解析检查 + 3 个错误码 + 单元测试 + doctor ssh 维度注册（SSH-03） — completed 2026-05-08
 
 ### Phase 41: Doctor 扩展与收尾
 **Goal**: `cloud-claude doctor` 覆盖 Remote-SSH 场景的诊断，里程碑完成时所有验收标准满足
@@ -202,7 +202,7 @@
   4. VS Code Server 下载和扩展安装流量通过 sing-box 出站
   5. 生成 Phase 40-VERIFICATION.md，SSH-05 / SEC-01 / SEC-02 标记 SATISFIED
 **Plans**: 1 plan
-- [ ] 44-01-PLAN.md — sshd_config 转发指令解析检查 + 3 个错误码 + 单元测试 + doctor ssh 维度注册（SSH-03）
+- [x] 44-01-PLAN.md — sshd_config 转发指令解析检查 + 3 个错误码 + 单元测试 + doctor ssh 维度注册（SSH-03） — completed 2026-05-08
 
 ### Phase 44: doctor sshd_config 主动验证
 **Goal**: doctor remote-ssh 维度主动检查 sshd_config 中 `AllowTcpForwarding=yes`，消除最后一个集成缺口
@@ -214,7 +214,7 @@
   2. 检测到 `AllowTcpForwarding` 缺失或为 `no` 时输出 warning
   3. 单元测试覆盖正常和异常 sshd_config 场景
 **Plans**: 1 plan
-- [ ] 44-01-PLAN.md — sshd_config 转发指令解析检查 + 3 个错误码 + 单元测试 + doctor ssh 维度注册（SSH-03）
+- [x] 44-01-PLAN.md — sshd_config 转发指令解析检查 + 3 个错误码 + 单元测试 + doctor ssh 维度注册（SSH-03） — completed 2026-05-08
 
 ## Progress
 
@@ -236,8 +236,8 @@ Phases execute in numeric order: 38 → 39 → 40 → 41
 | 41. Doctor 扩展与收尾 | v3.2 | 2/2 | Complete | 2026-05-08 |
 | 42. Phase 39 验证补齐 | v3.2 | Complete    | 2026-05-08 | 2026-05-08 |
 | 43. VS Code 端口转发 E2E 补齐 | v3.2 | 2/2 | Complete    | 2026-05-08 |
-| 44. doctor sshd_config 验证 | v3.2 | 0/? | In Progress | — |
+| 44. doctor sshd_config 验证 | v3.2 | 1/1 | Complete | 2026-05-08 |
 
 ---
 
-*Last updated: 2026-05-07 — v3.2 roadmap created.*
+*Last updated: 2026-05-08 — Phase 44 Plan 01 complete.*
