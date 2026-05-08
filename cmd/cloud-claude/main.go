@@ -319,38 +319,64 @@ func runRoot(cmd *cobra.Command, args []string) error {
 
 	client := cloudclaude.NewEntryClient(cfg.Gateway)
 
-	stage := "正在连接云主机"
-	fmt.Printf("%s .... ", stage)
+	username := cfg.Username
+	password := cfg.Password
+	maxRetries := 3
 
-	authResp, err := client.AuthenticateAndWait(
-		cmd.Context(),
-		cfg.Username,
-		cfg.Password,
-		func(msg string) {
-			fmt.Printf("\r\033[2K%s .... %s", stage, msg)
-		},
-	)
-	if err != nil {
+	var authResp *cloudclaude.AuthResponse
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		stage := "正在连接云主机"
+		fmt.Printf("%s .... ", stage)
+
+		var err error
+		authResp, err = client.AuthenticateAndWait(
+			cmd.Context(),
+			username,
+			password,
+			func(msg string) {
+				fmt.Printf("\r\033[2K%s .... %s", stage, msg)
+			},
+		)
+		if err == nil {
+			fmt.Printf("\r\033[2K%s .... 成功\n", stage)
+			break
+		}
+
 		fmt.Printf("\r\033[2K%s .... 失败\n", stage)
 		errMsg := err.Error()
-		fmt.Fprintln(os.Stderr, "错误: "+errMsg)
-		switch {
-		case strings.Contains(errMsg, "认证失败"),
-			strings.Contains(errMsg, "账号未激活"),
-			strings.Contains(errMsg, "未找到对应主机"):
-			os.Exit(exitAuthFailed)
-		case strings.Contains(errMsg, "网关不可达"),
-			strings.Contains(errMsg, "网关地址无效"),
-			strings.Contains(errMsg, "认证请求失败"):
-			os.Exit(exitNetworkError)
-		case strings.Contains(errMsg, "超时"):
-			os.Exit(exitTimeout)
-		default:
-			os.Exit(exitInternalError)
+
+		// 仅"用户名或密码错误"才允许重试；其他认证类错误直接退出
+		isCredError := strings.Contains(errMsg, "认证失败：用户名或密码错误")
+		if !isCredError {
+			fmt.Fprintln(os.Stderr, "错误: "+errMsg)
+			switch {
+			case strings.Contains(errMsg, "认证失败"),
+				strings.Contains(errMsg, "账号未激活"),
+				strings.Contains(errMsg, "未找到对应主机"):
+				os.Exit(exitAuthFailed)
+			case strings.Contains(errMsg, "网关不可达"),
+				strings.Contains(errMsg, "网关地址无效"),
+				strings.Contains(errMsg, "认证请求失败"):
+				os.Exit(exitNetworkError)
+			case strings.Contains(errMsg, "超时"):
+				os.Exit(exitTimeout)
+			default:
+				os.Exit(exitInternalError)
+			}
+			return nil
 		}
-		return nil
+
+		if attempt >= maxRetries {
+			fmt.Fprintln(os.Stderr, "错误: "+errMsg)
+			os.Exit(exitAuthFailed)
+		}
+
+		fmt.Fprintf(os.Stderr, "认证失败，请重新输入（还剩 %d 次机会）\n", maxRetries-attempt)
+		username, password = promptCredentials()
+		if username == "" {
+			username = cfg.Username
+		}
 	}
-	fmt.Printf("\r\033[2K%s .... 成功\n", stage)
 
 	fmt.Println("正在映射工作目录并进入 Claude Code 会话...")
 
@@ -403,4 +429,20 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// promptCredentials 交互式读取用户名和密码。
+func promptCredentials() (string, string) {
+	var username string
+	fmt.Print("用户名: ")
+	fmt.Scanln(&username)
+
+	fmt.Print("密码: ")
+	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "读取密码失败: "+err.Error())
+		return username, ""
+	}
+	fmt.Println()
+	return username, string(pw)
 }
