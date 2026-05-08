@@ -114,7 +114,7 @@
 - [x] **Phase 39: 本地 Dev Containers 支持** — cloud-claude local 子命令 + devcontainer.json + entrypoint MODE 分支 + local down/status (completed 2026-05-07)
 - [x] **Phase 40: VS Code Remote-SSH E2E 验证** — VS Code 端到端连接验证 + 安全流量校验 (completed 2026-05-08)
 - [x] **Phase 41: Doctor 扩展与收尾** — doctor remote-ssh 诊断维度 + 里程碑收尾 (completed 2026-05-08)
-- [ ] **Phase 42: Phase 39 验证补齐** — 为 LOCAL-01~04、UX-02 补充 VERIFICATION.md（gap closure）
+- [x] **Phase 42: Phase 39 验证补齐** — 为 LOCAL-01~04、UX-02 补充 VERIFICATION.md（gap closure）(completed 2026-05-08)
 - [ ] **Phase 43: VS Code Remote-SSH 端口转发 E2E 补齐** — 端口转发 + egress + 安全验证 + VERIFICATION.md（gap closure）
 - [ ] **Phase 44: doctor sshd_config 主动验证** — doctor 主动检查 AllowTcpForwarding + 集成测试（gap closure）
 
@@ -187,7 +187,7 @@
   4. `--egress-config` 注入 tun 和 proxy 模式均工作正常
   5. 生成 Phase 39-VERIFICATION.md，所有 5 个需求标记 SATISFIED
 **Plans**: 1 plan
-- [ ] 42-01-PLAN.md — 运行自动化验证 + 生成 39-VERIFICATION.md + Docker 集成确认
+- [x] 42-01-PLAN.md — 运行自动化验证 + 生成 39-VERIFICATION.md + Docker 集成确认 — completed 2026-05-08
 
 ### Phase 43: VS Code Remote-SSH 端口转发 E2E 补齐
 **Goal**: 完成 VS Code Remote-SSH 端口转发 + egress 流量的端到端验证，生成标准 VERIFICATION.md
@@ -231,7 +231,7 @@ Phases execute in numeric order: 38 → 39 → 40 → 41
 | 39. 本地 Dev Containers 支持 | v3.2 | Complete    | 2026-05-07 | — |
 | 40. VS Code Remote-SSH E2E 验证 | v3.2 | 2/2 | Complete | 2026-05-08 |
 | 41. Doctor 扩展与收尾 | v3.2 | 2/2 | Complete | 2026-05-08 |
-| 42. Phase 39 验证补齐 | v3.2 | 0/1 | In Progress | — |
+| 42. Phase 39 验证补齐 | v3.2 | Complete    | 2026-05-08 | 2026-05-08 |
 | 43. VS Code 端口转发 E2E 补齐 | v3.2 | 0/? | In Progress | — |
 | 44. doctor sshd_config 验证 | v3.2 | 0/? | In Progress | — |
 

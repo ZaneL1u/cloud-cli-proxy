@@ -35,24 +35,24 @@
 
 ### 本地 Dev Containers 支持（LOCAL）
 
-- [ ] **LOCAL-01**: `cloud-claude local` 子命令支持一键启动本地容器 → **Phase 42** gap closure
+- [x] **LOCAL-01**: `cloud-claude local` 子命令支持一键启动本地容器 → **Phase 42** gap closure
   - 不连接 control-plane/Entry API，直接调用本地 Docker
   - 自动拉取/构建 managed-user 镜像
   - 创建容器并 publish SSH 端口到宿主机
   - 输出连接信息（host, port, user, password）
 
-- [ ] **LOCAL-02**: 本地容器支持 Dev Containers 配置 → **Phase 42** gap closure
+- [x] **LOCAL-02**: 本地容器支持 Dev Containers 配置 → **Phase 42** gap closure
   - 项目根目录 `.devcontainer/devcontainer.json` 模板
   - 引用 managed-user 镜像
   - `workspaceMount` bind mount 当前目录到 `/workspace`
   - `runArgs` 包含 `--cap-add SYS_ADMIN --device /dev/fuse`
 
-- [ ] **LOCAL-03**: 本地容器支持 sing-box 全隧道（可选配置） → **Phase 42** gap closure
+- [x] **LOCAL-03**: 本地容器支持 sing-box 全隧道（可选配置） → **Phase 42** gap closure
   - 通过 `cloud-claude local --egress-config <file>` 注入 sing-box outbound JSON
   - 容器内 sing-box 自动启动 tun 模式
   - 本地宿主机 macOS 上支持 SOCKS/HTTP 代理模式兜底
 
-- [ ] **LOCAL-04**: entrypoint 支持 `MODE=local` 分支 → **Phase 42** gap closure
+- [x] **LOCAL-04**: entrypoint 支持 `MODE=local` 分支 → **Phase 42** gap closure
   - 本地模式跳过 KasmVNC 启动（节省资源）
   - 本地模式跳过 control-plane 心跳
   - 本地模式仍启动 sshd + sing-box
@@ -74,7 +74,7 @@
   - 检测 `~/.vscode-server/` 磁盘占用
   - 检测 forwarding channel 是否被拦截
 
-- [ ] **UX-02**: `cloud-claude local` 支持 `down` / `status` 子命令 → **Phase 42** gap closure
+- [x] **UX-02**: `cloud-claude local` 支持 `down` / `status` 子命令 → **Phase 42** gap closure
   - `local down` 停止并清理本地容器
   - `local status` 显示本地容器运行状态、端口映射
 
@@ -116,19 +116,19 @@
 | SSH-03 | Phase 38 | Complete (038-03) |
 | SSH-04 | Phase 38 | Complete (038-01) |
 | SSH-05 | Phase 43 (gap closure) | Pending |
-| LOCAL-01 | Phase 42 (gap closure) | Pending |
-| LOCAL-02 | Phase 42 (gap closure) | Pending |
-| LOCAL-03 | Phase 42 (gap closure) | Pending |
-| LOCAL-04 | Phase 42 (gap closure) | Pending |
+| LOCAL-01 | Phase 42 (gap closure) | Complete (42-01) |
+| LOCAL-02 | Phase 42 (gap closure) | Complete (42-01) |
+| LOCAL-03 | Phase 42 (gap closure) | Complete (42-01) |
+| LOCAL-04 | Phase 42 (gap closure) | Complete (42-01) |
 | SEC-01 | Phase 43 (gap closure) | Pending |
 | SEC-02 | Phase 43 (gap closure) | Pending |
 | UX-01 | Phase 41 | Complete (41-VERIFICATION) |
-| UX-02 | Phase 42 (gap closure) | Pending |
+| UX-02 | Phase 42 (gap closure) | Complete (42-01) |
 
 **Coverage:**
 - v3.2 requirements: 13 total
-- Satisfied: 5 (SSH-01~04, UX-01)
-- Pending: 8 (gap closure: Phase 42 x5, Phase 43 x3)
+- Satisfied: 10 (SSH-01~04, LOCAL-01~04, UX-01, UX-02)
+- Pending: 3 (gap closure: Phase 43 x3)
 - Mapped to phases: 13
 - Unmapped: 0
 

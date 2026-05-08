@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: 多形态容器接入
 status: unknown
-last_updated: "2026-05-08T04:38:34.622Z"
+last_updated: "2026-05-08T06:34:31.613Z"
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 28
-  completed_plans: 28
+  total_phases: 12
+  completed_phases: 10
+  total_plans: 29
+  completed_plans: 29
 ---
 
 # Project State
@@ -18,17 +18,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-07 — v3.2 milestone started)
 
 **Core value:** 给每个用户提供一台开箱即用的 SSH 云主机，并且严格保证其所有出网流量都走受控的指定出口 IP
-**Current focus:** Phase 40 — VS Code Remote-SSH E2E 验证 (plans complete, manual testing pending)
+**Current focus:** v3.2 里程碑全部阶段完成，待归档
 
 ## Current Position
 
 Milestone: v3.2 多形态容器接入
-Phase: 40 of 41 (VS Code Remote-SSH E2E 验证)
-Plan: 02 of 02 (E2E 验证执行 — template ready, manual testing pending)
-Status: Phase 40 plans complete — UAT script + checklist created, manual execution pending
-Last activity: 2026-05-08 — Completed 40-01 + 40-02: UAT script, manual checklist, verification report template
+Phase: 42 of 42 (Phase 39 验证补齐)
+Plan: 01 of 01 (自动化验证 + VERIFICATION.md 生成)
+Status: Phase 42 complete — Phase 39 VERIFICATION.md 生成，5 个需求全部 SATISFIED
+Last activity: 2026-05-08 — Completed 42-01: Phase 39 正式验证报告
 
-Progress: [████████░░] 77%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -76,10 +76,7 @@ Phase 38 Plan 03 决策：
 
 ### Pending Todos
 
-- Phase 39: Cloud/Local 两版架构边界分析
-- Phase 39: Dev Containers 配置设计
-- Phase 40: VS Code Remote-SSH E2E 验证
-- Phase 41: Doctor 扩展与收尾
+- v3.2 里程碑归档（audit + complete-milestone）
 
 ### Blockers/Concerns
 
@@ -91,16 +88,17 @@ v3.1 quick tasks 见归档 STATE。
 
 ### Roadmap Evolution
 
-v3.2 roadmap 已创建：
+v3.2 roadmap 全部完成：
 - Phase 38: SSH-01..04 (端口转发 + 安全校验 + 测试验证) — COMPLETE
-- Phase 39: LOCAL-01..04 + UX-02 (本地 Dev Containers)
-- Phase 40: SSH-05 + SEC-01..02 (E2E 验证 + 安全)
-- Phase 41: UX-01 (doctor 扩展)
+- Phase 39: LOCAL-01..04 + UX-02 (本地 Dev Containers) — COMPLETE
+- Phase 40: SSH-05 + SEC-01..02 (E2E 验证 + 安全) — COMPLETE
+- Phase 41: UX-01 (doctor 扩展) — COMPLETE
+- Phase 42: Phase 39 验证补齐 (gap closure) — COMPLETE
 
 ## Session Continuity
 
-Last session: 2026-05-07T12:08:00Z
-Stopped at: Completed 038-03-PLAN.md (sshd_config verification + forwarding test coverage)
+Last session: 2026-05-08T22:30:00Z
+Stopped at: Completed 42-01 (Phase 39 VERIFICATION.md)
 Resume file: None
 
 ## Deferred Items
@@ -108,4 +106,4 @@ Resume file: None
 v3.1 遗留 deferred items 保持原状态，见 MILESTONES.md。
 
 ---
-*State updated: 2026-05-07 after Phase 38 Plan 03 completion*
+*State updated: 2026-05-08 after Phase 42 Plan 01 completion*
