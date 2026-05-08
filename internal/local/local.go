@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -220,13 +219,11 @@ func (m *LocalManager) buildCreateArgs(containerName, projectDir, password strin
 		args = append(args, "-e", "CONTAINER_SSH_AUTHORIZED_KEY="+key)
 	}
 
-	// macOS/Windows: expose SSH port via Docker -p
-	if runtime.GOOS != "linux" {
-		if m.opts.Port > 0 {
-			args = append(args, "-p", fmt.Sprintf("%d:22", m.opts.Port))
-		} else {
-			args = append(args, "-p", "0:22")
-		}
+	// Expose SSH port via Docker -p
+	if m.opts.Port > 0 {
+		args = append(args, "-p", fmt.Sprintf("%d:22", m.opts.Port))
+	} else {
+		args = append(args, "-p", "0:22")
 	}
 
 	if m.opts.MemoryLimitMB > 0 {
