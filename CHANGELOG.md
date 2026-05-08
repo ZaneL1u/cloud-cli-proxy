@@ -4,6 +4,41 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v3.4.0 - 2026-05-08
+## What's Changed
+
+### Backend (Go / API)
+- fix(local): remove platform-gated SSH port mapping (95773ba)
+- feat(44-01): 注册 checkSSHDForwarding 到 doctor ssh 维度 (484e623)
+- feat(44-01): 新增 3 个 sshd 转发检查错误码 + parseSSHDForwarding + checkSSHDForwarding + 13 个单元测试 (bc00c7f)
+- test(41-02): remote-ssh dimension unit tests + error code coverage (45a73a5)
+- feat(41-01): add remote-ssh doctor dimension with 5 checks (a4de2eb)
+- feat(41-01): register remote-ssh error codes and explain coverage (72d3b6a)
+- fix(40): Docker error matching + SSH key injection for VS Code Remote-SSH (1f5afd6)
+- feat(39-02): egress config injection + protocol detection (bdb6904)
+- feat(39-01): local CLI subcommand + internal/local package + entrypoint MODE=local (c41735a)
+- feat(038-02): pre-dial shared targetClient in handleConnection (2d53dc5)
+- feat(038-02): implement handleGlobalRequests + proxyForwardedChannels (2b3efb8)
+- test(038-02): add failing tests for handleGlobalRequests and proxyForwardedChannels (474a377)
+- feat(038-01): add direct-tcpip channel dispatch and refactor dialContainer (d70c53c)
+- test(038-01): add failing tests for direct-tcpip channel dispatch in proxy (d559cd7)
+- feat(038-01): implement direct-tcpip forwarding with security validation (8ca26e9)
+- test(038-01): add failing tests for direct-tcpip payload parsing and security validation (1346714)
+
+### Runtime & Deployment
+- fix(40): Docker error matching + SSH key injection for VS Code Remote-SSH (1f5afd6)
+- feat(39-03): devcontainer.json MODE=local + sing-box entrypoint startup (295d558)
+- feat(39-01): local CLI subcommand + internal/local package + entrypoint MODE=local (c41735a)
+- feat(v3.2): sshd_config forwarding + devcontainer template (a218dcc)
+- docs(quick-260508): 基于当前代码全面更新 README、docs 与 deploy 文档 (c71e048)
+
+### Docs
+- fix(docs): 修复 VitePress 构建失败 (58a28ce)
+- docs(quick-260508): 基于当前代码全面更新 README、docs 与 deploy 文档 (c71e048)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v3.3.7...v3.4.0
+
+
 ## v3.3.7 - 2026-05-07
 ## What's Changed
 
