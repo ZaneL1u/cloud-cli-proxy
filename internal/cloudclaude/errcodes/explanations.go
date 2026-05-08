@@ -17,10 +17,12 @@ var (
 	// ExplainExempt：informational 类豁免长说明（Severity==SeverityInfo 的降级提示 / APFS 识别 / *_BACKOFF / *_NOTIFIED 等）。
 	// 注意：MOUNT_AUTO_DOWNGRADED 虽属"降级提示"，但 Severity=Warn，已登记长说明而不是放进豁免（Rule 1：和 TestExplainExemptOnlyInformational 协同）。
 	ExplainExempt = map[Code]struct{}{
-		MOUNT_APFS_CASE_INSENSITIVE: {},
-		SESSION_TAKEOVER_NOTIFIED:   {},
-		NET_RECONNECT_BACKOFF:       {},
-		STATE_LAST_SESSION_MISSING:  {},
+		MOUNT_APFS_CASE_INSENSITIVE:   {},
+		SESSION_TAKEOVER_NOTIFIED:     {},
+		NET_RECONNECT_BACKOFF:         {},
+		STATE_LAST_SESSION_MISSING:    {},
+		SSH_VSCODE_SERVER_NOT_RUNNING: {}, // Phase 41: Info 级，用户可能未使用 VS Code
+		SSH_FORWARDING_SOCKET_MISSING: {}, // Phase 41: Info 级，forwarding 未建立属正常
 	}
 )
 
@@ -300,4 +302,32 @@ func init() {
 复现方式：连续启动 cloud-claude 在多个大仓库下数十次 → hotsync 数据目录显著膨胀。
 修复路径：运行 rm -rf ~/.cloud-claude/hotsync/sessions/ 强制清理（下次启动 cloud-claude 自动重建 session）；这不会丢失代码（实际代码在仓库 + 远端 /workspace 中），只丢同步历史；定期运行 cloud-claude doctor disk 监控趋势。
 关联文档：Phase 34 D-21 / RESEARCH §6`)
+
+	// ────────────────────────────────────────────────────────────────────
+	// Phase 41: remote-ssh doctor 维度（Warn/Error 级 explain）
+	// ────────────────────────────────────────────────────────────────────
+
+	registerExplanation(SSH_VSCODE_PORT_NOT_LISTENING, `触发场景：cloud-claude doctor remote-ssh 检测到容器内 VS Code Server 进程存在（pgrep 返回成功），但 ss -tlnp 未发现其监听任何 TCP 端口。
+根本原因：VS Code Server 启动分为两个阶段——进程创建和端口绑定。进程启动后需要下载扩展、初始化工作区，然后才开始监听端口。如果在初始化完成前执行 doctor 检查，或扩展安装过程中出错导致服务卡在中间状态，就会出现"进程在但端口未开"的情况。此外，容器资源不足（CPU 满载、磁盘空间耗尽）也会显著延长启动时间。
+复现方式：通过 VS Code Remote-SSH 连接容器，连接建立后立即运行 cloud-claude doctor remote-ssh；或在容器内执行 pkill -STOP -f vscode-server 暂停进程后检查。
+修复路径：等待 30 秒后重新运行 cloud-claude doctor remote-ssh 确认是否为启动延迟；如果持续无端口，在 VS Code 中断开并重新连接 Remote-SSH；检查容器资源使用（docker stats）排除 CPU/内存瓶颈；最坏情况在容器内 rm -rf ~/.vscode-server 让 VS Code 重新下载。
+关联文档：Phase 41 CONTEXT §VS Code Server 进程检测；VS Code Remote-SSH 官方文档 Troubleshooting`)
+
+	registerExplanation(SSH_FORWARDING_BLOCKED, `触发场景：cloud-claude doctor remote-ssh 检测到容器内 OUTPUT 链存在 DROP 规则，可能拦截 VS Code 端口转发（语言服务器、调试器）使用的 SSH forwarding 流量。
+根本原因：cloud-claude 的网络安全模型通过 sing-box tun 全隧道 + iptables 默认拒绝策略实现出口 IP 强约束。如果 iptables OUTPUT 链的 DROP 规则过于宽泛（例如拒绝了容器内部的 loopback 转发流量），VS Code 的端口转发也会被误拦截。正常情况下 sing-box 只拦截出站 TCP/UDP，不应影响 SSH forwarding（走 unix socket）。
+复现方式：在容器内手动添加 iptables -A OUTPUT -p tcp -j DROP → 运行 cloud-claude doctor remote-ssh → 出现 SSH_FORWARDING_BLOCKED 警告。
+修复路径：检查容器内 iptables -L OUTPUT -v -n 确认 DROP 规则的具体匹配条件；如果规则由 sing-box 自动添加，重启容器让 sing-box 重新初始化路由表；如果规则是手动添加的，移除过于宽泛的 DROP 规则；确认 VS Code 端口转发在 doctor 报告通过后可正常使用。
+关联文档：Phase 41 CONTEXT §Forwarding Channel 检测；CLAUDE.md 网络安全约束`)
+
+	registerExplanation(DISK_VSCODE_SERVER_WARN, `触发场景：cloud-claude doctor remote-ssh 发现容器内 ~/.vscode-server/ 目录占用超过 500MB 警戒线。
+根本原因：VS Code Remote-SSH 会在容器内 ~/.vscode-server/ 下缓存扩展（extensions/）、扩展宿主进程（bin/）、以及各类临时数据。长时间使用或多版本 VS Code 客户端连接后，旧版本的 Server 和扩展会残留，目录逐渐膨胀。extensions-cache/ 子目录是扩展下载缓存，删除不影响已安装扩展。
+复现方式：在容器内安装 10+ 个 VS Code 扩展（如 Python、ESLint、Prettier 等），连续使用数周后运行 cloud-claude doctor remote-ssh → 出现 DISK_VSCODE_SERVER_WARN。
+修复路径：轻量清理：rm -rf ~/.vscode-server/extensions-cache/（仅删除下载缓存，不影响已安装扩展）；中量清理：rm -rf ~/.vscode-server/*/extensions/*/（删除所有扩展，VS Code 重连时会重新安装）；如果磁盘紧张，完整清理 rm -rf ~/.vscode-server/（VS Code 重连时会自动重建整个目录结构）。
+关联文档：Phase 41 CONTEXT §~/.vscode-server/ 磁盘占用；Phase 41 RESEARCH §6 Check Design`)
+
+	registerExplanation(DISK_VSCODE_SERVER_BLOAT, `触发场景：cloud-claude doctor remote-ssh 发现容器内 ~/.vscode-server/ 目录占用超过 2GB 严重警戒线，容器可用磁盘空间可能已受到显著影响。
+根本原因：~/.vscode-server/ 超过 2GB 通常是多个 VS Code Server 版本残留叠加大量已安装扩展共同导致。每次 VS Code 客户端升级后重新连接时会下载新版本 Server，但旧版本不会自动清理。扩展的 native 依赖（如 Python 的 Pylance、C/C++ 的 clangd）单个就可能占用数百 MB。在容器磁盘空间有限的场景下（通常 10-20GB volume），2GB 的 .vscode-server 会严重挤压 /workspace 可用空间。
+复现方式：连续数月使用 VS Code Remote-SSH 连接同一容器，期间 VS Code 客户端升级 3-4 次，安装 20+ 个扩展 → ~/.vscode-server/ 可达 2GB+。
+修复路径：完整清理 rm -rf ~/.vscode-server/（这是最直接有效的方案，VS Code 下次重连时会自动下载当前版本 Server 和已注册扩展）；清理后重新运行 cloud-claude doctor remote-ssh 确认磁盘恢复正常；如果空间仍然紧张，联系管理员检查容器 volume 容量是否充足。
+关联文档：Phase 41 CONTEXT §~/.vscode-server/ 磁盘占用（完整清理路径）；Phase 41 RESEARCH §GOTCHA 3 du 耗时`)
 }
