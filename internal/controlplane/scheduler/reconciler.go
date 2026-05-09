@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
+	"github.com/zanel1u/cloud-cli-proxy/internal/broadcast"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
 
@@ -105,6 +106,7 @@ func (r *Reconciler) reconcileHosts(ctx context.Context) error {
 				"host_id", host.ID, "db_status", "running", "previous_actual_status", actualStatus)
 			continue
 		}
+		broadcast.Broadcast("hosts", "update", host.ID)
 
 		// queuer == nil: 向后兼容，保持原有 drift 行为
 		r.recordHostDrift(ctx, host.ID, actualStatus)

@@ -6,6 +6,7 @@ import (
 	nethttp "net/http"
 	"time"
 
+	"github.com/zanel1u/cloud-cli-proxy/internal/broadcast"
 	"github.com/zanel1u/cloud-cli-proxy/internal/runtime"
 )
 
@@ -50,6 +51,7 @@ func (h *AdminImageHandler) Refresh() nethttp.Handler {
 			if err := h.cache.Refresh(ctx); err != nil {
 				h.logger.Warn("admin manual image refresh failed", "error", err)
 			}
+			broadcast.Broadcast("image-status", "update", "")
 		}()
 
 		writeJSON(w, nethttp.StatusAccepted, map[string]string{

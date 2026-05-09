@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
+	"github.com/zanel1u/cloud-cli-proxy/internal/broadcast"
 	"github.com/zanel1u/cloud-cli-proxy/internal/network"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -133,6 +134,8 @@ func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest
 			}
 		}
 		_ = w.repo.UpdateHostStatus(ctx, request.HostID, "failed")
+		broadcast.Broadcast("hosts", "update", request.HostID)
+		broadcast.Broadcast("events", "update", "")
 		return agentapi.TaskStatusUpdate{
 			TaskID:           request.TaskID,
 			Status:           taskStateFailed,
@@ -144,6 +147,8 @@ func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest
 
 	hostStatus := actionToHostStatus(request.Action)
 	_ = w.repo.UpdateHostStatus(ctx, request.HostID, hostStatus)
+	broadcast.Broadcast("hosts", "update", request.HostID)
+	broadcast.Broadcast("events", "update", "")
 
 	return agentapi.TaskStatusUpdate{
 		TaskID: request.TaskID,

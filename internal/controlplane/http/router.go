@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
+	"github.com/zanel1u/cloud-cli-proxy/internal/broadcast"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
 
@@ -280,6 +281,9 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			mux.Handle("GET /v1/admin/events", adminGuard(eventsHandler.List()))
 		}
 
+		// SSE 实时推送端点
+		mux.HandleFunc("GET /v1/admin/sse", broadcast.Subscribe)
+
 		if deps.SSHKeys != nil {
 			sshKeyHandler := NewSSHKeyHandler(deps.Logger, deps.SSHKeys)
 			mux.Handle("GET /v1/admin/users/{userID}/ssh-keys", adminGuard(sshKeyHandler.List()))
@@ -310,6 +314,9 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			userVNCProxy := NewUserVNCProxyHandler(deps.Logger, deps.UserHosts)
 			mux.Handle("/v1/user/hosts/{hostID}/vnc/{path...}", userGuard(userVNCProxy))
 		}
+
+		// 用户门户 SSE 实时推送端点
+		mux.HandleFunc("GET /v1/user/sse", broadcast.Subscribe)
 
 		if deps.SSHKeys != nil {
 			userSSHKeyHandler := NewSSHKeyHandler(deps.Logger, deps.SSHKeys)

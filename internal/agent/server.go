@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
+	"github.com/zanel1u/cloud-cli-proxy/internal/broadcast"
 	"github.com/zanel1u/cloud-cli-proxy/internal/network"
 	runtimetasks "github.com/zanel1u/cloud-cli-proxy/internal/runtime/tasks"
 )
@@ -96,6 +97,7 @@ func (s *Server) Serve(ctx context.Context) error {
 					ErrorMessage: fmt.Sprintf("handler panic: %v", rec),
 				}
 				_ = s.worker.UpdateTaskStatus(r.Context(), fallback)
+				broadcast.Broadcast("tasks", "update", request.TaskID)
 				writeJSON(w, http.StatusInternalServerError, agentapi.HostActionResponse{
 					TaskID: request.TaskID,
 					Action: request.Action,
@@ -119,6 +121,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		broadcast.Broadcast("tasks", "update", request.TaskID)
 
 		update := s.worker.Execute(r.Context(), request)
 		if err := s.worker.UpdateTaskStatus(r.Context(), update); err != nil {
@@ -126,6 +129,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		broadcast.Broadcast("tasks", "update", request.TaskID)
 
 		statusCode := http.StatusAccepted
 		if update.Status == "failed" {

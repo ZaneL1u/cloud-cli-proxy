@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
+	"github.com/zanel1u/cloud-cli-proxy/internal/broadcast"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
 
@@ -246,6 +247,7 @@ func (s *Service) QueueHostAction(ctx context.Context, hostID string, action age
 					},
 				})
 			}
+			broadcast.Broadcast("tasks", "update", task.ID)
 			return
 		}
 		if resp.Update.Status == string(repository.TaskStatusFailed) {
@@ -255,6 +257,7 @@ func (s *Service) QueueHostAction(ctx context.Context, hostID string, action age
 				"error_code", resp.Update.ErrorCode,
 				"error_message", resp.Update.ErrorMessage)
 		}
+		broadcast.Broadcast("tasks", "update", task.ID)
 	}()
 
 	return task, nil

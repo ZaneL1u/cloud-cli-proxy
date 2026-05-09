@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zanel1u/cloud-cli-proxy/internal/broadcast"
 )
 
 // ImageCacheStatus 描述当前镜像缓存的状态。
@@ -105,6 +107,7 @@ func (c *ImageCache) Refresh(ctx context.Context) error {
 		"image", spec.ImageName,
 		"digest", c.status.LocalDigest,
 		"output", strings.TrimSpace(string(output)))
+	broadcast.Broadcast("image-status", "update", "")
 	return nil
 }
 

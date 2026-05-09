@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
+	"github.com/zanel1u/cloud-cli-proxy/internal/broadcast"
 	cphttp "github.com/zanel1u/cloud-cli-proxy/internal/controlplane/http"
 	"github.com/zanel1u/cloud-cli-proxy/internal/controlplane/scheduler"
 	"github.com/zanel1u/cloud-cli-proxy/internal/network"
@@ -70,6 +71,7 @@ func newLogger() *slog.Logger {
 
 func New(ctx context.Context, cfg Config) (*App, error) {
 	logger := newLogger()
+	broadcast.SetLogger(logger.With("component", "sse"))
 
 	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
