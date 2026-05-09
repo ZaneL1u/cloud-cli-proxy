@@ -4,7 +4,7 @@ Produces DISCOVERY.md (for Level 2-3) that informs PLAN.md creation.
 
 Called from plan-phase.md's mandatory_discovery step with a depth parameter.
 
-NOTE: For comprehensive ecosystem research ("how do experts build this"), use /gsd:research-phase instead, which produces RESEARCH.md.
+NOTE: For comprehensive ecosystem research ("how do experts build this"), use /gsd-plan-phase --research-phase instead, which produces RESEARCH.md.
 </purpose>
 
 <depth_levels>
@@ -28,7 +28,7 @@ Claude's training data is 6-18 months stale. Always verify.
 2. **Official docs** - When Context7 lacks coverage
 3. **WebSearch LAST** - For comparisons and trends only
 
-See /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/templates/discovery.md `<discovery_protocol>` for full protocol.
+See /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/templates/discovery.md `<discovery_protocol>` for full protocol.
 </source_hierarchy>
 
 <process>
@@ -107,7 +107,7 @@ For: Choosing between options, new external integration.
 
 5. **Cross-verify:** Any WebSearch finding → confirm with Context7/official docs.
 
-6. **Create DISCOVERY.md** using /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/templates/discovery.md structure:
+6. **Create DISCOVERY.md** using /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/templates/discovery.md structure:
 
    - Summary with recommendation
    - Key findings per option
@@ -126,7 +126,7 @@ For: Architectural decisions, novel problems, high-risk choices.
 
 **Process:**
 
-1. **Scope the discovery** using /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/templates/discovery.md:
+1. **Scope the discovery** using /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/templates/discovery.md:
 
    - Define clear scope
    - Define include/exclude boundaries
@@ -160,7 +160,7 @@ For: Architectural decisions, novel problems, high-risk choices.
 
 6. **Create comprehensive DISCOVERY.md:**
 
-   - Full structure from /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/templates/discovery.md
+   - Full structure from /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/templates/discovery.md
    - Quality report with source attribution
    - Confidence by finding
    - If LOW confidence on any critical finding → add validation checkpoints
@@ -184,7 +184,7 @@ Ask: What do we need to learn before we can plan this phase?
   </step>
 
 <step name="create_discovery_scope">
-Use /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/templates/discovery.md.
+Use /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/templates/discovery.md.
 
 Include:
 
@@ -214,6 +214,8 @@ Write `.planning/phases/XX-name/DISCOVERY.md`:
 After creating DISCOVERY.md, check confidence level.
 
 If confidence is LOW:
+
+**Text mode (`workflow.text_mode: true` in config or `--text` flag):** Set `TEXT_MODE=true` if `--text` is present in `$ARGUMENTS` OR `text_mode` from init JSON is `true`. When TEXT_MODE is active, replace every `AskUserQuestion` call with a plain-text numbered list and ask the user to type their choice number. This is required for non-Claude runtimes (OpenAI Codex, Gemini CLI, etc.) where `AskUserQuestion` is not available.
 Use AskUserQuestion:
 
 - header: "Low Conf."
@@ -252,8 +254,8 @@ Confidence: [level]
 
 What's next?
 
-1. Discuss phase context (/gsd:discuss-phase [current-phase])
-2. Create phase plan (/gsd:plan-phase [current-phase])
+1. Discuss phase context (/gsd-discuss-phase [current-phase])
+2. Create phase plan (/gsd-plan-phase [current-phase])
 3. Refine discovery (dig deeper)
 4. Review discovery
 

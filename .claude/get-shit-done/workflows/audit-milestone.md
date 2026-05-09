@@ -16,23 +16,23 @@ Valid GSD subagent types (use exact names — do not fall back to 'general-purpo
 ## 0. Initialize Milestone Context
 
 ```bash
-INIT=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" init milestone-op)
+INIT=$(gsd-sdk query init.milestone-op)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
-AGENT_SKILLS_CHECKER=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-integration-checker 2>/dev/null)
+AGENT_SKILLS_CHECKER=$(gsd-sdk query agent-skills gsd-integration-checker)
 ```
 
 Extract from init JSON: `milestone_version`, `milestone_name`, `phase_count`, `completed_phases`, `commit_docs`.
 
 Resolve integration checker model:
 ```bash
-integration_checker_model=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" resolve-model gsd-integration-checker --raw)
+integration_checker_model=$(gsd-sdk query resolve-model gsd-integration-checker --raw)
 ```
 
 ## 1. Determine Milestone Scope
 
 ```bash
 # Get phases in milestone (sorted numerically, handles decimals)
-node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" phases list
+gsd-sdk query phases.list
 ```
 
 - Parse version from arguments or detect current from ROADMAP.md
@@ -46,7 +46,7 @@ For each phase directory, read the VERIFICATION.md:
 
 ```bash
 # For each phase, use find-phase to resolve the directory (handles archived phases)
-PHASE_INFO=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" find-phase 01 --raw)
+PHASE_INFO=$(gsd-sdk query find-phase 01 --raw)
 # Extract directory from JSON, then read VERIFICATION.md from that directory
 # Repeat for each phase number from ROADMAP.md
 ```
@@ -67,7 +67,7 @@ With phase context collected:
 Extract `MILESTONE_REQ_IDS` from REQUIREMENTS.md traceability table — all REQ-IDs assigned to phases in this milestone.
 
 ```
-Task(
+Agent(
   prompt="Check cross-phase integration and E2E flows.
 
 Phases: {phase_dirs}
@@ -85,6 +85,8 @@ ${AGENT_SKILLS_CHECKER}",
   model="{integration_checker_model}"
 )
 ```
+
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 ## 4. Collect Results
 
@@ -113,7 +115,7 @@ For each phase's SUMMARY.md, extract `requirements-completed` from YAML frontmat
 ```bash
 for summary in .planning/phases/*-*/*-SUMMARY.md; do
   [ -e "$summary" ] || continue
-  node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" summary-extract "$summary" --fields requirements_completed --pick requirements_completed
+  gsd-sdk query summary-extract "$summary" --fields requirements_completed --pick requirements_completed
 done
 ```
 
@@ -141,7 +143,7 @@ For each REQ-ID, determine status using all three sources:
 Skip if `workflow.nyquist_validation` is explicitly `false` (absent = enabled).
 
 ```bash
-NYQUIST_CONFIG=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.nyquist_validation --raw 2>/dev/null)
+NYQUIST_CONFIG=$(gsd-sdk query config-get workflow.nyquist_validation --raw 2>/dev/null)
 ```
 
 If `false`: skip entirely.
@@ -158,7 +160,7 @@ Classify per phase:
 
 Add to audit YAML: `nyquist: { compliant_phases, partial_phases, missing_phases, overall }`
 
-Discovery only — never auto-calls `/gsd:validate-phase`.
+Discovery only — never auto-calls `/gsd-validate-phase`.
 
 ## 6. Aggregate into v{version}-MILESTONE-AUDIT.md
 
@@ -225,13 +227,13 @@ All requirements covered. Cross-phase integration verified. E2E flows complete.
 
 ───────────────────────────────────────────────────────────────
 
-## ▶ Next Up
+## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
 
 **Complete milestone** — archive and tag
 
-/gsd:complete-milestone {version}
+/clear then:
 
-<sub>/clear first → fresh context window</sub>
+/gsd-complete-milestone {version}
 
 ───────────────────────────────────────────────────────────────
 
@@ -264,25 +266,36 @@ All requirements covered. Cross-phase integration verified. E2E flows complete.
 
 | Phase | VALIDATION.md | Compliant | Action |
 |-------|---------------|-----------|--------|
-| {phase} | exists/missing | true/false/partial | `/gsd:validate-phase {N}` |
+| {phase} | exists/missing | true/false/partial | `/gsd-validate-phase {N}` |
 
-Phases needing validation: run `/gsd:validate-phase {N}` for each flagged phase.
+Phases needing validation: run `/gsd-validate-phase {N}` for each flagged phase.
 
 ───────────────────────────────────────────────────────────────
 
-## ▶ Next Up
+## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
 
-**Plan gap closure** — create phases to complete milestone
+**Close the gaps inline** — gap planning happens as part of this audit's
+output (see the Unsatisfied Requirements, Cross-Phase Issues, Broken Flows,
+and Nyquist Coverage sections above). Insert one closure phase per gap (or
+per group of related gaps) using the standard phase chain:
 
-/gsd:plan-milestone-gaps
+/clear then:
 
-<sub>/clear first → fresh context window</sub>
+/gsd-phase --insert <N> "Close gap: <REQ-ID> — <description>"
+/gsd-discuss-phase <N>
+/gsd-plan-phase <N>
+/gsd-execute-phase <N>
+
+For Nyquist-coverage gaps flagged in the table above, prefer running
+`/gsd-validate-phase <N>` for each flagged phase (and `/gsd-secure-phase
+<N>` if SECURITY.md was flagged) before inserting a new closure phase —
+they may close the gap retroactively without a new phase.
 
 ───────────────────────────────────────────────────────────────
 
 **Also available:**
 - cat .planning/v{version}-MILESTONE-AUDIT.md — see full report
-- /gsd:complete-milestone {version} — proceed anyway (accept tech debt)
+- /gsd-complete-milestone {version} — proceed anyway (accept tech debt)
 
 ───────────────────────────────────────────────────────────────
 
@@ -312,13 +325,17 @@ All requirements met. No critical blockers. Accumulated tech debt needs review.
 
 **A. Complete milestone** — accept debt, track in backlog
 
-/gsd:complete-milestone {version}
+/gsd-complete-milestone {version}
 
-**B. Plan cleanup phase** — address debt before completing
+**B. Plan a cleanup phase** — address the debt above before completing.
+Insert a closure phase using the standard chain:
 
-/gsd:plan-milestone-gaps
+/clear then:
 
-<sub>/clear first → fresh context window</sub>
+/gsd-phase --insert <N> "Address tech debt: <area>"
+/gsd-discuss-phase <N>
+/gsd-plan-phase <N>
+/gsd-execute-phase <N>
 
 ───────────────────────────────────────────────────────────────
 </offer_next>

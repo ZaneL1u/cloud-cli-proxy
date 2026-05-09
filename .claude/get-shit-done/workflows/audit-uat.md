@@ -8,7 +8,7 @@ Cross-phase audit of all UAT and verification files. Finds every outstanding ite
 Run the CLI audit:
 
 ```bash
-AUDIT=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" audit-uat --raw)
+AUDIT=$(gsd-sdk query audit-uat --raw)
 ```
 
 Parse JSON for `results` array and `summary` object.
@@ -76,9 +76,9 @@ Present the audit report:
 
 ## Recommended Actions
 
-1. **Close stale items:** `/gsd:verify-work {phase}` — mark stale tests as resolved
+1. **Close stale items:** `/gsd-verify-work {phase}` — mark stale tests as resolved
 2. **Run active tests:** Human UAT test plan below
-3. **When prerequisites met:** Retest blocked items with `/gsd:verify-work {phase}`
+3. **When prerequisites met:** Retest blocked items with `/gsd-verify-work {phase}`
 ```
 </step>
 

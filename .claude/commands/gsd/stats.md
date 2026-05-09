@@ -10,9 +10,9 @@ Display comprehensive project statistics including phase progress, plan executio
 </objective>
 
 <execution_context>
-@/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/workflows/stats.md
+@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/stats.md
 </execution_context>
 
 <process>
-Execute the stats workflow from @/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/workflows/stats.md end-to-end.
+Execute end-to-end.
 </process>

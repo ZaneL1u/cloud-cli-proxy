@@ -27,16 +27,54 @@ Documents are reference material for Claude when planning/executing. Always incl
 
 <process>
 
+<step name="parse_paths_flag" priority="first">
+Parse an optional `--paths <p1,p2,...>` argument. When supplied (by the
+post-execute codebase-drift gate in `/gsd-execute-phase` or by a user running
+`/gsd-map-codebase --paths apps/accounting,packages/ui`), the workflow
+operates in **incremental-remap mode**:
+
+- Pass `--paths <p1>,<p2>,...` through to each spawned `gsd-codebase-mapper`
+  agent's prompt. Agents scope their Glob/Grep/Bash exploration to the listed
+  repo-relative prefixes only — no whole-repo scan.
+- Reject path values that contain `..`, start with `/`, or include shell
+  metacharacters (`;`, `` ` ``, `$`, `&`, `|`, `<`, `>`). If all provided
+  paths are invalid, fall back to a normal whole-repo run.
+- On write, each mapper stamps `last_mapped_commit: <HEAD sha>` into the YAML
+  frontmatter of every document it produces (see `bin/lib/drift.cjs:writeMappedCommit`).
+
+**Explicit contract — propagate `--paths` through a single normalized
+variable.** Downstream steps (`spawn_agents`, `sequential_mapping`, and any
+Agent-mode prompt construction) MUST use `${PATH_SCOPE_HINT}` to ensure every
+mapper receives the same deterministic scope. Without this contract
+incremental-remap can silently regress to a whole-repo scan.
+
+```bash
+# Validated, comma-separated paths (empty if --paths absent or all rejected):
+SCOPED_PATHS="<validated paths or empty>"
+if [ -n "$SCOPED_PATHS" ]; then
+  PATH_SCOPE_HINT="--paths $SCOPED_PATHS"
+else
+  PATH_SCOPE_HINT=""
+fi
+```
+
+All mapper prompts built later in this workflow MUST include
+`${PATH_SCOPE_HINT}` (expanded to empty when full-repo mode is in effect).
+
+When `--paths` is absent, behave exactly as before: full-repo scan, all 7
+documents refreshed.
+</step>
+
 <step name="init_context" priority="first">
 Load codebase mapping context:
 
 ```bash
-INIT=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" init map-codebase)
+INIT=$(gsd-sdk query init.map-codebase)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
-AGENT_SKILLS_MAPPER=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" agent-skills gsd-codebase-mapper 2>/dev/null)
+AGENT_SKILLS_MAPPER=$(gsd-sdk query agent-skills gsd-codebase-mapper)
 ```
 
-Extract from init JSON: `mapper_model`, `commit_docs`, `codebase_dir`, `existing_maps`, `has_maps`, `codebase_dir_exists`.
+Extract from init JSON: `mapper_model`, `commit_docs`, `codebase_dir`, `existing_maps`, `has_maps`, `codebase_dir_exists`, `subagent_timeout`, `date`.
 </step>
 
 <step name="check_existing">
@@ -89,37 +127,42 @@ Continue to spawn_agents.
 </step>
 
 <step name="detect_runtime_capabilities">
-Before spawning agents, detect whether the current runtime supports the `Task` tool for subagent delegation.
+Before spawning agents, detect whether the current runtime supports the `Agent` tool for subagent delegation.
 
-**How to detect:** Check if you have access to a `Task` tool (may be capitalized as `Task` or lowercase as `task` depending on runtime). If you do NOT have a `Task`/`task` tool (or only have tools like `browser_subagent` which is for web browsing, NOT code analysis):
+**How to detect:** Check if you have access to an `Agent` tool (may be capitalized as `Agent` or lowercase as `agent` depending on runtime). If you do NOT have an `Agent`/`agent` tool (or only have tools like `browser_subagent` which is for web browsing, NOT code analysis):
 
 → **Skip `spawn_agents` and `collect_confirmations`** — go directly to `sequential_mapping` instead.
 
-**CRITICAL:** Never use `browser_subagent` or `Explore` as a substitute for `Task`. The `browser_subagent` tool is exclusively for web page interaction and will fail for codebase analysis. If `Task` is unavailable, perform the mapping sequentially in-context.
+**CRITICAL:** Never use `browser_subagent` or `Explore` as a substitute for `Agent`. The `browser_subagent` tool is exclusively for web page interaction and will fail for codebase analysis. If `Agent` is unavailable, perform the mapping sequentially in-context.
 </step>
 
-<step name="spawn_agents" condition="Task tool is available">
+<step name="spawn_agents" condition="Agent tool is available">
 Spawn 4 parallel gsd-codebase-mapper agents.
 
-Use Task tool with `subagent_type="gsd-codebase-mapper"`, `model="{mapper_model}"`, and `run_in_background=true` for parallel execution.
+Use Agent tool with `subagent_type="gsd-codebase-mapper"`, `model="{mapper_model}"`, and `run_in_background=true` for parallel execution.
 
 **CRITICAL:** Use the dedicated `gsd-codebase-mapper` agent, NOT `Explore` or `browser_subagent`. The mapper agent writes documents directly.
 
 **Agent 1: Tech Focus**
 
-```
-Task(
+```text
+Agent(
   subagent_type="gsd-codebase-mapper",
   model="{mapper_model}",
   run_in_background=true,
   description="Map codebase tech stack",
   prompt="Focus: tech
+Today's date: {date}
 
 Analyze this codebase for technology stack and external integrations.
 
 Write these documents to .planning/codebase/:
 - STACK.md - Languages, runtime, frameworks, dependencies, configuration
 - INTEGRATIONS.md - External APIs, databases, auth providers, webhooks
+
+IMPORTANT: Use {date} for all [YYYY-MM-DD] date placeholders in documents.
+
+Scope: ${PATH_SCOPE_HINT:-(full repo)} — when --paths is supplied, restrict exploration to those prefixes only.
 
 Explore thoroughly. Write documents directly using templates. Return confirmation only.
 ${AGENT_SKILLS_MAPPER}"
@@ -128,19 +171,24 @@ ${AGENT_SKILLS_MAPPER}"
 
 **Agent 2: Architecture Focus**
 
-```
-Task(
+```text
+Agent(
   subagent_type="gsd-codebase-mapper",
   model="{mapper_model}",
   run_in_background=true,
   description="Map codebase architecture",
   prompt="Focus: arch
+Today's date: {date}
 
 Analyze this codebase architecture and directory structure.
 
 Write these documents to .planning/codebase/:
 - ARCHITECTURE.md - Pattern, layers, data flow, abstractions, entry points
 - STRUCTURE.md - Directory layout, key locations, naming conventions
+
+IMPORTANT: Use {date} for all [YYYY-MM-DD] date placeholders in documents.
+
+Scope: ${PATH_SCOPE_HINT:-(full repo)} — when --paths is supplied, restrict exploration to those prefixes only.
 
 Explore thoroughly. Write documents directly using templates. Return confirmation only.
 ${AGENT_SKILLS_MAPPER}"
@@ -149,19 +197,24 @@ ${AGENT_SKILLS_MAPPER}"
 
 **Agent 3: Quality Focus**
 
-```
-Task(
+```text
+Agent(
   subagent_type="gsd-codebase-mapper",
   model="{mapper_model}",
   run_in_background=true,
   description="Map codebase conventions",
   prompt="Focus: quality
+Today's date: {date}
 
 Analyze this codebase for coding conventions and testing patterns.
 
 Write these documents to .planning/codebase/:
 - CONVENTIONS.md - Code style, naming, patterns, error handling
 - TESTING.md - Framework, structure, mocking, coverage
+
+IMPORTANT: Use {date} for all [YYYY-MM-DD] date placeholders in documents.
+
+Scope: ${PATH_SCOPE_HINT:-(full repo)} — when --paths is supplied, restrict exploration to those prefixes only.
 
 Explore thoroughly. Write documents directly using templates. Return confirmation only.
 ${AGENT_SKILLS_MAPPER}"
@@ -171,22 +224,29 @@ ${AGENT_SKILLS_MAPPER}"
 **Agent 4: Concerns Focus**
 
 ```
-Task(
+Agent(
   subagent_type="gsd-codebase-mapper",
   model="{mapper_model}",
   run_in_background=true,
   description="Map codebase concerns",
   prompt="Focus: concerns
+Today's date: {date}
 
 Analyze this codebase for technical debt, known issues, and areas of concern.
 
 Write this document to .planning/codebase/:
 - CONCERNS.md - Tech debt, bugs, security, performance, fragile areas
 
+IMPORTANT: Use {date} for all [YYYY-MM-DD] date placeholders in documents.
+
+Scope: ${PATH_SCOPE_HINT:-(full repo)} — when --paths is supplied, restrict exploration to those prefixes only.
+
 Explore thoroughly. Write document directly using template. Return confirmation only.
 ${AGENT_SKILLS_MAPPER}"
 )
 ```
+
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling all 4 Agent() calls above with `run_in_background=true`, do NOT read any source files, analyze the codebase, or write any mapping documents independently while the subagents are active. Wait for all 4 agents to complete before proceeding to collect_confirmations. This prevents duplicate work and wasted context.
 
 Continue to collect_confirmations.
 </step>
@@ -199,8 +259,10 @@ Wait for all 4 agents to complete using TaskOutput tool.
 TaskOutput tool:
   task_id: "{task_id from Agent result}"
   block: true
-  timeout: 300000
+  timeout: {subagent_timeout from init context, default 300000}
 ```
+
+> The timeout is configurable via `workflow.subagent_timeout` in `.planning/config.json` (milliseconds). Default: 300000 (5 minutes). Increase for large codebases or slower models.
 
 Call TaskOutput for all 4 agents in parallel (single message with 4 TaskOutput calls).
 
@@ -225,10 +287,14 @@ If any agent failed, note the failure and continue with successful documents.
 Continue to verify_output.
 </step>
 
-<step name="sequential_mapping" condition="Task tool is NOT available (e.g. Antigravity, Gemini CLI, Codex)">
-When the `Task` tool is unavailable, perform codebase mapping sequentially in the current context. This replaces `spawn_agents` and `collect_confirmations`.
+<step name="sequential_mapping" condition="Agent tool is NOT available (e.g. Antigravity, Gemini CLI, Codex)">
+When the `Agent` tool is unavailable, perform codebase mapping sequentially in the current context. This replaces `spawn_agents` and `collect_confirmations`.
 
 **IMPORTANT:** Do NOT use `browser_subagent`, `Explore`, or any browser-based tool. Use only file system tools (Read, Bash, Write, Grep, Glob, list_dir, view_file, grep_search, or equivalent tools available in your runtime).
+
+**IMPORTANT:** Use `{date}` from init context for all `[YYYY-MM-DD]` date placeholders in documents. NEVER guess the date.
+
+**SCOPE:** When `${PATH_SCOPE_HINT}` is non-empty (i.e. `--paths` was supplied), restrict every pass below to the validated path prefixes in `${SCOPED_PATHS}`. Do NOT scan files outside those prefixes. When `${PATH_SCOPE_HINT}` is empty, perform a full-repo scan.
 
 Perform all 4 mapping passes sequentially:
 
@@ -312,7 +378,7 @@ Continue to commit_codebase_map.
 Commit the codebase map:
 
 ```bash
-node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs: map existing codebase" --files .planning/codebase/*.md
+gsd-sdk query commit "docs: map existing codebase" --files .planning/codebase/*.md
 ```
 
 Continue to offer_next.
@@ -343,18 +409,18 @@ Created .planning/codebase/:
 
 ---
 
-## ▶ Next Up
+## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
 
 **Initialize project** — use codebase context for planning
 
-`/gsd:new-project`
+`/clear` then:
 
-<sub>`/clear` first → fresh context window</sub>
+`/gsd-new-project`
 
 ---
 
 **Also available:**
-- Re-run mapping: `/gsd:map-codebase`
+- Re-run mapping: `/gsd-map-codebase`
 - Review specific file: `cat .planning/codebase/STACK.md`
 - Edit any document before proceeding
 
@@ -368,8 +434,8 @@ End workflow.
 
 <success_criteria>
 - .planning/codebase/ directory created
-- If Task tool available: 4 parallel gsd-codebase-mapper agents spawned with run_in_background=true
-- If Task tool NOT available: 4 sequential mapping passes performed inline (never using browser_subagent)
+- If Agent tool available: 4 parallel gsd-codebase-mapper agents spawned with run_in_background=true
+- If Agent tool NOT available: 4 sequential mapping passes performed inline (never using browser_subagent)
 - All 7 codebase documents exist
 - No empty documents (each should have >20 lines)
 - Clear completion summary with line counts

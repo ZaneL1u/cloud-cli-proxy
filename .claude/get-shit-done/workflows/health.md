@@ -11,21 +11,60 @@ Read all files referenced by the invoking prompt's execution_context before star
 <step name="parse_args">
 **Parse arguments:**
 
-Check if `--repair` flag is present in the command arguments.
+Check if `--repair`, `--backfill`, or `--context` flags are present in the command arguments.
 
 ```
 REPAIR_FLAG=""
+BACKFILL_FLAG=""
+CONTEXT_MODE=""
 if arguments contain "--repair"; then
   REPAIR_FLAG="--repair"
 fi
+if arguments contain "--backfill"; then
+  BACKFILL_FLAG="--backfill"
+fi
+if arguments contain "--context"; then
+  CONTEXT_MODE="true"
+fi
 ```
+
+If `CONTEXT_MODE` is set, jump to the `context_check` step and skip the
+integrity validation steps. The two modes are orthogonal — context utilization
+has nothing to do with `.planning/` directory health.
+</step>
+
+<step name="context_check">
+**Run only when `--context` is set.**
+
+The model running this workflow self-reports the current session's
+approximate `tokensUsed` and the active model's `contextWindow`. Use the values
+visible in your runtime (Claude Code's `/context` slash command output, or the
+model's own session telemetry). If the runtime exposes neither, prompt the user
+once via AskUserQuestion for both numbers.
+
+**TEXT_MODE fallback:** when `text_mode` is true (config or `--text` flag) the
+runtime is non-Claude (Codex, Gemini, etc.) and `AskUserQuestion` is not
+available — replace the prompt with a plain-text two-question sequence
+("Approximate tokens used? Context window size?") and read the answers as
+plain text from the user's response.
+
+```bash
+gsd-sdk query validate.context \
+  --tokens-used "$TOKENS_USED" \
+  --context-window "$CONTEXT_WINDOW"
+```
+
+The query prints a one-line status (`Context utilization: NN% (state)`) plus
+a recommendation line for the warning and critical states. Print the SDK
+output verbatim and end the workflow — do **not** mix in `.planning/`
+health output, the two modes are independent diagnostics.
 </step>
 
 <step name="run_health_check">
 **Run health validation:**
 
 ```bash
-node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" validate health $REPAIR_FLAG
+gsd-sdk query validate.health $REPAIR_FLAG $BACKFILL_FLAG
 ```
 
 Parse JSON output:
@@ -62,10 +101,10 @@ Errors: N | Warnings: N | Info: N
 ## Errors
 
 - [E001] config.json: JSON parse error at line 5
-  Fix: Run /gsd:health --repair to reset to defaults
+  Fix: Run /gsd-health --repair to reset to defaults
 
 - [E002] PROJECT.md not found
-  Fix: Run /gsd:new-project to create
+  Fix: Run /gsd-new-project to create
 ```
 
 **If warnings exist:**
@@ -90,7 +129,7 @@ Errors: N | Warnings: N | Info: N
 **Footer (if repairable issues exist and --repair was NOT used):**
 ```
 ---
-N issues can be auto-repaired. Run: /gsd:health --repair
+N issues can be auto-repaired. Run: /gsd-health --repair
 ```
 </step>
 
@@ -100,7 +139,7 @@ N issues can be auto-repaired. Run: /gsd:health --repair
 Ask user if they want to run repairs:
 
 ```
-Would you like to run /gsd:health --repair to fix N issues automatically?
+Would you like to run /gsd-health --repair to fix N issues automatically?
 ```
 
 If yes, re-run with --repair flag and display results.
@@ -112,7 +151,7 @@ If yes, re-run with --repair flag and display results.
 Re-run health check without --repair to confirm issues are resolved:
 
 ```bash
-node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" validate health
+gsd-sdk query validate.health
 ```
 
 Report final status.
@@ -138,6 +177,8 @@ Report final status.
 | W007 | warning | Phase on disk but not in ROADMAP | No |
 | W008 | warning | config.json: workflow.nyquist_validation absent (defaults to enabled but agents may skip) | Yes |
 | W009 | warning | Phase has Validation Architecture in RESEARCH.md but no VALIDATION.md | No |
+| W018 | warning | MILESTONES.md missing entry for archived milestone snapshot | Yes (`--backfill`) |
+| W019 | warning | Unrecognized .planning/ root file — not a canonical GSD artifact | No |
 | I001 | info | Plan without SUMMARY (may be in progress) | No |
 
 </error_codes>
@@ -150,6 +191,7 @@ Report final status.
 | resetConfig | Delete + recreate config.json | Loses custom settings |
 | regenerateState | Create STATE.md from ROADMAP structure when it is missing | Loses session history |
 | addNyquistKey | Add workflow.nyquist_validation: true to config.json | None — matches existing default |
+| backfillMilestones | Synthesize missing MILESTONES.md entries from `.planning/milestones/vX.Y-ROADMAP.md` snapshots | None — additive only; triggered by `--backfill` flag |
 
 **Not repairable (too risky):**
 - PROJECT.md, ROADMAP.md content
@@ -166,13 +208,13 @@ When `--repair` is active, detect and clean up:
 
 ```bash
 # Check for stale task directories (older than 24 hours)
-TASKS_DIR="/workspace/Desktop/cloud-cli-proxy/.claude/tasks"
+TASKS_DIR="/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/tasks"
 if [ -d "$TASKS_DIR" ]; then
   STALE_COUNT=$( (find "$TASKS_DIR" -maxdepth 1 -type d -mtime +1 2>/dev/null || true) | wc -l )
   if [ "$STALE_COUNT" -gt 0 ]; then
-    echo "⚠️  Found $STALE_COUNT stale task directories in /workspace/Desktop/cloud-cli-proxy/.claude/tasks/"
+    echo "⚠️  Found $STALE_COUNT stale task directories in /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/tasks/"
     echo "   These are leftover from crashed subagent sessions."
-    echo "   Run: rm -rf /workspace/Desktop/cloud-cli-proxy/.claude/tasks/*  (safe — only affects dead sessions)"
+    echo "   Run: rm -rf /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/tasks/*  (safe — only affects dead sessions)"
   fi
 fi
 ```

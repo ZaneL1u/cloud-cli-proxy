@@ -66,6 +66,14 @@ None yet.
 
 None yet.
 
+## Deferred Items
+
+Items acknowledged and carried forward from previous milestone close:
+
+| Category | Item | Status | Deferred At |
+|----------|------|--------|-------------|
+| *(none)* | | | |
+
 ## Session Continuity
 
 Last session: [YYYY-MM-DD HH:MM]
@@ -145,10 +153,10 @@ Updated after each plan completion.
 
 **Decisions:** Reference to PROJECT.md Key Decisions table, plus recent decisions summary for quick access. Full decision log lives in PROJECT.md.
 
-**Pending Todos:** Ideas captured via /gsd:add-todo
+**Pending Todos:** Ideas captured via /gsd-add-todo
 - Count of pending todos
 - Reference to .planning/todos/pending/
-- Brief list if few, count if many (e.g., "5 pending todos — see /gsd:check-todos")
+- Brief list if few, count if many (e.g., "5 pending todos — see /gsd-capture --list")
 
 **Blockers/Concerns:** From "Next Phase Readiness" sections
 - Issues that affect future work

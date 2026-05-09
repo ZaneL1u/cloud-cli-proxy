@@ -12,14 +12,14 @@ Read all files referenced by the invoking prompt's execution_context before star
 **Load progress context (paths only):**
 
 ```bash
-INIT=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" init progress)
+INIT=$(gsd-sdk query init.progress)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
 Extract from init JSON: `project_exists`, `roadmap_exists`, `state_exists`, `phases`, `current_phase`, `next_phase`, `milestone_version`, `completed_count`, `phase_count`, `paused_at`, `state_path`, `roadmap_path`, `project_path`, `config_path`.
 
 ```bash
-DISCUSS_MODE=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.discuss_mode 2>/dev/null || echo "discuss")
+DISCUSS_MODE=$(gsd-sdk query config-get workflow.discuss_mode 2>/dev/null || echo "discuss")
 ```
 
 If `project_exists` is false (no `.planning/` directory):
@@ -27,26 +27,26 @@ If `project_exists` is false (no `.planning/` directory):
 ```
 No planning structure found.
 
-Run /gsd:new-project to start a new project.
+Run /gsd-new-project to start a new project.
 ```
 
 Exit.
 
-If missing STATE.md: suggest `/gsd:new-project`.
+If missing STATE.md: suggest `/gsd-new-project`.
 
 **If ROADMAP.md missing but PROJECT.md exists:**
 
 This means a milestone was completed and archived. Go to **Route F** (between milestones).
 
-If missing both ROADMAP.md and PROJECT.md: suggest `/gsd:new-project`.
+If missing both ROADMAP.md and PROJECT.md: suggest `/gsd-new-project`.
 </step>
 
 <step name="load">
-**Use structured extraction from gsd-tools:**
+**Use structured extraction from `gsd-sdk query` (or legacy gsd-tools.cjs):**
 
 Instead of reading full files, use targeted tools to get only the data needed for the report:
-- `ROADMAP=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap analyze)`
-- `STATE=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" state-snapshot)`
+- `ROADMAP=$(gsd-sdk query roadmap.analyze)`
+- `STATE=$(gsd-sdk query state-snapshot)`
 
 This minimizes orchestrator context usage.
 </step>
@@ -55,7 +55,7 @@ This minimizes orchestrator context usage.
 **Get comprehensive roadmap analysis (replaces manual parsing):**
 
 ```bash
-ROADMAP=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap analyze)
+ROADMAP=$(gsd-sdk query roadmap.analyze)
 ```
 
 This returns structured JSON with:
@@ -74,7 +74,7 @@ Use this instead of manually reading/parsing ROADMAP.md.
 - Find the 2-3 most recent SUMMARY.md files
 - Use `summary-extract` for efficient parsing:
   ```bash
-  node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" summary-extract <path> --fields one_liner
+  gsd-sdk query summary-extract <path> --fields one_liner
   ```
 - This shows "what we've been working on"
   </step>
@@ -89,11 +89,16 @@ Use this instead of manually reading/parsing ROADMAP.md.
   </step>
 
 <step name="report">
-**Generate progress bar from gsd-tools, then present rich status report:**
+> ⚠️ Context authority: PROJECT.md, STATE.md, and ROADMAP.md are the authoritative sources
+> for project name, milestone, current phase, and next-step routing. CLAUDE.md ## Project
+> blocks are a secondary config aid that may be significantly stale — do NOT use the
+> CLAUDE.md project description as a source for any progress report field.
+
+**Generate progress bar from `gsd-sdk query progress` / `progress.json`, then present rich status report:**
 
 ```bash
 # Get formatted progress bar
-PROGRESS_BAR=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" progress bar --raw)
+PROGRESS_BAR=$(gsd-sdk query progress.bar --raw)
 ```
 
 Present:
@@ -123,16 +128,41 @@ CONTEXT: [✓ if has_context | - if not]
 - [e.g. jq -r '.blockers[].text' from state-snapshot]
 
 ## Pending Todos
-- [count] pending — /gsd:check-todos to review
+- [count] pending — /gsd-capture --list to review
 
 ## Active Debug Sessions
-- [count] active — /gsd:debug to continue
+- [count] active — /gsd-debug to continue
 (Only show this section if count > 0)
 
 ## What's Next
 [Next phase/plan objective from roadmap analyze]
 ```
 
+</step>
+
+<step name="mvp_display">
+**MVP-mode display (when phase has `**Mode:** mvp` in ROADMAP.md).**
+
+Resolve `MVP_MODE` per phase via the centralized resolver. progress has no `--mvp` CLI flag (mode is inherited from the planned phase), so we omit `--cli-flag`:
+
+```bash
+MVP_MODE=$(gsd-sdk query phase.mvp-mode "${PHASE_NUMBER}" --pick active)
+```
+
+When `MVP_MODE=true`, the per-phase progress block adds a **user-flow status** sub-block sourced from the phase's PLAN.md task names. Each task whose name reads like a user-visible capability (e.g., "Register flow", "Login flow", "Password reset") is rendered as a status line:
+
+```
+Phase 1 — User Auth MVP
+  ✅ Walking Skeleton complete           ← from SKELETON.md existence
+  ✅ Register flow working               ← from PLAN.md task with summary
+  ✅ Login flow working                  ← from PLAN.md task with summary
+  🔄 Password reset (in progress)        ← from PLAN.md task without summary
+  ⬜ Email verification                  ← from PLAN.md task not yet started
+```
+
+**User-flow filter:** Tasks whose names are technical-sounding ("Wire DB schema", "Create migration", "Bump deps") are NOT rendered as user-flow status lines. Heuristic: a task name is user-flow-shaped if it ends in "flow", "page", "screen", or starts with a verb the user would recognize ("Register", "Login", "Upload", "View"). Tasks that fail the heuristic still count toward the standard task progress total but don't appear in the user-flow sub-block.
+
+When `MVP_MODE=false` (mode is null, absent, or the phase has no `**Mode:**` line), fall back to the standard display path — no behavioral change.
 </step>
 
 <step name="route">
@@ -168,7 +198,7 @@ Track:
 Scan ALL phases in the current milestone for outstanding verification debt using the CLI (which respects milestone boundaries via `getMilestonePhaseFilter`):
 
 ```bash
-DEBT=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" audit-uat --raw 2>/dev/null)
+DEBT=$(gsd-sdk query audit-uat --raw 2>/dev/null)
 ```
 
 Parse JSON for `summary.total_items` and `summary.total_files`.
@@ -185,8 +215,8 @@ Track: `outstanding_debt` — `summary.total_items` from the audit.
 | {phase} | {filename} | {pending_count} pending, {skipped_count} skipped, {blocked_count} blocked |
 | {phase} | {filename} | human_needed — {count} items |
 
-Review: `/gsd:audit-uat ${GSD_WS}` — full cross-phase audit
-Resume testing: `/gsd:verify-work {phase} ${GSD_WS}` — retest specific phase
+Review: `/gsd-audit-uat ${GSD_WS}` — full cross-phase audit
+Resume testing: `/gsd-verify-work {phase} ${GSD_WS}` — retest specific phase
 ```
 
 This is a WARNING, not a blocker — routing proceeds normally. The debt is visible so the user can make an informed choice.
@@ -211,13 +241,13 @@ Read its `<objective>` section.
 ```
 ---
 
-## ▶ Next Up
+## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
 
 **{phase}-{plan}: [Plan Name]** — [objective summary from PLAN.md]
 
-`/gsd:execute-phase {phase} ${GSD_WS}`
+`/clear` then:
 
-<sub>`/clear` first → fresh context window</sub>
+`/gsd-execute-phase {phase} ${GSD_WS}`
 
 ---
 ```
@@ -231,7 +261,7 @@ Check if `{phase_num}-CONTEXT.md` exists in phase directory.
 Check if current phase has UI indicators:
 
 ```bash
-PHASE_SECTION=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase "${CURRENT_PHASE}" 2>/dev/null)
+PHASE_SECTION=$(gsd-sdk query roadmap.get-phase "${CURRENT_PHASE}" 2>/dev/null)
 PHASE_HAS_UI=$(echo "$PHASE_SECTION" | grep -qi "UI hint.*yes" && echo "true" || echo "false")
 ```
 
@@ -240,14 +270,14 @@ PHASE_HAS_UI=$(echo "$PHASE_SECTION" | grep -qi "UI hint.*yes" && echo "true" ||
 ```
 ---
 
-## ▶ Next Up
+## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
 
 **Phase {N}: {Name}** — {Goal from ROADMAP.md}
 <sub>✓ Context gathered, ready to plan</sub>
 
-`/gsd:plan-phase {phase-number} ${GSD_WS}`
+`/clear` then:
 
-<sub>`/clear` first → fresh context window</sub>
+`/gsd-plan-phase {phase-number} ${GSD_WS}`
 
 ---
 ```
@@ -257,20 +287,20 @@ PHASE_HAS_UI=$(echo "$PHASE_SECTION" | grep -qi "UI hint.*yes" && echo "true" ||
 ```
 ---
 
-## ▶ Next Up
+## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
 
 **Phase {N}: {Name}** — {Goal from ROADMAP.md}
 
-`/gsd:discuss-phase {phase}` — gather context and clarify approach
+`/clear` then:
 
-<sub>`/clear` first → fresh context window</sub>
+`/gsd-discuss-phase {phase}` — gather context and clarify approach
 
 ---
 
 **Also available:**
-- `/gsd:ui-phase {phase}` — generate UI design contract (recommended for frontend phases)
-- `/gsd:plan-phase {phase}` — skip discussion, plan directly
-- `/gsd:list-phase-assumptions {phase}` — see Claude's assumptions
+- `/gsd-ui-phase {phase}` — generate UI design contract (recommended for frontend phases)
+- `/gsd-plan-phase {phase}` — skip discussion, plan directly
+- `/gsd-discuss-phase {phase}` — include assumptions check before planning
 
 ---
 ```
@@ -280,19 +310,19 @@ PHASE_HAS_UI=$(echo "$PHASE_SECTION" | grep -qi "UI hint.*yes" && echo "true" ||
 ```
 ---
 
-## ▶ Next Up
+## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
 
 **Phase {N}: {Name}** — {Goal from ROADMAP.md}
 
-`/gsd:discuss-phase {phase} ${GSD_WS}` — gather context and clarify approach
+`/clear` then:
 
-<sub>`/clear` first → fresh context window</sub>
+`/gsd-discuss-phase {phase} ${GSD_WS}` — gather context and clarify approach
 
 ---
 
 **Also available:**
-- `/gsd:plan-phase {phase} ${GSD_WS}` — skip discussion, plan directly
-- `/gsd:list-phase-assumptions {phase} ${GSD_WS}` — see Claude's assumptions
+- `/gsd-plan-phase {phase} ${GSD_WS}` — skip discussion, plan directly
+- `/gsd-discuss-phase {phase} ${GSD_WS}` — include assumptions check before planning
 
 ---
 ```
@@ -310,15 +340,15 @@ UAT.md exists with gaps (diagnosed issues). User needs to plan fixes.
 
 **{phase_num}-UAT.md** has {N} gaps requiring fixes.
 
-`/gsd:plan-phase {phase} --gaps ${GSD_WS}`
+`/clear` then:
 
-<sub>`/clear` first → fresh context window</sub>
+`/gsd-plan-phase {phase} --gaps ${GSD_WS}`
 
 ---
 
 **Also available:**
-- `/gsd:execute-phase {phase} ${GSD_WS}` — execute phase plans
-- `/gsd:verify-work {phase} ${GSD_WS}` — run more UAT testing
+- `/gsd-execute-phase {phase} ${GSD_WS}` — execute phase plans
+- `/gsd-verify-work {phase} ${GSD_WS}` — run more UAT testing
 
 ---
 ```
@@ -336,15 +366,15 @@ UAT.md exists with `status: partial` — testing session ended before all items 
 
 **{phase_num}-UAT.md** has {N} unresolved tests (pending, blocked, or skipped).
 
-`/gsd:verify-work {phase} ${GSD_WS}` — resume testing from where you left off
+`/clear` then:
 
-<sub>`/clear` first → fresh context window</sub>
+`/gsd-verify-work {phase} ${GSD_WS}` — resume testing from where you left off
 
 ---
 
 **Also available:**
-- `/gsd:audit-uat ${GSD_WS}` — full cross-phase UAT audit
-- `/gsd:execute-phase {phase} ${GSD_WS}` — execute phase plans
+- `/gsd-audit-uat ${GSD_WS}` — full cross-phase UAT audit
+- `/gsd-execute-phase {phase} ${GSD_WS}` — execute phase plans
 
 ---
 ```
@@ -377,7 +407,7 @@ Read ROADMAP.md to get the next phase's name and goal.
 Check if next phase has UI indicators:
 
 ```bash
-NEXT_PHASE_SECTION=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase "$((Z+1))" 2>/dev/null)
+NEXT_PHASE_SECTION=$(gsd-sdk query roadmap.get-phase "$((Z+1))" 2>/dev/null)
 NEXT_HAS_UI=$(echo "$NEXT_PHASE_SECTION" | grep -qi "UI hint.*yes" && echo "true" || echo "false")
 ```
 
@@ -388,20 +418,20 @@ NEXT_HAS_UI=$(echo "$NEXT_PHASE_SECTION" | grep -qi "UI hint.*yes" && echo "true
 
 ## ✓ Phase {Z} Complete
 
-## ▶ Next Up
+## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
 
 **Phase {Z+1}: {Name}** — {Goal from ROADMAP.md}
 
-`/gsd:discuss-phase {Z+1}` — gather context and clarify approach
+`/clear` then:
 
-<sub>`/clear` first → fresh context window</sub>
+`/gsd-discuss-phase {Z+1}` — gather context and clarify approach
 
 ---
 
 **Also available:**
-- `/gsd:ui-phase {Z+1}` — generate UI design contract (recommended for frontend phases)
-- `/gsd:plan-phase {Z+1}` — skip discussion, plan directly
-- `/gsd:verify-work {Z}` — user acceptance test before continuing
+- `/gsd-ui-phase {Z+1}` — generate UI design contract (recommended for frontend phases)
+- `/gsd-plan-phase {Z+1}` — skip discussion, plan directly
+- `/gsd-verify-work {Z}` — user acceptance test before continuing
 
 ---
 ```
@@ -413,19 +443,19 @@ NEXT_HAS_UI=$(echo "$NEXT_PHASE_SECTION" | grep -qi "UI hint.*yes" && echo "true
 
 ## ✓ Phase {Z} Complete
 
-## ▶ Next Up
+## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
 
 **Phase {Z+1}: {Name}** — {Goal from ROADMAP.md}
 
-`/gsd:discuss-phase {Z+1} ${GSD_WS}` — gather context and clarify approach
+`/clear` then:
 
-<sub>`/clear` first → fresh context window</sub>
+`/gsd-discuss-phase {Z+1} ${GSD_WS}` — gather context and clarify approach
 
 ---
 
 **Also available:**
-- `/gsd:plan-phase {Z+1} ${GSD_WS}` — skip discussion, plan directly
-- `/gsd:verify-work {Z} ${GSD_WS}` — user acceptance test before continuing
+- `/gsd-plan-phase {Z+1} ${GSD_WS}` — skip discussion, plan directly
+- `/gsd-verify-work {Z} ${GSD_WS}` — user acceptance test before continuing
 
 ---
 ```
@@ -441,18 +471,18 @@ NEXT_HAS_UI=$(echo "$NEXT_PHASE_SECTION" | grep -qi "UI hint.*yes" && echo "true
 
 All {N} phases finished!
 
-## ▶ Next Up
+## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
 
 **Complete Milestone** — archive and prepare for next
 
-`/gsd:complete-milestone ${GSD_WS}`
+`/clear` then:
 
-<sub>`/clear` first → fresh context window</sub>
+`/gsd-complete-milestone ${GSD_WS}`
 
 ---
 
 **Also available:**
-- `/gsd:verify-work ${GSD_WS}` — user acceptance test before completing milestone
+- `/gsd-verify-work ${GSD_WS}` — user acceptance test before completing milestone
 
 ---
 ```
@@ -472,13 +502,13 @@ Read MILESTONES.md to find the last completed milestone version.
 
 Ready to plan the next milestone.
 
-## ▶ Next Up
+## ▶ Next Up — [${PROJECT_CODE}] ${PROJECT_TITLE}
 
 **Start Next Milestone** — questioning → research → requirements → roadmap
 
-`/gsd:new-milestone ${GSD_WS}`
+`/clear` then:
 
-<sub>`/clear` first → fresh context window</sub>
+`/gsd-new-milestone ${GSD_WS}`
 
 ---
 ```
@@ -488,11 +518,123 @@ Ready to plan the next milestone.
 <step name="edge_cases">
 **Handle edge cases:**
 
-- Phase complete but next phase not planned → offer `/gsd:plan-phase [next] ${GSD_WS}`
+- Phase complete but next phase not planned → offer `/gsd-plan-phase [next] ${GSD_WS}`
 - All work complete → offer milestone completion
 - Blockers present → highlight before offering to continue
-- Handoff file exists → mention it, offer `/gsd:resume-work ${GSD_WS}`
-  </step>
+- Handoff file exists → mention it, offer `/gsd-resume-work ${GSD_WS}`
+</step>
+
+<step name="forensic_audit">
+**Forensic Integrity Audit** — only runs when `--forensic` is present in ARGUMENTS.
+
+If `--forensic` is NOT present in ARGUMENTS: skip this step entirely. Default progress behavior (standard report + routing) is unchanged.
+
+If `--forensic` IS present: after the standard report and routing suggestion have been displayed, append the following audit section.
+
+---
+
+## Forensic Integrity Audit
+
+Running 6 deep checks against project state...
+
+Run each check in order. For each check, emit ✓ (pass) or ⚠ (warning) with concrete evidence when a problem is found.
+
+**Check 1 — STATE vs artifact consistency**
+
+Read STATE.md `status` / `stopped_at` fields (from the STATE snapshot already loaded). Compare against the artifact count from the roadmap analysis. If STATE.md claims the current phase is pending/mid-flight but the artifact count shows it as complete (all PLAN.md files have matching SUMMARY.md files), flag inconsistency. Emit:
+- ✓ `STATE.md consistent with artifact count` — if both agree
+- ⚠ `STATE.md claims [status] but artifact count shows phase complete` — with the specific values
+
+**Check 2 — Orphaned handoff files**
+
+Check for existence of:
+```bash
+ls .planning/HANDOFF.json .planning/phases/*/.continue-here.md .planning/phases/*/*HANDOFF*.md 2>/dev/null || true
+```
+Also check `.planning/continue-here.md`.
+
+Emit:
+- ✓ `No orphaned handoff files` — if none found
+- ⚠ `Orphaned handoff files found` — list each file path, add: `→ Work was paused mid-flight. Read the handoff before continuing.`
+
+**Check 3 — Deferred scope drift**
+
+Search phase artifacts (CONTEXT.md, DISCUSSION-LOG.md, BUG-BRIEF.md, VERIFICATION.md, SUMMARY.md, HANDOFF.md files under `.planning/phases/`) for patterns:
+```bash
+grep -rl "defer to Phase\|future phase\|out of scope Phase\|deferred to Phase" .planning/phases/ 2>/dev/null || true
+```
+
+For each match, extract the referenced phase number. Cross-reference against ROADMAP.md phase list. If the referenced phase number is NOT in ROADMAP.md, flag as deferred scope not captured.
+
+Emit:
+- ✓ `All deferred scope captured in ROADMAP` — if no mismatches
+- ⚠ `Deferred scope references phase(s) not in ROADMAP` — list: file, reference text, missing phase number
+
+**Check 4 — Memory-flagged pending work**
+
+Check if `.planning/MEMORY.md` or `.planning/memory/` exists:
+```bash
+ls .planning/MEMORY.md .planning/memory/*.md 2>/dev/null || true
+```
+
+If found, grep for entries containing: `pending`, `status`, `deferred`, `not yet run`, `backfill`, `blocking`.
+
+Emit:
+- ✓ `No memory entries flagging pending work` — if none found or no MEMORY.md
+- ⚠ `Memory entries flag pending/deferred work` — list the matching lines (max 5, truncated at 80 chars)
+
+**Check 5 — Blocking operational todos**
+
+Check for pending todos:
+```bash
+ls .planning/todos/pending/*.md 2>/dev/null || true
+```
+
+For files found, scan for keywords indicating operational blockers: `script`, `credential`, `API key`, `manual`, `verification`, `setup`, `configure`, `run `.
+
+Emit:
+- ✓ `No blocking operational todos` — if no pending todos or none match operational keywords
+- ⚠ `Blocking operational todos found` — list the file names and matching keywords (max 5)
+
+**Check 6 — Uncommitted code**
+
+```bash
+git status --porcelain 2>/dev/null | grep -v "^??" | grep -v "^.planning\/" | grep -v "^\.\." | head -10
+```
+
+If output is non-empty (modified/staged files outside `.planning/`), flag as uncommitted code.
+
+Emit:
+- ✓ `Working tree clean` — if no modified files outside `.planning/`
+- ⚠ `Uncommitted changes in source files` — list up to 10 file paths
+
+---
+
+After all 6 checks, display the verdict:
+
+**If all 6 checks passed:**
+```
+### Verdict: CLEAN
+
+The standard progress report is trustworthy — proceed with the routing suggestion above.
+```
+
+**If 1 or more checks failed:**
+```
+### Verdict: N INTEGRITY ISSUE(S) FOUND
+
+The standard progress report may not reflect true project state.
+Review the flagged items above before acting on the routing suggestion.
+```
+
+Then for each failed check, add a concrete next action:
+- Check 2 (orphaned handoff): `Read the handoff file(s) and resume from where work was paused: /gsd-resume-work ${GSD_WS}`
+- Check 3 (deferred scope): `Add the missing phases to ROADMAP.md or update the deferred references`
+- Check 4 (memory pending): `Review the flagged memory entries and resolve or clear them`
+- Check 5 (blocking todos): `Complete the operational steps in .planning/todos/pending/ before continuing`
+- Check 6 (uncommitted code): `Commit or stash the uncommitted changes before advancing`
+- Check 1 (STATE inconsistency): `Run /gsd-verify-work ${PHASE} ${GSD_WS} to reconcile state`
+</step>
 
 </process>
 
@@ -501,7 +643,7 @@ Ready to plan the next milestone.
 - [ ] Rich context provided (recent work, decisions, issues)
 - [ ] Current position clear with visual progress
 - [ ] What's next clearly explained
-- [ ] Smart routing: /gsd:execute-phase if plans exist, /gsd:plan-phase if not
+- [ ] Smart routing: /gsd-execute-phase if plans exist, /gsd-plan-phase if not
 - [ ] User confirms before any action
 - [ ] Seamless handoff to appropriate gsd command
       </success_criteria>

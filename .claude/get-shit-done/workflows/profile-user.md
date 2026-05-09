@@ -1,16 +1,16 @@
 <purpose>
 Orchestrate the full developer profiling flow: consent, session analysis (or questionnaire fallback), profile generation, result display, and artifact creation.
 
-This workflow wires Phase 1 (session pipeline) and Phase 2 (profiling engine) into a cohesive user-facing experience. All heavy lifting is done by existing gsd-tools.cjs subcommands and the gsd-user-profiler agent -- this workflow orchestrates the sequence, handles branching, and provides the UX.
+This workflow wires Phase 1 (session pipeline) and Phase 2 (profiling engine) into a cohesive user-facing experience. All heavy lifting is done by existing `gsd-sdk query` handlers (with legacy `gsd-tools.cjs` parity where needed) and the gsd-user-profiler agent -- this workflow orchestrates the sequence, handles branching, and provides the UX.
 </purpose>
 
 <required_reading>
 Read all files referenced by the invoking prompt's execution_context before starting.
 
 Key references:
-- @/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/references/ui-brand.md (display patterns)
-- @/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/agents/gsd-user-profiler.md (profiler agent definition)
-- @/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/references/user-profiling.md (profiling reference doc)
+- @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/ui-brand.md (display patterns)
+- @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/agents/gsd-user-profiler.md (profiler agent definition)
+- @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/user-profiling.md (profiling reference doc)
 </required_reading>
 
 <process>
@@ -24,12 +24,14 @@ Parse flags from $ARGUMENTS:
 Check for existing profile:
 
 ```bash
-PROFILE_PATH="/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md"
+PROFILE_PATH="/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md"
 [ -f "$PROFILE_PATH" ] && echo "EXISTS" || echo "NOT_FOUND"
 ```
 
 **If profile exists AND --refresh NOT set AND --questionnaire NOT set:**
 
+
+**Text mode (`workflow.text_mode: true` in config or `--text` flag):** Set `TEXT_MODE=true` if `--text` is present in `$ARGUMENTS` OR `text_mode` from init JSON is `true`. When TEXT_MODE is active, replace every `AskUserQuestion` call with a plain-text numbered list and ask the user to type their choice number. This is required for non-Claude runtimes (OpenAI Codex, Gemini CLI, etc.) where `AskUserQuestion` is not available.
 Use AskUserQuestion:
 - header: "Existing Profile"
 - question: "You already have a profile. What would you like to do?"
@@ -46,7 +48,7 @@ If "Cancel": Display "No changes made." and exit.
 
 Backup existing profile:
 ```bash
-cp "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md" "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.backup.md"
+cp "/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md" "/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/USER-PROFILE.backup.md"
 ```
 
 Display: "Re-analyzing your sessions to update your profile."
@@ -90,7 +92,7 @@ Your recent Claude Code sessions, looking for patterns in these
 
 ✓ Reads session files locally (read-only, nothing modified)
 ✓ Analyzes message patterns (not content meaning)
-✓ Stores profile at /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md
+✓ Stores profile at /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md
 ✗ Nothing is sent to external services
 ✗ Sensitive content (API keys, passwords) is automatically excluded
 ```
@@ -118,7 +120,7 @@ Use AskUserQuestion:
 - options:
   - "Let's go" -- Proceed to step 3 (session analysis)
   - "Use questionnaire instead" -- Jump to step 4b (questionnaire path)
-  - "Not now" -- Display "No worries. Run /gsd:profile-user when ready." and exit
+  - "Not now" -- Display "No worries. Run /gsd-profile-user when ready." and exit
 
 ---
 
@@ -128,7 +130,7 @@ Display: "◆ Scanning sessions..."
 
 Run session scan:
 ```bash
-SCAN_RESULT=$(node /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs scan-sessions --json 2>/dev/null)
+SCAN_RESULT=$(gsd-sdk query scan-sessions --json 2>/dev/null)
 ```
 
 Parse the JSON output to get session count and project count.
@@ -148,7 +150,7 @@ Display: "◆ Sampling messages..."
 
 Run profile sampling:
 ```bash
-SAMPLE_RESULT=$(node /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs profile-sample --json 2>/dev/null)
+SAMPLE_RESULT=$(gsd-sdk query profile-sample --json 2>/dev/null)
 ```
 
 Parse the JSON output to get the temp directory path and message count.
@@ -161,13 +163,13 @@ Display: "◆ Analyzing patterns..."
 
 Use the Task tool to spawn the `gsd-user-profiler` agent. Provide it with:
 - The sampled JSONL file path from profile-sample output
-- The user-profiling reference doc at `/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/references/user-profiling.md`
+- The user-profiling reference doc at `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/user-profiling.md`
 
 The agent prompt should follow this structure:
 ```
 Read the profiling reference document and the sampled session messages, then analyze the developer's behavioral patterns across all 8 dimensions.
 
-Reference: @/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/references/user-profiling.md
+Reference: @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/user-profiling.md
 Session data: @{temp_dir}/profile-sample.jsonl
 
 Analyze these messages and return your analysis in the <analysis> JSON format specified in the reference document.
@@ -199,7 +201,7 @@ Display: "Using questionnaire to build your profile."
 
 **Get questions:**
 ```bash
-QUESTIONS=$(node /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs profile-questionnaire --json 2>/dev/null)
+QUESTIONS=$(gsd-sdk query profile-questionnaire --json 2>/dev/null)
 ```
 
 Parse the questions JSON. It contains 8 questions, one per dimension.
@@ -222,7 +224,7 @@ Write the answers JSON to `$ANSWERS_PATH`.
 
 **Convert answers to analysis:**
 ```bash
-ANALYSIS_RESULT=$(node /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs profile-questionnaire --answers "$ANSWERS_PATH" --json 2>/dev/null)
+ANALYSIS_RESULT=$(gsd-sdk query profile-questionnaire --answers "$ANSWERS_PATH" --json 2>/dev/null)
 ```
 
 Parse the analysis JSON from the result.
@@ -269,10 +271,10 @@ Write updated analysis JSON back to `$ANALYSIS_PATH`.
 Display: "◆ Writing profile..."
 
 ```bash
-node /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs write-profile --input "$ANALYSIS_PATH" --json 2>/dev/null
+gsd-sdk query write-profile --input "$ANALYSIS_PATH" --json
 ```
 
-Display: "✓ Profile written to /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md"
+Display: "✓ Profile written to /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md"
 
 ---
 
@@ -333,11 +335,11 @@ Use AskUserQuestion with multiSelect:
 - header: "Artifacts"
 - question: "Which artifacts should I generate?"
 - options (ALL pre-selected by default):
-  - "/gsd:dev-preferences command file" -- "Load your preferences in any session"
+  - "/gsd-dev-preferences command file" -- "Load your preferences in any session"
   - "CLAUDE.md profile section" -- "Add profile to this project's CLAUDE.md"
-  - "Global CLAUDE.md" -- "Add profile to /workspace/Desktop/cloud-cli-proxy/.claude/CLAUDE.md for all projects"
+  - "Global CLAUDE.md" -- "Add profile to /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/CLAUDE.md for all projects"
 
-**If no artifacts selected:** Display "No artifacts generated. Your profile is saved at /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md" and jump to step 10.
+**If no artifacts selected:** Display "No artifacts generated. Your profile is saved at /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md" and jump to step 10.
 
 ---
 
@@ -345,18 +347,18 @@ Use AskUserQuestion with multiSelect:
 
 Generate selected artifacts sequentially (file I/O is fast, no benefit from parallel agents):
 
-**For /gsd:dev-preferences (if selected):**
+**For /gsd-dev-preferences (if selected):**
 
 ```bash
-node /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs generate-dev-preferences --analysis "$ANALYSIS_PATH" --json 2>/dev/null
+gsd-sdk query generate-dev-preferences --analysis "$ANALYSIS_PATH" --json
 ```
 
-Display: "✓ Generated /gsd:dev-preferences at /workspace/Desktop/cloud-cli-proxy/.claude/commands/gsd/dev-preferences.md"
+Display: "✓ Generated /gsd-dev-preferences at /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/skills/gsd-dev-preferences/SKILL.md"
 
 **For CLAUDE.md profile section (if selected):**
 
 ```bash
-node /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs generate-claude-profile --analysis "$ANALYSIS_PATH" --json 2>/dev/null
+gsd-sdk query generate-claude-profile --analysis "$ANALYSIS_PATH" --json
 ```
 
 Display: "✓ Added profile section to CLAUDE.md"
@@ -364,12 +366,12 @@ Display: "✓ Added profile section to CLAUDE.md"
 **For Global CLAUDE.md (if selected):**
 
 ```bash
-node /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs generate-claude-profile --analysis "$ANALYSIS_PATH" --global --json 2>/dev/null
+gsd-sdk query generate-claude-profile --analysis "$ANALYSIS_PATH" --global --json
 ```
 
-Display: "✓ Added profile section to /workspace/Desktop/cloud-cli-proxy/.claude/CLAUDE.md"
+Display: "✓ Added profile section to /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/CLAUDE.md"
 
-**Error handling:** If any gsd-tools.cjs call fails, display the error message and use AskUserQuestion to offer "Retry" or "Skip this artifact". On retry, re-run the command. On skip, continue to next artifact.
+**Error handling:** If any `gsd-sdk query` or gsd-tools.cjs call fails, display the error message and use AskUserQuestion to offer "Retry" or "Skip this artifact". On retry, re-run the command. On skip, continue to next artifact.
 
 ---
 
@@ -381,7 +383,7 @@ Read both old backup and new analysis to compare dimension ratings/confidence.
 
 Read the backed-up profile:
 ```bash
-BACKUP_PATH="/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.backup.md"
+BACKUP_PATH="/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/USER-PROFILE.backup.md"
 ```
 
 Compare each dimension's rating and confidence between old and new. Display diff table showing only changed dimensions:
@@ -404,15 +406,15 @@ If nothing changed: Display "No changes detected -- your profile is already up t
  GSD > PROFILE COMPLETE ✓
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Your profile:    /workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md
+Your profile:    /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md
 ```
 
 Then list paths for each generated artifact:
 ```
 Artifacts:
-  ✓ /gsd:dev-preferences   /workspace/Desktop/cloud-cli-proxy/.claude/commands/gsd/dev-preferences.md
+  ✓ /gsd-dev-preferences   /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/skills/gsd-dev-preferences/SKILL.md
   ✓ CLAUDE.md section       ./CLAUDE.md
-  ✓ Global CLAUDE.md        /workspace/Desktop/cloud-cli-proxy/.claude/CLAUDE.md
+  ✓ Global CLAUDE.md        /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/CLAUDE.md
 ```
 
 (Only show artifacts that were actually generated.)
@@ -444,7 +446,7 @@ rm -f "$ANALYSIS_PATH" 2>/dev/null
 - [ ] Profile written to USER-PROFILE.md via write-profile subcommand
 - [ ] Result display shows report card table and highlight reel with evidence
 - [ ] Artifact selection uses multiSelect with all options pre-selected
-- [ ] Artifacts generated sequentially via gsd-tools.cjs subcommands
+- [ ] Artifacts generated sequentially via gsd-sdk query (or gsd-tools.cjs) subcommands
 - [ ] Refresh diff shows changed dimensions when --refresh was used
 - [ ] Temp files cleaned up on completion
 </success_criteria>

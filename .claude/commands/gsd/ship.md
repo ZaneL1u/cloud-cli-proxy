@@ -11,13 +11,13 @@ allowed-tools:
   - AskUserQuestion
 ---
 <objective>
-Bridge local completion → merged PR. After /gsd:verify-work passes, ship the work: push branch, create PR with auto-generated body, optionally trigger review, and track the merge.
+Bridge local completion → merged PR. After /gsd-verify-work passes, ship the work: push branch, create PR with auto-generated body, optionally trigger review, and track the merge.
 
 Closes the plan → execute → verify → ship loop.
 </objective>
 
 <execution_context>
-@/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/workflows/ship.md
+@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/ship.md
 </execution_context>
 
-Execute the ship workflow from @/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/workflows/ship.md end-to-end.
+Execute the ship workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/ship.md end-to-end.

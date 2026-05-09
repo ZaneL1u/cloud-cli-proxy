@@ -1,7 +1,7 @@
 ---
 name: gsd:discuss-phase
-description: Gather phase context through adaptive questioning before planning. Use --auto to skip interactive questions (Claude picks recommended defaults).
-argument-hint: "<phase> [--auto] [--batch] [--analyze] [--text]"
+description: Gather phase context through adaptive questioning before planning.
+argument-hint: "<phase> [--all] [--auto] [--chain] [--batch] [--analyze] [--text] [--power] [--assumptions]"
 allowed-tools:
   - Read
   - Write
@@ -9,7 +9,7 @@ allowed-tools:
   - Glob
   - Grep
   - AskUserQuestion
-  - Task
+  - Agent
   - mcp__context7__resolve-library-id
   - mcp__context7__query-docs
 ---
@@ -29,10 +29,13 @@ Extract implementation decisions that downstream agents need — researcher and 
 </objective>
 
 <execution_context>
-@/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/workflows/discuss-phase.md
-@/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/workflows/discuss-phase-assumptions.md
-@/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/templates/context.md
+Workflow files are loaded on-demand in the <process> section below — not upfront.
+Do not pre-load any workflow files before reading the mode routing instructions.
 </execution_context>
+
+<runtime_note>
+**Copilot (VS Code):** Use `vscode_askquestions` wherever this workflow calls `AskUserQuestion`. They are equivalent — `vscode_askquestions` is the VS Code Copilot implementation of the same interactive question API.
+</runtime_note>
 
 <context>
 Phase number: $ARGUMENTS (required)
@@ -43,14 +46,22 @@ Context files are resolved in-workflow using `init phase-op` and roadmap/state t
 <process>
 **Mode routing:**
 ```bash
-DISCUSS_MODE=$(node "/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.discuss_mode 2>/dev/null || echo "discuss")
+DISCUSS_MODE=$(gsd-sdk query config-get workflow.discuss_mode 2>/dev/null || echo "discuss")
 ```
 
-If `DISCUSS_MODE` is `"assumptions"`: Read and execute @/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/workflows/discuss-phase-assumptions.md end-to-end.
+If `--assumptions` is in $ARGUMENTS:
+Read and execute `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/list-phase-assumptions.md` end-to-end.
+Stop here.
 
-If `DISCUSS_MODE` is `"discuss"` (or unset, or any other value): Read and execute @/workspace/Desktop/cloud-cli-proxy/.claude/get-shit-done/workflows/discuss-phase.md end-to-end.
+Otherwise, if `DISCUSS_MODE` is `"assumptions"`:
+Read and execute `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/discuss-phase-assumptions.md` end-to-end.
 
-**MANDATORY:** The execution_context files listed above ARE the instructions. Read the workflow file BEFORE taking any action. The objective and success_criteria sections in this command file are summaries — the workflow file contains the complete step-by-step process with all required behaviors, config checks, and interaction patterns. Do not improvise from the summary.
+Otherwise (`"discuss"` / unset / any other value):
+Read and execute `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/discuss-phase.md` end-to-end.
+
+**MANDATORY:** Read the appropriate workflow file BEFORE taking any action. The objective and success_criteria sections in this command file are summaries — the workflow file contains the complete step-by-step process with all required behaviors, config checks, and interaction patterns. Do not improvise from the summary.
+
+**Lazy loading:** `templates/context.md` is loaded inside the `write_context` step of the active workflow. `discuss-phase-power.md` is loaded inside `discuss-phase.md` when `--power` is detected. Do not load either here.
 </process>
 
 <success_criteria>
