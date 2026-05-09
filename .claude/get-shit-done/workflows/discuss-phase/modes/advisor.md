@@ -2,14 +2,14 @@
 
 > **Lazy-loaded and gated.** The parent `workflows/discuss-phase.md` Reads
 > this file ONLY when `ADVISOR_MODE` is true (i.e., when
-> `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md` exists). Skip the Read
+> `.claude/get-shit-done/USER-PROFILE.md` exists). Skip the Read
 > entirely when no profile is present — that's the inverse of the
 > `--advisor` flag from #2174 (don't pay the cost when unused).
 
 ## Activation
 
 ```bash
-PROFILE_PATH="/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md"
+PROFILE_PATH=".claude/get-shit-done/USER-PROFILE.md"
 if [ -f "$PROFILE_PATH" ]; then
   ADVISOR_MODE=true
 else
@@ -45,7 +45,7 @@ ADVISOR_MODEL=$(gsd-sdk query resolve-model gsd-advisor-researcher --raw)
 Read USER-PROFILE.md and check for product-owner signals:
 
 ```bash
-PROFILE_CONTENT=$(cat "/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/USER-PROFILE.md" 2>/dev/null || true)
+PROFILE_CONTENT=$(cat ".claude/get-shit-done/USER-PROFILE.md" 2>/dev/null || true)
 ```
 
 Set `NON_TECHNICAL_OWNER = true` if ANY of the following are present:
@@ -91,7 +91,7 @@ research agents.
 
    ```
    Agent(
-     prompt="First, read @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/agents/gsd-advisor-researcher.md for your role and instructions.
+     prompt="First, read @.claude/agents/gsd-advisor-researcher.md for your role and instructions.
 
      <gray_area>{area_name}: {area_description from gray area identification}</gray_area>
      <phase_context>{phase_goal and description from ROADMAP.md}</phase_context>

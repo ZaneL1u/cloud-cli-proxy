@@ -29,9 +29,9 @@ Does not require `/gsd-new-project` — auto-creates `.planning/spikes/` if need
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/spike.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/spike-wrap-up.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/ui-brand.md
+@.claude/get-shit-done/workflows/spike.md
+@.claude/get-shit-done/workflows/spike-wrap-up.md
+@.claude/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <runtime_note>

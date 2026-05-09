@@ -35,7 +35,7 @@ Output: Conversational output only (no file creation) - ends with "What do you t
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/list-phase-assumptions.md
+@.cursor/get-shit-done/workflows/list-phase-assumptions.md
 </execution_context>
 
 <context>

@@ -40,8 +40,8 @@ Designed for power users who want to parallelize work across phases from one ter
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/manager.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ui-brand.md
+@.cursor/get-shit-done/workflows/manager.md
+@.cursor/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <context>
@@ -51,6 +51,6 @@ Project context, phase list, dependencies, and recommendations are resolved insi
 </context>
 
 <process>
-Execute the manager workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/manager.md end-to-end.
+Execute the manager workflow from @.cursor/get-shit-done/workflows/manager.md end-to-end.
 Maintain the dashboard refresh loop until the user exits or all phases complete.
 </process>

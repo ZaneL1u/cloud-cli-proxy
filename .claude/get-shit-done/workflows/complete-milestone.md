@@ -518,7 +518,7 @@ ls .planning/RETROSPECTIVE.md 2>/dev/null || true
 
 **If exists:** Read the file, append new milestone section before the "## Cross-Milestone Trends" section.
 
-**If doesn't exist:** Create from template at `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/templates/retrospective.md`.
+**If doesn't exist:** Create from template at `.claude/get-shit-done/templates/retrospective.md`.
 
 **Gather retrospective data:**
 

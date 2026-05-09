@@ -38,10 +38,10 @@ Output ONLY the reference content below. Do NOT add:
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/help.md
+@.cursor/get-shit-done/workflows/help.md
 </execution_context>
 
 <process>
-Output the complete GSD command reference from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/help.md.
+Output the complete GSD command reference from @.cursor/get-shit-done/workflows/help.md.
 Display the reference content directly — no additions or modifications.
 </process>

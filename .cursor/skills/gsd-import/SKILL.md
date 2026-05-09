@@ -36,10 +36,10 @@ Future: `--prd` mode for PRD extraction is planned for a follow-up PR.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/import.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ui-brand.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/gate-prompts.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/doc-conflict-engine.md
+@.cursor/get-shit-done/workflows/import.md
+@.cursor/get-shit-done/references/ui-brand.md
+@.cursor/get-shit-done/references/gate-prompts.md
+@.cursor/get-shit-done/references/doc-conflict-engine.md
 </execution_context>
 
 <context>

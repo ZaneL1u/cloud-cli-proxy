@@ -37,8 +37,8 @@ Output: Milestone archived (roadmap + requirements), PROJECT.md evolved, git tag
 <execution_context>
 **Load these files NOW (before proceeding):**
 
-- @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/complete-milestone.md (main workflow)
-- @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/milestone-archive.md (archive template)
+- @.cursor/get-shit-done/workflows/complete-milestone.md (main workflow)
+- @.cursor/get-shit-done/templates/milestone-archive.md (archive template)
   </execution_context>
 
 <context>

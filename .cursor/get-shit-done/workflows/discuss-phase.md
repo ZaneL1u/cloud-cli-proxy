@@ -5,9 +5,9 @@ You are a thinking partner, not an interviewer. The user is the visionary — yo
 </purpose>
 
 <required_reading>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/domain-probes.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/gate-prompts.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/universal-anti-patterns.md
+@.cursor/get-shit-done/references/domain-probes.md
+@.cursor/get-shit-done/references/gate-prompts.md
+@.cursor/get-shit-done/references/universal-anti-patterns.md
 </required_reading>
 
 <downstream_awareness>
@@ -168,7 +168,7 @@ Exit workflow.
 
 **Power mode** — If `--power` is present in ARGUMENTS:
 - Skip interactive questioning entirely
-- Read and execute @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/discuss-phase-power.md end-to-end
+- Read and execute @.cursor/get-shit-done/workflows/discuss-phase-power.md end-to-end
 - Do not continue with the steps below
 
 **All mode** — If `--all` is present in ARGUMENTS:
@@ -507,7 +507,7 @@ Check if advisor mode should activate:
 
 1. Check for USER-PROFILE.md:
    ```bash
-   PROFILE_PATH="/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/USER-PROFILE.md"
+   PROFILE_PATH=".cursor/get-shit-done/USER-PROFILE.md"
    ```
    ADVISOR_MODE = file exists at PROFILE_PATH → true, otherwise → false
 
@@ -533,7 +533,7 @@ If ADVISOR_MODE is false, skip all advisor-specific steps — workflow proceeds 
 Check USER-PROFILE.md for communication preferences that indicate a non-technical product owner:
 
 ```bash
-PROFILE_CONTENT=$(cat "/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/USER-PROFILE.md" 2>/dev/null || true)
+PROFILE_CONTENT=$(cat ".cursor/get-shit-done/USER-PROFILE.md" 2>/dev/null || true)
 ```
 
 Set NON_TECHNICAL_OWNER = true if ANY of the following are present in USER-PROFILE.md:
@@ -658,7 +658,7 @@ After user selects gray areas in present_gray_areas, spawn parallel research age
 2. For EACH user-selected gray area, spawn a Task() in parallel:
 
    Task(
-     prompt="First, read @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/agents/gsd-advisor-researcher.md for your role and instructions.
+     prompt="First, read @.cursor/agents/gsd-advisor-researcher.md for your role and instructions.
 
      <gray_area>{area_name}: {area_description from gray area identification}</gray_area>
      <phase_context>{phase_goal and description from ROADMAP.md}</phase_context>
@@ -1292,7 +1292,7 @@ When `--power` flag is present in ARGUMENTS, skip interactive questioning and ex
 
 The power user mode generates ALL questions upfront into machine-readable and human-friendly files, then waits for the user to answer at their own pace before processing all answers in a single pass.
 
-**Full step-by-step instructions:** @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/discuss-phase-power.md
+**Full step-by-step instructions:** @.cursor/get-shit-done/workflows/discuss-phase-power.md
 
 **Summary of flow:**
 1. Run the same phase analysis (gray area identification) as standard mode

@@ -39,7 +39,7 @@ Granular flags are composable: `--discuss --research --validate` gives the same 
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/quick.md
+@.claude/get-shit-done/workflows/quick.md
 </execution_context>
 
 <context>

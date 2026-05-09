@@ -25,11 +25,11 @@ Brownfield equivalent of new-project. Project exists, PROJECT.md has history. Ga
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/new-milestone.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/questioning.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/ui-brand.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/templates/project.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/templates/requirements.md
+@.claude/get-shit-done/workflows/new-milestone.md
+@.claude/get-shit-done/references/questioning.md
+@.claude/get-shit-done/references/ui-brand.md
+@.claude/get-shit-done/templates/project.md
+@.claude/get-shit-done/templates/requirements.md
 </execution_context>
 
 <context>

@@ -34,10 +34,10 @@ Provides situational awareness before continuing work.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/progress.md
+@.cursor/get-shit-done/workflows/progress.md
 </execution_context>
 
 <process>
-Execute the progress workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/progress.md end-to-end.
+Execute the progress workflow from @.cursor/get-shit-done/workflows/progress.md end-to-end.
 Preserve all routing logic (Routes A through F) and edge case handling.
 </process>

@@ -14,7 +14,7 @@ Use when `.planning/phases/` has accumulated directories from past milestones.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/cleanup.md
+@.claude/get-shit-done/workflows/cleanup.md
 </execution_context>
 
 <process>

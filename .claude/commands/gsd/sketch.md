@@ -29,13 +29,13 @@ Does not require `/gsd-new-project` — auto-creates `.planning/sketches/` if ne
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/sketch.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/sketch-wrap-up.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/ui-brand.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/sketch-theme-system.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/sketch-interactivity.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/sketch-tooling.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/sketch-variant-patterns.md
+@.claude/get-shit-done/workflows/sketch.md
+@.claude/get-shit-done/workflows/sketch-wrap-up.md
+@.claude/get-shit-done/references/ui-brand.md
+@.claude/get-shit-done/references/sketch-theme-system.md
+@.claude/get-shit-done/references/sketch-interactivity.md
+@.claude/get-shit-done/references/sketch-tooling.md
+@.claude/get-shit-done/references/sketch-variant-patterns.md
 </execution_context>
 
 <runtime_note>

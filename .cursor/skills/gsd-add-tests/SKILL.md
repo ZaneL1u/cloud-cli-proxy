@@ -36,7 +36,7 @@ Output: Test files committed with message `test(phase-{N}): add unit and E2E tes
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/add-tests.md
+@.cursor/get-shit-done/workflows/add-tests.md
 </execution_context>
 
 <context>
@@ -47,6 +47,6 @@ Phase: {{GSD_ARGS}}
 </context>
 
 <process>
-Execute the add-tests workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/add-tests.md end-to-end.
+Execute the add-tests workflow from @.cursor/get-shit-done/workflows/add-tests.md end-to-end.
 Preserve all workflow gates (classification approval, test plan approval, RED-GREEN verification, gap reporting).
 </process>

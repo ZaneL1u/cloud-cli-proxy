@@ -31,9 +31,9 @@ Mode routing:
 </routing>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/settings.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/settings-advanced.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/settings-integrations.md
+@.claude/get-shit-done/workflows/settings.md
+@.claude/get-shit-done/workflows/settings-advanced.md
+@.claude/get-shit-done/workflows/settings-integrations.md
 </execution_context>
 
 <context>

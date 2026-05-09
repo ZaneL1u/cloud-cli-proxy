@@ -8,9 +8,9 @@ This workflow wires Phase 1 (session pipeline) and Phase 2 (profiling engine) in
 Read all files referenced by the invoking prompt's execution_context before starting.
 
 Key references:
-- @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ui-brand.md (display patterns)
-- @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/agents/gsd-user-profiler.md (profiler agent definition)
-- @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/user-profiling.md (profiling reference doc)
+- @.cursor/get-shit-done/references/ui-brand.md (display patterns)
+- @.cursor/get-shit-done/agents/gsd-user-profiler.md (profiler agent definition)
+- @.cursor/get-shit-done/references/user-profiling.md (profiling reference doc)
 </required_reading>
 
 <process>
@@ -24,7 +24,7 @@ Parse flags from {{GSD_ARGS}}:
 Check for existing profile:
 
 ```bash
-PROFILE_PATH="/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/USER-PROFILE.md"
+PROFILE_PATH=".cursor/get-shit-done/USER-PROFILE.md"
 [ -f "$PROFILE_PATH" ] && echo "EXISTS" || echo "NOT_FOUND"
 ```
 
@@ -48,7 +48,7 @@ If "Cancel": Display "No changes made." and exit.
 
 Backup existing profile:
 ```bash
-cp "/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/USER-PROFILE.md" "/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/USER-PROFILE.backup.md"
+cp ".cursor/get-shit-done/USER-PROFILE.md" ".cursor/USER-PROFILE.backup.md"
 ```
 
 Display: "Re-analyzing your sessions to update your profile."
@@ -92,7 +92,7 @@ Your recent Cursor sessions, looking for patterns in these
 
 ✓ Reads session files locally (read-only, nothing modified)
 ✓ Analyzes message patterns (not content meaning)
-✓ Stores profile at /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/USER-PROFILE.md
+✓ Stores profile at .cursor/get-shit-done/USER-PROFILE.md
 ✗ Nothing is sent to external services
 ✗ Sensitive content (API keys, passwords) is automatically excluded
 ```
@@ -163,13 +163,13 @@ Display: "◆ Analyzing patterns..."
 
 Use the Task tool to spawn the `gsd-user-profiler` agent. Provide it with:
 - The sampled JSONL file path from profile-sample output
-- The user-profiling reference doc at `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/user-profiling.md`
+- The user-profiling reference doc at `.cursor/get-shit-done/references/user-profiling.md`
 
 The agent prompt should follow this structure:
 ```
 Read the profiling reference document and the sampled session messages, then analyze the developer's behavioral patterns across all 8 dimensions.
 
-Reference: @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/user-profiling.md
+Reference: @.cursor/get-shit-done/references/user-profiling.md
 Session data: @{temp_dir}/profile-sample.jsonl
 
 Analyze these messages and return your analysis in the <analysis> JSON format specified in the reference document.
@@ -274,7 +274,7 @@ Display: "◆ Writing profile..."
 gsd-sdk query write-profile --input "$ANALYSIS_PATH" --json 2>/dev/null
 ```
 
-Display: "✓ Profile written to /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/USER-PROFILE.md"
+Display: "✓ Profile written to .cursor/get-shit-done/USER-PROFILE.md"
 
 ---
 
@@ -337,9 +337,9 @@ Use conversational prompting with multiSelect:
 - options (ALL pre-selected by default):
   - "/gsd-dev-preferences command file" -- "Load your preferences in any session"
   - ".cursor/rules/ profile section" -- "Add profile to this project's .cursor/rules/"
-  - "Global .cursor/rules/" -- "Add profile to /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/.cursor/rules/ for all projects"
+  - "Global .cursor/rules/" -- "Add profile to .cursor/.cursor/rules/ for all projects"
 
-**If no artifacts selected:** Display "No artifacts generated. Your profile is saved at /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/USER-PROFILE.md" and jump to step 10.
+**If no artifacts selected:** Display "No artifacts generated. Your profile is saved at .cursor/get-shit-done/USER-PROFILE.md" and jump to step 10.
 
 ---
 
@@ -353,7 +353,7 @@ Generate selected artifacts sequentially (file I/O is fast, no benefit from para
 gsd-sdk query generate-dev-preferences --analysis "$ANALYSIS_PATH" --json 2>/dev/null
 ```
 
-Display: "✓ Generated /gsd-dev-preferences at /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/commands/gsd/dev-preferences.md"
+Display: "✓ Generated /gsd-dev-preferences at .cursor/commands/gsd/dev-preferences.md"
 
 **For .cursor/rules/ profile section (if selected):**
 
@@ -369,7 +369,7 @@ Display: "✓ Added profile section to .cursor/rules/"
 gsd-sdk query generate-claude-profile --analysis "$ANALYSIS_PATH" --global --json 2>/dev/null
 ```
 
-Display: "✓ Added profile section to /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/.cursor/rules/"
+Display: "✓ Added profile section to .cursor/.cursor/rules/"
 
 **Error handling:** If any `gsd-sdk query` or gsd-tools.cjs call fails, display the error message and use conversational prompting to offer "Retry" or "Skip this artifact". On retry, re-run the command. On skip, continue to next artifact.
 
@@ -383,7 +383,7 @@ Read both old backup and new analysis to compare dimension ratings/confidence.
 
 Read the backed-up profile:
 ```bash
-BACKUP_PATH="/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/USER-PROFILE.backup.md"
+BACKUP_PATH=".cursor/USER-PROFILE.backup.md"
 ```
 
 Compare each dimension's rating and confidence between old and new. Display diff table showing only changed dimensions:
@@ -406,15 +406,15 @@ If nothing changed: Display "No changes detected -- your profile is already up t
  GSD > PROFILE COMPLETE ✓
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Your profile:    /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/USER-PROFILE.md
+Your profile:    .cursor/get-shit-done/USER-PROFILE.md
 ```
 
 Then list paths for each generated artifact:
 ```
 Artifacts:
-  ✓ /gsd-dev-preferences   /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/commands/gsd/dev-preferences.md
+  ✓ /gsd-dev-preferences   .cursor/commands/gsd/dev-preferences.md
   ✓ .cursor/rules/ section       .cursor/rules/
-  ✓ Global .cursor/rules/        /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/.cursor/rules/
+  ✓ Global .cursor/rules/        .cursor/.cursor/rules/
 ```
 
 (Only show artifacts that were actually generated.)

@@ -18,8 +18,8 @@ Output: {phase_num}-UI-REVIEW.md
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/ui-review.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/ui-brand.md
+@.claude/get-shit-done/workflows/ui-review.md
+@.claude/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <context>

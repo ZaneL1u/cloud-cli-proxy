@@ -544,7 +544,7 @@ func TestExplain_MountRequireGitRepo_Exit0_MinLen(t *testing.T) {
 - `internal/cloudclaude/ignore.go`（LoadMountIgnorePatterns）
 - `Makefile`（ci-gate target + ci-doctor-grep.sh）
 - `go.mod`（go 1.25.7，pkg/sftp v1.13.10）
-- `/Users/zaneliu/golang/pkg/mod/github.com/pkg/sftp@v1.13.9/request-interfaces.go`（FileReader interface）
+- `$(go env GOPATH)/pkg/mod/github.com/pkg/sftp@v1.13.9/request-interfaces.go`（FileReader interface）
 
 ---
 

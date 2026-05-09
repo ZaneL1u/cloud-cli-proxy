@@ -24,10 +24,10 @@ Replaces gsd-plan-phase's internal gsd-plan-checker with external AI reviewers (
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/plan-review-convergence.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/revision-loop.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/gates.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/agent-contracts.md
+@.claude/get-shit-done/workflows/plan-review-convergence.md
+@.claude/get-shit-done/references/revision-loop.md
+@.claude/get-shit-done/references/gates.md
+@.claude/get-shit-done/references/agent-contracts.md
 </execution_context>
 
 <runtime_note>

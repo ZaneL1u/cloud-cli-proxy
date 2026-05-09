@@ -25,7 +25,7 @@ Flag handling rule:
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/docs-update.md
+@.claude/get-shit-done/workflows/docs-update.md
 </execution_context>
 
 <context>

@@ -25,8 +25,8 @@ Designed for power users who want to parallelize work across phases from one ter
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/manager.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/ui-brand.md
+@.claude/get-shit-done/workflows/manager.md
+@.claude/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <context>
@@ -37,7 +37,7 @@ Project context, phase list, dependencies, and recommendations are resolved insi
 
 <process>
 If `--analyze-deps` is in $ARGUMENTS:
-Read and execute `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/analyze-dependencies.md` end-to-end.
+Read and execute `.claude/get-shit-done/workflows/analyze-dependencies.md` end-to-end.
 
 Execute end-to-end.
 Maintain the dashboard refresh loop until the user exits or all phases complete.

@@ -22,7 +22,7 @@ Output: updated VALIDATION.md + generated test files.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/validate-phase.md
+@.claude/get-shit-done/workflows/validate-phase.md
 </execution_context>
 
 <context>

@@ -15,7 +15,7 @@ Output ONLY the reference content below. Do NOT add:
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/help.md
+@.claude/get-shit-done/workflows/help.md
 </execution_context>
 
 <process>

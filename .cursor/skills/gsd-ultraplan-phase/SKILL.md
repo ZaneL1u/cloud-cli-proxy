@@ -38,8 +38,8 @@ Requirements: Cursor v2.1.91+, claude.ai account, GitHub repository.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/ultraplan-phase.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ui-brand.md
+@.cursor/get-shit-done/workflows/ultraplan-phase.md
+@.cursor/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <context>

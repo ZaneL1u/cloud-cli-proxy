@@ -17,7 +17,7 @@ changes that are irrelevant to code review.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/pr-branch.md
+@.claude/get-shit-done/workflows/pr-branch.md
 </execution_context>
 
 <process>

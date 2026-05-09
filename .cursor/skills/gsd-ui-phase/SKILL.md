@@ -34,8 +34,8 @@ Flow: Validate → Research UI → Verify UI-SPEC → Done
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/ui-phase.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ui-brand.md
+@.cursor/get-shit-done/workflows/ui-phase.md
+@.cursor/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <context>
@@ -43,6 +43,6 @@ Phase number: {{GSD_ARGS}} — optional, auto-detects next unplanned phase if om
 </context>
 
 <process>
-Execute @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/ui-phase.md end-to-end.
+Execute @.cursor/get-shit-done/workflows/ui-phase.md end-to-end.
 Preserve all workflow gates.
 </process>

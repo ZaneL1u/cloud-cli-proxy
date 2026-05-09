@@ -37,7 +37,7 @@ Output: updated VALIDATION.md + generated test files.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/validate-phase.md
+@.cursor/get-shit-done/workflows/validate-phase.md
 </execution_context>
 
 <context>
@@ -45,6 +45,6 @@ Phase: {{GSD_ARGS}} — optional, defaults to last completed phase.
 </context>
 
 <process>
-Execute @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/validate-phase.md.
+Execute @.cursor/get-shit-done/workflows/validate-phase.md.
 Preserve all workflow gates.
 </process>

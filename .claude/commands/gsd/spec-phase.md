@@ -28,8 +28,8 @@ Clarify phase requirements through structured Socratic questioning with quantita
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/spec-phase.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/templates/spec.md
+@.claude/get-shit-done/workflows/spec-phase.md
+@.claude/get-shit-done/templates/spec.md
 </execution_context>
 
 <runtime_note>

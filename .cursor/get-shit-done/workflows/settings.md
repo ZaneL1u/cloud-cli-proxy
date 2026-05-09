@@ -13,7 +13,7 @@ Ensure config exists and load current state:
 
 ```bash
 gsd-sdk query config-ensure-section
-GSD_CONFIG_PATH=$(node "/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/bin/gsd-tools.cjs" config-path)
+GSD_CONFIG_PATH=$(node ".cursor/get-shit-done/bin/gsd-tools.cjs" config-path)
 INIT=$(gsd-sdk query state.load)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```

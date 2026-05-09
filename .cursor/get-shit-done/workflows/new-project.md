@@ -777,7 +777,7 @@ Your STACK.md feeds into roadmap creation. Be prescriptive:
 
 <output>
 Write to: .planning/research/STACK.md
-Use template: /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/research-project/STACK.md
+Use template: .cursor/get-shit-done/templates/research-project/STACK.md
 </output>
 ", subagent_type="gsd-project-researcher", model="{researcher_model}", description="Stack research")
 
@@ -817,7 +817,7 @@ Your FEATURES.md feeds into requirements definition. Categorize clearly:
 
 <output>
 Write to: .planning/research/FEATURES.md
-Use template: /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/research-project/FEATURES.md
+Use template: .cursor/get-shit-done/templates/research-project/FEATURES.md
 </output>
 ", subagent_type="gsd-project-researcher", model="{researcher_model}", description="Features research")
 
@@ -857,7 +857,7 @@ Your ARCHITECTURE.md informs phase structure in roadmap. Include:
 
 <output>
 Write to: .planning/research/ARCHITECTURE.md
-Use template: /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/research-project/ARCHITECTURE.md
+Use template: .cursor/get-shit-done/templates/research-project/ARCHITECTURE.md
 </output>
 ", subagent_type="gsd-project-researcher", model="{researcher_model}", description="Architecture research")
 
@@ -897,7 +897,7 @@ Your PITFALLS.md prevents mistakes in roadmap/planning. For each pitfall:
 
 <output>
 Write to: .planning/research/PITFALLS.md
-Use template: /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/research-project/PITFALLS.md
+Use template: .cursor/get-shit-done/templates/research-project/PITFALLS.md
 </output>
 ", subagent_type="gsd-project-researcher", model="{researcher_model}", description="Pitfalls research")
 ```
@@ -921,7 +921,7 @@ ${AGENT_SKILLS_SYNTHESIZER}
 
 <output>
 Write to: .planning/research/SUMMARY.md
-Use template: /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/research-project/SUMMARY.md
+Use template: .cursor/get-shit-done/templates/research-project/SUMMARY.md
 Commit after writing.
 </output>
 ", subagent_type="gsd-research-synthesizer", model="{synthesizer_model}", description="Synthesize research")

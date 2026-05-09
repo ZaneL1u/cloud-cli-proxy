@@ -19,7 +19,7 @@ planning via /gsd-plan-phase --reviews.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/review.md
+@.claude/get-shit-done/workflows/review.md
 </execution_context>
 
 <context>

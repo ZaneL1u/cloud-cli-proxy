@@ -27,10 +27,10 @@ Auto-synthesizes most conflicts using the precedence rule `ADR > SPEC > PRD > DO
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/ingest-docs.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/ui-brand.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/gate-prompts.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/doc-conflict-engine.md
+@.claude/get-shit-done/workflows/ingest-docs.md
+@.claude/get-shit-done/references/ui-brand.md
+@.claude/get-shit-done/references/gate-prompts.md
+@.claude/get-shit-done/references/doc-conflict-engine.md
 </execution_context>
 
 <context>

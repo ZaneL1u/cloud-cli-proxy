@@ -20,7 +20,7 @@ Routes to the settings workflow which handles:
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/settings.md
+@.claude/get-shit-done/workflows/settings.md
 </execution_context>
 
 <process>

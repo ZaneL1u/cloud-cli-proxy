@@ -20,7 +20,7 @@ and optionally applies labels or closes non-compliant submissions.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/inbox.md
+@.claude/get-shit-done/workflows/inbox.md
 </execution_context>
 
 <context>

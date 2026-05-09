@@ -15,7 +15,7 @@ doesn't belong to any specific phase.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/thread.md
+@.claude/get-shit-done/workflows/thread.md
 </execution_context>
 
 <process>

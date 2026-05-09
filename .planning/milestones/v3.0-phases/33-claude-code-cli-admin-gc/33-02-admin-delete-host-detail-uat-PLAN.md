@@ -73,8 +73,8 @@ Output:
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/execute-plan.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/summary.md
+@.cursor/get-shit-done/workflows/execute-plan.md
+@.cursor/get-shit-done/templates/summary.md
 </execution_context>
 
 <context>

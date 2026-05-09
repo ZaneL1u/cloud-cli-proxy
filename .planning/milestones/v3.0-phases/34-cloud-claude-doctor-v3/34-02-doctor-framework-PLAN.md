@@ -92,7 +92,7 @@ Output:
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/skills/gsd-execute-phase/SKILL.md
+@.cursor/skills/gsd-execute-phase/SKILL.md
 </execution_context>
 
 <context>

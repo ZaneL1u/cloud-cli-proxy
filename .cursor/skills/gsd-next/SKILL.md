@@ -39,9 +39,9 @@ Before routing to the next step, scans all prior phases for incomplete work: pla
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/next.md
+@.cursor/get-shit-done/workflows/next.md
 </execution_context>
 
 <process>
-Execute the next workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/next.md end-to-end.
+Execute the next workflow from @.cursor/get-shit-done/workflows/next.md end-to-end.
 </process>

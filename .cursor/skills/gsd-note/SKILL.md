@@ -39,8 +39,8 @@ Runs inline — no Task, no conversational prompting, no Bash.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/note.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ui-brand.md
+@.cursor/get-shit-done/workflows/note.md
+@.cursor/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <context>
@@ -48,6 +48,6 @@ Runs inline — no Task, no conversational prompting, no Bash.
 </context>
 
 <process>
-Execute the note workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/note.md end-to-end.
+Execute the note workflow from @.cursor/get-shit-done/workflows/note.md end-to-end.
 Capture the note, list notes, or promote to todo — depending on arguments.
 </process>

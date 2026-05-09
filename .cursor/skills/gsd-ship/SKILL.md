@@ -34,7 +34,7 @@ Closes the plan → execute → verify → ship loop.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/ship.md
+@.cursor/get-shit-done/workflows/ship.md
 </execution_context>
 
-Execute the ship workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/ship.md end-to-end.
+Execute the ship workflow from @.cursor/get-shit-done/workflows/ship.md end-to-end.

@@ -50,14 +50,14 @@ DISCUSS_MODE=$(gsd-sdk query config-get workflow.discuss_mode 2>/dev/null || ech
 ```
 
 If `--assumptions` is in $ARGUMENTS:
-Read and execute `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/list-phase-assumptions.md` end-to-end.
+Read and execute `.claude/get-shit-done/workflows/list-phase-assumptions.md` end-to-end.
 Stop here.
 
 Otherwise, if `DISCUSS_MODE` is `"assumptions"`:
-Read and execute `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/discuss-phase-assumptions.md` end-to-end.
+Read and execute `.claude/get-shit-done/workflows/discuss-phase-assumptions.md` end-to-end.
 
 Otherwise (`"discuss"` / unset / any other value):
-Read and execute `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/discuss-phase.md` end-to-end.
+Read and execute `.claude/get-shit-done/workflows/discuss-phase.md` end-to-end.
 
 **MANDATORY:** Read the appropriate workflow file BEFORE taking any action. The objective and success_criteria sections in this command file are summaries — the workflow file contains the complete step-by-step process with all required behaviors, config checks, and interaction patterns. Do not improvise from the summary.
 

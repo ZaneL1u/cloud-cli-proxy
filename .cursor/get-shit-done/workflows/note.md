@@ -17,7 +17,7 @@ Read all files referenced by the invoking prompt's execution_context before star
 Notes are stored as individual markdown files:
 
 - **Project scope**: `.planning/notes/{YYYY-MM-DD}-{slug}.md` — used when `.planning/` exists in cwd
-- **Global scope**: `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/notes/{YYYY-MM-DD}-{slug}.md` — fallback when no `.planning/`, or when `--global` flag is present
+- **Global scope**: `.cursor/notes/{YYYY-MM-DD}-{slug}.md` — fallback when no `.planning/`, or when `--global` flag is present
 
 Each note file:
 
@@ -52,7 +52,7 @@ promoted: false
 **Subcommand: append — create a timestamped note file.**
 
 1. Determine scope (project or global) per storage format above
-2. Ensure the notes directory exists (`.planning/notes/` or `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/notes/`)
+2. Ensure the notes directory exists (`.planning/notes/` or `.cursor/notes/`)
 3. Generate slug: first ~4 meaningful words of the note text, lowercase, hyphen-separated (strip articles/prepositions from the start)
 4. Generate filename: `{YYYY-MM-DD}-{slug}.md`
    - If a file with that name already exists, append `-2`, `-3`, etc.
@@ -70,7 +70,7 @@ promoted: false
 **Subcommand: list — show notes from both scopes.**
 
 1. Glob `.planning/notes/*.md` (if directory exists) — project notes
-2. Glob `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/notes/*.md` (if directory exists) — global notes
+2. Glob `.cursor/notes/*.md` (if directory exists) — global notes
 3. For each file, read frontmatter to get `date` and `promoted` status
 4. Exclude files where `promoted: true` from active counts (but still show them, dimmed)
 5. Sort by date, number all active entries sequentially starting at 1
@@ -86,7 +86,7 @@ Project (.planning/notes/):
   2. [promoted] [2026-02-08 14:40] add rate limiting to the API endpoints
   3. [2026-02-08 15:10] consider adding a --dry-run flag to build
 
-Global (/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/notes/):
+Global (.cursor/notes/):
   4. [2026-02-08 10:00] cross-project idea about shared config
 
 {count} active note(s). Use `/gsd-note promote <N>` to convert to a todo.
@@ -138,7 +138,7 @@ Promoted from quick note captured on {original date}.
 
 <edge_cases>
 1. **"list" as note text**: `/gsd-note list of things` saves note "list of things" (subcommand only when `list` is the entire arg)
-2. **No `.planning/`**: Falls back to global `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/notes/` — works in any directory
+2. **No `.planning/`**: Falls back to global `.cursor/notes/` — works in any directory
 3. **Promote without project**: Warns that todos require `.planning/`, suggests `/gsd-new-project`
 4. **Large files**: `list` shows last 10 when >20 active entries
 5. **Duplicate slugs**: Append `-2`, `-3` etc. to filename if slug already used on same date

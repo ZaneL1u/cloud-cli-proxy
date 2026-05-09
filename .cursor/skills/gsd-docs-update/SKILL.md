@@ -40,7 +40,7 @@ Flag handling rule:
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/docs-update.md
+@.cursor/get-shit-done/workflows/docs-update.md
 </execution_context>
 
 <context>
@@ -58,6 +58,6 @@ Arguments: {{GSD_ARGS}}
 </context>
 
 <process>
-Execute the docs-update workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/docs-update.md end-to-end.
+Execute the docs-update workflow from @.cursor/get-shit-done/workflows/docs-update.md end-to-end.
 Preserve all workflow gates (preservation_check, flag handling, wave execution, monorepo dispatch, commit, reporting).
 </process>

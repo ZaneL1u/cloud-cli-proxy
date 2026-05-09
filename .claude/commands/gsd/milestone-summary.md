@@ -19,7 +19,7 @@ Output: MILESTONE_SUMMARY written to `.planning/reports/`, presented inline, opt
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/milestone-summary.md
+@.claude/get-shit-done/workflows/milestone-summary.md
 </execution_context>
 
 <context>

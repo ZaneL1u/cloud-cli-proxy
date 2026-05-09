@@ -216,7 +216,7 @@ get-shit-done/
 
 **New Workflow:**
 - Implementation: `get-shit-done/workflows/{name}.md`
-- Usage: Reference from command with `@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/{name}.md`
+- Usage: Reference from command with `@.cursor/get-shit-done/workflows/{name}.md`
 
 **New Reference Document:**
 - Implementation: `get-shit-done/references/{name}.md`
@@ -229,12 +229,12 @@ get-shit-done/
 ## Special Directories
 
 **get-shit-done/**
-- Purpose: Resources installed to /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/
+- Purpose: Resources installed to .cursor/
 - Source: Copied by bin/install.js during installation
 - Committed: Yes (source of truth)
 
 **commands/**
-- Purpose: Slash commands installed to /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/commands/
+- Purpose: Slash commands installed to .cursor/commands/
 - Source: Copied by bin/install.js during installation
 - Committed: Yes (source of truth)
 

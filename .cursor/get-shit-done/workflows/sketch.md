@@ -11,10 +11,10 @@ Supports two modes:
 <required_reading>
 Read all files referenced by the invoking prompt's execution_context before starting.
 
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/sketch-theme-system.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/sketch-variant-patterns.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/sketch-interactivity.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/sketch-tooling.md
+@.cursor/get-shit-done/references/sketch-theme-system.md
+@.cursor/get-shit-done/references/sketch-variant-patterns.md
+@.cursor/get-shit-done/references/sketch-interactivity.md
+@.cursor/get-shit-done/references/sketch-tooling.md
 </required_reading>
 
 <process>

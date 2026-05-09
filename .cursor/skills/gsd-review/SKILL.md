@@ -36,7 +36,7 @@ planning via /gsd-plan-phase --reviews.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/review.md
+@.cursor/get-shit-done/workflows/review.md
 </execution_context>
 
 <context>
@@ -53,5 +53,5 @@ Phase number: extracted from {{GSD_ARGS}} (required)
 </context>
 
 <process>
-Execute the review workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/review.md end-to-end.
+Execute the review workflow from @.cursor/get-shit-done/workflows/review.md end-to-end.
 </process>

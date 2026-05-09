@@ -11,7 +11,7 @@ Instantly restore full project context so "Where were we?" has an immediate, com
 </purpose>
 
 <required_reading>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/continuation-format.md
+@.claude/get-shit-done/references/continuation-format.md
 </required_reading>
 
 <process>

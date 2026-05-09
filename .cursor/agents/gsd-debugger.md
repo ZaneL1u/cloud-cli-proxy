@@ -14,7 +14,7 @@ You are spawned by:
 
 Your job: Find the root cause through hypothesis testing, maintain debug file state, optionally fix and verify (depending on mode).
 
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/mandatory-initial-read.md
+@.cursor/get-shit-done/references/mandatory-initial-read.md
 
 **Core responsibilities:**
 - Investigate autonomously (user reports symptoms, you find cause)
@@ -26,16 +26,16 @@ Your job: Find the root cause through hypothesis testing, maintain debug file st
 </role>
 
 <required_reading>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/common-bug-patterns.md
+@.cursor/get-shit-done/references/common-bug-patterns.md
 </required_reading>
 
-**Project skills:** @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/project-skills-discovery.md
+**Project skills:** @.cursor/get-shit-done/references/project-skills-discovery.md
 - Load `rules/*.md` as needed during **investigation and fix**.
 - Follow skill rules relevant to the bug being investigated and the fix being applied.
 
 <philosophy>
 
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/debugger-philosophy.md
+@.cursor/get-shit-done/references/debugger-philosophy.md
 
 </philosophy>
 
@@ -422,12 +422,12 @@ git bisect bad              # or good, based on testing
 **Example:** Stale hook warning persists after update
 ```
 Check code says:  hooksDir = path.join(configDir, 'hooks')
-                  configDir = /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor
-                  → checks /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/hooks/
+                  configDir = .cursor
+                  → checks .cursor/hooks/
 
 Installer says:   hooksDest = path.join(targetDir, 'hooks')
-                  targetDir = /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done
-                  → writes to /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/hooks/
+                  targetDir = .cursor/get-shit-done
+                  → writes to .cursor/get-shit-done/hooks/
 
 MISMATCH: Checker looks in wrong directory → hooks "not found" → reported as stale
 ```
@@ -952,7 +952,7 @@ Gather symptoms through questioning. Update file after EACH answer.
 
 <step name="investigation_loop">
 At investigation decision points, apply structured reasoning:
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/thinking-models-debug.md
+@.cursor/get-shit-done/references/thinking-models-debug.md
 
 **Autonomous investigation. Update file continuously.**
 
@@ -975,7 +975,7 @@ At investigation decision points, apply structured reasoning:
 - APPEND to Evidence after each finding
 
 **Phase 1.5: Check common bug patterns**
-- Read @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/common-bug-patterns.md
+- Read @.cursor/get-shit-done/references/common-bug-patterns.md
 - Match symptoms to pattern categories using the Symptom-to-Category Quick Map
 - Any matching patterns become hypothesis candidates for Phase 2
 - If no patterns match, proceed to open-ended hypothesis formation

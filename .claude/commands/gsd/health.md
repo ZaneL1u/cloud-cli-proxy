@@ -21,7 +21,7 @@ Validate `.planning/` directory integrity and report actionable issues. Checks f
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/health.md
+@.claude/get-shit-done/workflows/health.md
 </execution_context>
 
 <process>

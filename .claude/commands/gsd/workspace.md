@@ -29,10 +29,10 @@ Mode routing:
 </routing>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/new-workspace.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/list-workspaces.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/remove-workspace.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/ui-brand.md
+@.claude/get-shit-done/workflows/new-workspace.md
+@.claude/get-shit-done/workflows/list-workspaces.md
+@.claude/get-shit-done/workflows/remove-workspace.md
+@.claude/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <context>

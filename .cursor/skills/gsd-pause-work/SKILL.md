@@ -39,7 +39,7 @@ Routes to the pause-work workflow which handles:
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/pause-work.md
+@.cursor/get-shit-done/workflows/pause-work.md
 </execution_context>
 
 <context>
@@ -47,7 +47,7 @@ State and phase progress are gathered in-workflow with targeted reads.
 </context>
 
 <process>
-**Follow the pause-work workflow** from `@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/pause-work.md`.
+**Follow the pause-work workflow** from `@.cursor/get-shit-done/workflows/pause-work.md`.
 
 The workflow handles all logic including:
 1. Phase directory detection

@@ -20,9 +20,9 @@ Three modes:
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/undo.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/ui-brand.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/gate-prompts.md
+@.claude/get-shit-done/workflows/undo.md
+@.claude/get-shit-done/references/ui-brand.md
+@.claude/get-shit-done/references/gate-prompts.md
 </execution_context>
 
 <context>

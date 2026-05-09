@@ -290,7 +290,7 @@ ${AGENT_SKILLS_RESEARCHER}
 
 <output>
 Write to: .planning/research/{FILE}
-Use template: /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/research-project/{FILE}
+Use template: .cursor/get-shit-done/templates/research-project/{FILE}
 </output>
 ", subagent_type="gsd-project-researcher", model="{researcher_model}", description="{DIMENSION} research")
 ```
@@ -321,7 +321,7 @@ Synthesize research outputs into SUMMARY.md.
 ${AGENT_SKILLS_SYNTHESIZER}
 
 Write to: .planning/research/SUMMARY.md
-Use template: /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/research-project/SUMMARY.md
+Use template: .cursor/get-shit-done/templates/research-project/SUMMARY.md
 Commit after writing.
 ", subagent_type="gsd-research-synthesizer", model="{synthesizer_model}", description="Synthesize research")
 ```

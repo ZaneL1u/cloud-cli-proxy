@@ -8,7 +8,7 @@
 ## Dispatch
 
 ```
-Read @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/discuss-phase-power.md
+Read @.claude/get-shit-done/workflows/discuss-phase-power.md
 ```
 
 Execute it end-to-end. Do not continue with the standard interactive steps.

@@ -43,7 +43,7 @@ Before proceeding with milestone close, run the comprehensive open artifact audi
 `audit-open` is not registered on `gsd-sdk query` yet; use the installed CJS CLI:
 
 ```bash
-node "/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/bin/gsd-tools.cjs" audit-open 2>/dev/null
+node ".cursor/get-shit-done/bin/gsd-tools.cjs" audit-open 2>/dev/null
 ```
 
 If the output contains open items (any section with count > 0):
@@ -520,7 +520,7 @@ ls .planning/RETROSPECTIVE.md 2>/dev/null || true
 
 **If exists:** Read the file, append new milestone section before the "## Cross-Milestone Trends" section.
 
-**If doesn't exist:** Create from template at `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/retrospective.md`.
+**If doesn't exist:** Create from template at `.cursor/get-shit-done/templates/retrospective.md`.
 
 **Gather retrospective data:**
 

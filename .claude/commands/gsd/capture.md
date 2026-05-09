@@ -36,12 +36,12 @@ Mode routing:
 </routing>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/add-todo.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/note.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/add-backlog.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/plant-seed.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/check-todos.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/ui-brand.md
+@.claude/get-shit-done/workflows/add-todo.md
+@.claude/get-shit-done/workflows/note.md
+@.claude/get-shit-done/workflows/add-backlog.md
+@.claude/get-shit-done/workflows/plant-seed.md
+@.claude/get-shit-done/workflows/check-todos.md
+@.claude/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <context>

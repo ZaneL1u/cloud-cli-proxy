@@ -8,9 +8,9 @@ Orchestrator only does: init, loop control, parse CYCLE_SUMMARY for HIGH count, 
 <required_reading>
 Read all files referenced by the invoking prompt's execution_context before starting.
 
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/revision-loop.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/gates.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/agent-contracts.md
+@.claude/get-shit-done/references/revision-loop.md
+@.claude/get-shit-done/references/gates.md
+@.claude/get-shit-done/references/agent-contracts.md
 </required_reading>
 
 <process>
@@ -62,7 +62,7 @@ Then re-run: /gsd-plan-review-convergence {PHASE}
 ## 2. Initialize
 
 ```bash
-INIT=$(node "/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" init plan-phase "$PHASE")
+INIT=$(node ".claude/get-shit-done/bin/gsd-tools.cjs" init plan-phase "$PHASE")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
@@ -75,7 +75,7 @@ Set `TEXT_MODE=true` if `--text` is present in $ARGUMENTS OR `text_mode` from in
 ## 3. Validate Phase + Pre-flight Gate
 
 ```bash
-PHASE_INFO=$(node "/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase "${PHASE}")
+PHASE_INFO=$(node ".claude/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase "${PHASE}")
 ```
 
 **If `found` is false:** Error with available phases. Exit.
@@ -213,7 +213,7 @@ fi
 **If HIGH_COUNT == 0 (converged):**
 
 ```bash
-node "/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/bin/gsd-tools.cjs" state planned-phase --phase "${PHASE}" --name "${phase_name}" --plans "${PLAN_COUNT}"
+node ".claude/get-shit-done/bin/gsd-tools.cjs" state planned-phase --phase "${PHASE}" --name "${phase_name}" --plans "${PLAN_COUNT}"
 ```
 
 Display:

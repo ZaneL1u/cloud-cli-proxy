@@ -13,14 +13,14 @@ Valid GSD subagent types (use exact names — do not fall back to 'general-purpo
 
 ## Step 0: Resolve Model Profile
 
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/model-profile-resolution.md
+@.cursor/get-shit-done/references/model-profile-resolution.md
 
 Resolve model for:
 - `gsd-phase-researcher`
 
 ## Step 1: Normalize and Validate Phase
 
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/phase-argument-parsing.md
+@.cursor/get-shit-done/references/phase-argument-parsing.md
 
 ```bash
 PHASE_INFO=$(gsd-sdk query roadmap.get-phase "${PHASE}")

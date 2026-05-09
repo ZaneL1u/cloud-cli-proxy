@@ -11,7 +11,7 @@ Spawned by `/gsd-execute-phase` orchestrator.
 
 Your job: Execute the plan completely, commit each task, create SUMMARY.md, update STATE.md.
 
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/mandatory-initial-read.md
+@.cursor/get-shit-done/references/mandatory-initial-read.md
 </role>
 
 <documentation_lookup>
@@ -46,7 +46,7 @@ Before executing, discover project context:
 
 **Project instructions:** Read `.cursor/rules/` if it exists in the working directory. Follow all project-specific guidelines, security requirements, and coding conventions.
 
-**Project skills:** @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/project-skills-discovery.md
+**Project skills:** @.cursor/get-shit-done/references/project-skills-discovery.md
 - Load `rules/*.md` as needed during **implementation**.
 - Follow skill rules relevant to the task you are about to commit.
 
@@ -103,10 +103,10 @@ grep -n "type=\"checkpoint" [plan-path]
 
 <step name="execute_tasks">
 At execution decision points, apply structured reasoning:
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/thinking-models-execution.md
+@.cursor/get-shit-done/references/thinking-models-execution.md
 
 **iOS app scaffolding:** If this plan creates an iOS app target, follow ios-scaffold guidance:
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ios-scaffold.md
+@.cursor/get-shit-done/references/ios-scaffold.md
 
 For each task:
 
@@ -203,7 +203,7 @@ Track auto-fix attempts per task. After 3 auto-fix attempts on a single task:
 
 **Extended examples and edge case guide:**
 For detailed deviation rule examples, checkpoint examples, and edge case decision guidance:
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/executor-examples.md
+@.cursor/get-shit-done/references/executor-examples.md
 </deviation_rules>
 
 <analysis_paralysis_guard>
@@ -249,7 +249,7 @@ Auto mode is active if either `AUTO_CHAIN` or `AUTO_CFG` is `"true"`. Store the 
 Before any `checkpoint:human-verify`, ensure verification environment is ready. If plan lacks server startup before checkpoint, ADD ONE (deviation Rule 3).
 
 For full automation-first patterns, server lifecycle, CLI handling:
-**See @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/checkpoints.md**
+**See @.cursor/get-shit-done/references/checkpoints.md**
 
 **Quick reference:** Users NEVER run CLI commands. Users ONLY visit URLs, click UI, evaluate visuals, provide secrets. Claude does all automation.
 
@@ -434,7 +434,7 @@ After all tasks complete, create `{phase}-{plan}-SUMMARY.md` at `.planning/phase
 
 **ALWAYS use the Write tool to create files** — never use `Shell(cat << 'EOF')` or heredoc commands for file creation.
 
-**Use template:** @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/summary.md
+**Use template:** @.cursor/get-shit-done/templates/summary.md
 
 **Frontmatter:** phase, plan, subsystem, tags, dependency graph (requires/provides/affects), tech-stack (added/patterns), key-files (created/modified), decisions, metrics (duration, completed date).
 

@@ -39,9 +39,9 @@ Flags:
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/audit-fix.md
+@.cursor/get-shit-done/workflows/audit-fix.md
 </execution_context>
 
 <process>
-Execute the audit-fix workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/audit-fix.md end-to-end.
+Execute the audit-fix workflow from @.cursor/get-shit-done/workflows/audit-fix.md end-to-end.
 </process>

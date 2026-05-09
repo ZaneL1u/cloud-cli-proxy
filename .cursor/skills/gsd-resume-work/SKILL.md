@@ -40,11 +40,11 @@ Routes to the resume-project workflow which handles:
   </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/resume-project.md
+@.cursor/get-shit-done/workflows/resume-project.md
 </execution_context>
 
 <process>
-**Follow the resume-project workflow** from `@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/resume-project.md`.
+**Follow the resume-project workflow** from `@.cursor/get-shit-done/workflows/resume-project.md`.
 
 The workflow handles all resumption logic including:
 

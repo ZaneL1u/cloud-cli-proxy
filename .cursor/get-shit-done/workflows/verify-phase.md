@@ -19,8 +19,8 @@ Then verify each level against the actual codebase.
 </core_principle>
 
 <required_reading>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/verification-patterns.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/verification-report.md
+@.cursor/get-shit-done/references/verification-patterns.md
+@.cursor/get-shit-done/templates/verification-report.md
 </required_reading>
 
 <process>
@@ -427,7 +427,7 @@ REPORT_PATH="$PHASE_DIR/${PHASE_NUM}-VERIFICATION.md"
 
 Fill template sections: frontmatter (phase/timestamp/status/score), goal achievement, artifact table, wiring table, requirements coverage, anti-patterns, human verification, gaps summary, fix plans (if gaps_found), metadata.
 
-See /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/verification-report.md for complete template.
+See .cursor/get-shit-done/templates/verification-report.md for complete template.
 </step>
 
 <step name="return_to_orchestrator">

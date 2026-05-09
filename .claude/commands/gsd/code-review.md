@@ -30,7 +30,7 @@ Output: {padded_phase}-REVIEW.md in phase directory + inline summary of findings
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/code-review.md
+@.claude/get-shit-done/workflows/code-review.md
 </execution_context>
 
 <context>

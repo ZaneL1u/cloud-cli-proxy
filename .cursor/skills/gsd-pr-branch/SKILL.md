@@ -36,9 +36,9 @@ changes that are irrelevant to code review.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/pr-branch.md
+@.cursor/get-shit-done/workflows/pr-branch.md
 </execution_context>
 
 <process>
-Execute the pr-branch workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/pr-branch.md end-to-end.
+Execute the pr-branch workflow from @.cursor/get-shit-done/workflows/pr-branch.md end-to-end.
 </process>

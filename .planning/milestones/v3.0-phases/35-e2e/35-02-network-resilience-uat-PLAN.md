@@ -52,8 +52,8 @@ Output: 两个 bash 脚本。UAT 脚本需支持 10s / 30s / 2min 三场景；M1
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/execute-plan.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/summary.md
+@.cursor/get-shit-done/workflows/execute-plan.md
+@.cursor/get-shit-done/templates/summary.md
 </execution_context>
 
 <context>

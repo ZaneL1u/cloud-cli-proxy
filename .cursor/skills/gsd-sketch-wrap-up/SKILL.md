@@ -34,8 +34,8 @@ project history. Output skill goes to `./.cursor/skills/sketch-findings-[project
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/sketch-wrap-up.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ui-brand.md
+@.cursor/get-shit-done/workflows/sketch-wrap-up.md
+@.cursor/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <runtime_note>
@@ -43,6 +43,6 @@ project history. Output skill goes to `./.cursor/skills/sketch-findings-[project
 </runtime_note>
 
 <process>
-Execute the sketch-wrap-up workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/sketch-wrap-up.md end-to-end.
+Execute the sketch-wrap-up workflow from @.cursor/get-shit-done/workflows/sketch-wrap-up.md end-to-end.
 Preserve all curation gates (per-sketch review, grouping approval, .cursor/rules/ routing line).
 </process>

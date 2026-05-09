@@ -5,11 +5,11 @@ Create executable phase prompts (PLAN.md files) for a roadmap phase with integra
 <required_reading>
 Read all files referenced by the invoking prompt's execution_context before starting.
 
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ui-brand.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/revision-loop.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/gate-prompts.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/agent-contracts.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/gates.md
+@.cursor/get-shit-done/references/ui-brand.md
+@.cursor/get-shit-done/references/revision-loop.md
+@.cursor/get-shit-done/references/gate-prompts.md
+@.cursor/get-shit-done/references/agent-contracts.md
+@.cursor/get-shit-done/references/gates.md
 </required_reading>
 
 <available_agent_types>
@@ -36,7 +36,7 @@ CONTEXT_WINDOW=$(gsd-sdk query config-get context_window 2>/dev/null || echo "20
 TDD_MODE=$(gsd-sdk query config-get workflow.tdd_mode 2>/dev/null || echo "false")
 ```
 
-When `TDD_MODE` is `true`, the planner agent is instructed to apply `type: tdd` to eligible tasks using heuristics from `references/tdd.md`. The planner's `<required_reading>` is extended to include `@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/tdd.md` so gate enforcement rules are available during planning.
+When `TDD_MODE` is `true`, the planner agent is instructed to apply `type: tdd` to eligible tasks using heuristics from `references/tdd.md`. The planner's `<required_reading>` is extended to include `@.cursor/get-shit-done/references/tdd.md` so gate enforcement rules are available during planning.
 
 When `CONTEXT_WINDOW >= 500000`, the planner prompt includes the 3 most recent prior phase CONTEXT.md and SUMMARY.md files PLUS any phases explicitly listed in the current phase's `Depends on:` field in ROADMAP.md. Explicit dependencies always load regardless of recency (e.g., Phase 7 declaring `Depends on: Phase 2` always sees Phase 2's context). Bounded recency keeps the planner's context budget focused on recent work.
 
@@ -401,7 +401,7 @@ grep -l "## Validation Architecture" "${PHASE_DIR}"/*-RESEARCH.md 2>/dev/null ||
 ```
 
 **If found:**
-1. Read template: `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/VALIDATION.md`
+1. Read template: `.cursor/get-shit-done/templates/VALIDATION.md`
 2. Write to `${PHASE_DIR}/${PADDED_PHASE}-VALIDATION.md` (use Write tool)
 3. Fill frontmatter: `{N}` → phase number, `{phase-slug}` → slug, `{date}` → current date
 4. Verify:
@@ -730,7 +730,7 @@ ${AGENT_SKILLS_PLANNER}
 
 ${TDD_MODE === 'true' ? `
 <tdd_mode_active>
-**TDD Mode is ENABLED.** Apply TDD heuristics from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/tdd.md to all eligible tasks:
+**TDD Mode is ENABLED.** Apply TDD heuristics from @.cursor/get-shit-done/references/tdd.md to all eligible tasks:
 - Business logic with defined I/O → type: tdd
 - API endpoints with request/response contracts → type: tdd
 - Data transformations, validation, algorithms → type: tdd

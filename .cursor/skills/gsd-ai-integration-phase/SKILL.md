@@ -34,9 +34,9 @@ Flow: Select Framework → Research Docs → Research Domain → Design Eval Str
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/ai-integration-phase.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ai-frameworks.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ai-evals.md
+@.cursor/get-shit-done/workflows/ai-integration-phase.md
+@.cursor/get-shit-done/references/ai-frameworks.md
+@.cursor/get-shit-done/references/ai-evals.md
 </execution_context>
 
 <context>
@@ -44,6 +44,6 @@ Phase number: {{GSD_ARGS}} — optional, auto-detects next unplanned phase if om
 </context>
 
 <process>
-Execute @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/ai-integration-phase.md end-to-end.
+Execute @.cursor/get-shit-done/workflows/ai-integration-phase.md end-to-end.
 Preserve all workflow gates.
 </process>

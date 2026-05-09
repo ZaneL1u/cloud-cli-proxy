@@ -34,8 +34,8 @@ Produces EVAL-REVIEW.md with score, verdict, gaps, and remediation plan.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/eval-review.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ai-evals.md
+@.cursor/get-shit-done/workflows/eval-review.md
+@.cursor/get-shit-done/references/ai-evals.md
 </execution_context>
 
 <context>
@@ -43,6 +43,6 @@ Phase: {{GSD_ARGS}} — optional, defaults to last completed phase.
 </context>
 
 <process>
-Execute @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/eval-review.md end-to-end.
+Execute @.cursor/get-shit-done/workflows/eval-review.md end-to-end.
 Preserve all workflow gates.
 </process>

@@ -60,8 +60,8 @@ Output: 三个 bash 脚本（`gen-bench-tree.sh` / `perf-benchmark.sh` / `cold-s
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/execute-plan.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/templates/summary.md
+@.cursor/get-shit-done/workflows/execute-plan.md
+@.cursor/get-shit-done/templates/summary.md
 </execution_context>
 
 <context>

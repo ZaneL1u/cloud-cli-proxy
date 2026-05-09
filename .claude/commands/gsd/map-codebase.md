@@ -20,7 +20,7 @@ Output: .planning/codebase/ folder with 7 structured documents about the codebas
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/map-codebase.md
+@.claude/get-shit-done/workflows/map-codebase.md
 </execution_context>
 
 <flags>

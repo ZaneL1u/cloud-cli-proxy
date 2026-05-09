@@ -6,8 +6,8 @@ offers mid-conversation research when useful, then routes crystallized outputs t
 <required_reading>
 Read all files referenced by the invoking prompt's execution_context before starting.
 
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/questioning.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/domain-probes.md
+@.cursor/get-shit-done/references/questioning.md
+@.cursor/get-shit-done/references/domain-probes.md
 </required_reading>
 
 <available_agent_types>

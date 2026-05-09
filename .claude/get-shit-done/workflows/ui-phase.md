@@ -5,7 +5,7 @@ UI-SPEC.md locks spacing, typography, color, copywriting, and design system deci
 </purpose>
 
 <required_reading>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/references/ui-brand.md
+@.claude/get-shit-done/references/ui-brand.md
 </required_reading>
 
 <available_agent_types>
@@ -123,7 +123,7 @@ Display:
 Build prompt:
 
 ```markdown
-Read /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/agents/gsd-ui-researcher.md for instructions.
+Read .claude/agents/gsd-ui-researcher.md for instructions.
 
 <objective>
 Create UI design contract for Phase {phase_number}: {phase_name}
@@ -143,7 +143,7 @@ ${AGENT_SKILLS_UI}
 
 <output>
 Write to: {phase_dir}/{padded_phase}-UI-SPEC.md
-Template: /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/templates/UI-SPEC.md
+Template: .claude/get-shit-done/templates/UI-SPEC.md
 </output>
 
 <config>
@@ -188,7 +188,7 @@ Display:
 Build prompt:
 
 ```markdown
-Read /Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/agents/gsd-ui-checker.md for instructions.
+Read .claude/agents/gsd-ui-checker.md for instructions.
 
 <objective>
 Validate UI design contract for Phase {phase_number}: {phase_name}

@@ -32,7 +32,7 @@ Extract structured learnings from completed phase artifacts (PLAN.md, SUMMARY.md
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/extract_learnings.md
+@.cursor/get-shit-done/workflows/extract_learnings.md
 </execution_context>
 
-Execute the extract-learnings workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/extract_learnings.md end-to-end.
+Execute the extract-learnings workflow from @.cursor/get-shit-done/workflows/extract_learnings.md end-to-end.

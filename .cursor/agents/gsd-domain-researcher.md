@@ -33,7 +33,7 @@ works via Bash and produces equivalent output.
 </documentation_lookup>
 
 <required_reading>
-Read `/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ai-evals.md` — specifically the rubric design and domain expert sections.
+Read `.cursor/get-shit-done/references/ai-evals.md` — specifically the rubric design and domain expert sections.
 </required_reading>
 
 <input>

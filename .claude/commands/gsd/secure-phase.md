@@ -22,7 +22,7 @@ Output: updated SECURITY.md.
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/secure-phase.md
+@.claude/get-shit-done/workflows/secure-phase.md
 </execution_context>
 
 <context>

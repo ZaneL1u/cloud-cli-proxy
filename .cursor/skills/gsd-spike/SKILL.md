@@ -41,8 +41,8 @@ Does not require `/gsd-new-project` — auto-creates `.planning/spikes/` if need
 </objective>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/spike.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/references/ui-brand.md
+@.cursor/get-shit-done/workflows/spike.md
+@.cursor/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <runtime_note>
@@ -58,6 +58,6 @@ Idea: {{GSD_ARGS}}
 </context>
 
 <process>
-Execute the spike workflow from @/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.cursor/get-shit-done/workflows/spike.md end-to-end.
+Execute the spike workflow from @.cursor/get-shit-done/workflows/spike.md end-to-end.
 Preserve all workflow gates (prior spike check, decomposition, research, risk ordering, observability assessment, verification, MANIFEST updates, commit patterns).
 </process>

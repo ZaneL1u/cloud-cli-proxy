@@ -31,10 +31,10 @@ Mode routing:
 </routing>
 
 <execution_context>
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/add-phase.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/insert-phase.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/remove-phase.md
-@/Users/zaneliu/Projects/open-source/cloud-cli-proxy/.claude/get-shit-done/workflows/edit-phase.md
+@.claude/get-shit-done/workflows/add-phase.md
+@.claude/get-shit-done/workflows/insert-phase.md
+@.claude/get-shit-done/workflows/remove-phase.md
+@.claude/get-shit-done/workflows/edit-phase.md
 </execution_context>
 
 <context>
