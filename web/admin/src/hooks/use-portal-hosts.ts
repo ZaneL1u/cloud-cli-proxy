@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { portalApiFetch } from "@/lib/portal-api";
+import { useSSE } from "@/hooks/use-sse";
 
 export interface PortalHost {
   id: string;
@@ -32,10 +33,21 @@ export interface PortalHostDetail {
 }
 
 export function useMyHosts() {
-  return useQuery({
+  const qc = useQueryClient();
+
+  const query = useQuery({
     queryKey: ["portal", "hosts"],
     queryFn: () => portalApiFetch<{ hosts: PortalHost[] }>("/hosts"),
+    refetchInterval: 30000,
   });
+
+  useSSE(`${window.location.origin}/v1/user/sse?topics=hosts`, (msg) => {
+    if (msg.topic === "hosts") {
+      qc.invalidateQueries({ queryKey: ["portal", "hosts"] });
+    }
+  });
+
+  return query;
 }
 
 export function useMyHostDetail(
@@ -47,12 +59,27 @@ export function useMyHostDetail(
       | ((query: { state: { data?: PortalHostDetail } }) => number | false);
   },
 ) {
-  return useQuery({
+  const qc = useQueryClient();
+
+  const query = useQuery({
     queryKey: ["portal", "hosts", hostId],
     queryFn: () => portalApiFetch<PortalHostDetail>(`/hosts/${hostId}`),
     enabled: !!hostId,
-    refetchInterval: options?.refetchInterval,
+    refetchInterval: options?.refetchInterval ?? 30000,
   });
+
+  useSSE(
+    hostId
+      ? `${window.location.origin}/v1/user/sse?topics=hosts`
+      : "",
+    (msg) => {
+      if (msg.topic === "hosts" && msg.id === hostId) {
+        qc.invalidateQueries({ queryKey: ["portal", "hosts", hostId] });
+      }
+    },
+  );
+
+  return query;
 }
 
 export function useRebuildHost() {

@@ -68,53 +68,55 @@ export function MountManager({ hostId, hostStatus, mounts }: MountManagerProps) 
           <p className="text-xs text-muted-foreground">
             将宿主机目录挂载到容器内部。左侧为宿主机绝对路径，右侧为容器内挂载点，挂载后容器内可直接读写宿主机对应目录。
           </p>
-          <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-4 space-y-3">
-            {localMounts.map((m, i) => (
-              <div key={i} className="flex items-end gap-2">
-                <div className="flex-1 space-y-1">
-                  <span className="text-xs text-muted-foreground">宿主机路径</span>
-                  <PathAutocomplete
-                    placeholder="例: /data/shared"
-                    value={m.source}
-                    onChange={(v) => updateMountRow(i, "source", v)}
-                  />
+          {localMounts.length > 0 && (
+            <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-4 space-y-3">
+              {localMounts.map((m, i) => (
+                <div key={i} className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <span className="text-xs text-muted-foreground">宿主机路径</span>
+                    <PathAutocomplete
+                      placeholder="例: /data/shared"
+                      value={m.source}
+                      onChange={(v) => updateMountRow(i, "source", v)}
+                    />
+                  </div>
+                  <span className="pb-2 text-muted-foreground">-&gt;</span>
+                  <div className="flex-1 space-y-1">
+                    <span className="text-xs text-muted-foreground">容器路径</span>
+                    <Input
+                      placeholder="例: /data/shared"
+                      value={m.target}
+                      onChange={(e) => updateMountRow(i, "target", e.target.value)}
+                    />
+                  </div>
+                  {isRunning ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" disabled>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        运行中主机不允许修改挂载
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 w-9 p-0 shrink-0"
+                      onClick={() => removeMountRow(i)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
-                <span className="pb-2 text-muted-foreground">-&gt;</span>
-                <div className="flex-1 space-y-1">
-                  <span className="text-xs text-muted-foreground">容器路径</span>
-                  <Input
-                    placeholder="例: /data/shared"
-                    value={m.target}
-                    onChange={(e) => updateMountRow(i, "target", e.target.value)}
-                  />
-                </div>
-                {isRunning ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" disabled>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      运行中主机不允许修改挂载
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-9 w-9 p-0 shrink-0"
-                    onClick={() => removeMountRow(i)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
           {!isRunning && (
             <Button
               type="button"
@@ -144,12 +146,7 @@ export function MountManager({ hostId, hostStatus, mounts }: MountManagerProps) 
             已配置挂载
           </p>
           {mounts.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center">
-              <p className="text-sm text-muted-foreground">暂无挂载配置</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                停止主机后可在下方添加挂载。
-              </p>
-            </div>
+            <p className="py-3 text-sm text-muted-foreground">尚未配置挂载路径，停止主机后可添加。</p>
           ) : (
             <ul className="space-y-3">
               {mounts.map((m, i) => (

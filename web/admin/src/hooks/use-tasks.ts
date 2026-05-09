@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { useSSE } from "@/hooks/use-sse";
 
 export interface Task {
   task_id: string;
@@ -17,11 +18,24 @@ export interface Task {
 }
 
 export function useTasks() {
-  return useQuery({
+  const qc = useQueryClient();
+
+  const query = useQuery({
     queryKey: ["tasks"],
     queryFn: () => apiFetch<{ tasks: Task[] }>("/tasks"),
-    refetchInterval: 5000,
+    refetchInterval: 10000,
   });
+
+  useSSE(`${window.location.origin}/v1/admin/sse?topics=tasks`, (msg) => {
+    if (msg.topic === "tasks") {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      if (msg.id) {
+        qc.invalidateQueries({ queryKey: ["tasks", msg.id] });
+      }
+    }
+  });
+
+  return query;
 }
 
 export function useTaskPolling(taskId: string | null) {

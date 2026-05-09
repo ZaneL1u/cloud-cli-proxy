@@ -3,120 +3,126 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Check,
   Copy,
-  Download,
-  FileText,
   KeyRound,
   Monitor,
   Pause,
   Play,
   RefreshCw,
   Settings,
+  Square,
   Terminal,
-  Upload,
+  Trash2,
+  Clock,
+  Globe,
+  HardDrive,
+  ExternalLink,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getToken } from "@/lib/auth";
 import {
   useHostDetail,
   useHostImageInfo,
-  useRestartHostVNC,
-  useExportHostConfig,
   useImportHostConfig,
   useHostLogs,
+  useHostAction,
+  useDeleteHost,
 } from "@/hooks/use-hosts";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { BindingManager } from "@/components/hosts/binding-manager";
 import { MountManager } from "@/components/hosts/mount-manager";
 import { PortManager } from "@/components/hosts/port-manager";
-import { HostLifecycleActions } from "@/components/hosts/host-lifecycle-actions";
 import { RotatePasswordDialog } from "@/components/users/rotate-password-dialog";
 import { ChangeRootPasswordDialog } from "@/components/hosts/change-root-password-dialog";
 import { ClaudeSettingsDialog } from "@/components/hosts/claude-settings-dialog";
 import { ClaudeStatusCard } from "@/components/hosts/claude-status-card";
+import { RebuildDialog } from "@/components/hosts/rebuild-dialog";
 
 export const Route = createFileRoute("/_dashboard/hosts/$hostId")({
   component: HostDetailPage,
 });
 
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+function timeSince(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时`;
+  return `${Math.floor(hours / 24)} 天`;
 }
 
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  running: { label: "运行中", variant: "default" },
-  stopped: { label: "已停止", variant: "secondary" },
-  pending: { label: "等待中", variant: "outline" },
-  failed: { label: "失败", variant: "destructive" },
+const statusConfig: Record<string, { label: string; color: string; dot: string; bg: string; border: string }> = {
+  running: { label: "运行中", color: "text-emerald-700", dot: "bg-emerald-500", bg: "bg-emerald-50", border: "border-emerald-200" },
+  stopped: { label: "已停止", color: "text-slate-600", dot: "bg-slate-400", bg: "bg-slate-50", border: "border-slate-200" },
+  pending: { label: "等待中", color: "text-amber-700", dot: "bg-amber-500", bg: "bg-amber-50", border: "border-amber-200" },
+  failed: { label: "失败", color: "text-red-700", dot: "bg-red-500", bg: "bg-red-50", border: "border-red-200" },
 };
 
-const dockerStatusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  running: { label: "运行中", variant: "default" },
-  exited: { label: "已停止", variant: "secondary" },
-  "not found": { label: "未创建", variant: "outline" },
-  created: { label: "已创建", variant: "outline" },
-  restarting: { label: "重启中", variant: "outline" },
-  paused: { label: "已暂停", variant: "outline" },
-  dead: { label: "已死亡", variant: "destructive" },
-};
-
-function getHostStatus(host: { status: string; docker_status?: string }) {
-  // 优先 DB status
-  if (statusConfig[host.status]) return statusConfig[host.status];
-  // docker_status 仅作为降级辅助
-  if (host.docker_status && dockerStatusConfig[host.docker_status]) {
-    return dockerStatusConfig[host.docker_status];
-  }
-  return { label: host.status, variant: "outline" as const };
-}
+type ConnTab = "ssh" | "curl" | "vnc";
 
 function HostDetailPage() {
   const { hostId } = Route.useParams();
   const { data, isLoading } = useHostDetail(hostId);
   const { data: imageInfo } = useHostImageInfo(hostId, !!data?.host);
-  const restartVNCMutation = useRestartHostVNC();
-  const exportConfigMutation = useExportHostConfig();
   const importConfigMutation = useImportHostConfig();
+  const actionMutation = useHostAction();
+  const deleteMutation = useDeleteHost();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [activeTab, setActiveTab] = useState<ConnTab>("ssh");
+  const [configOpen, setConfigOpen] = useState(true);
   const [rotateLoginOpen, setRotateLoginOpen] = useState(false);
   const [changeRootPwOpen, setChangeRootPwOpen] = useState(false);
   const [claudeSettingsOpen, setClaudeSettingsOpen] = useState(false);
+  const [rebuildOpen, setRebuildOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <div className="h-8 w-48 animate-pulse rounded bg-muted" />
-        <div className="h-40 animate-pulse rounded bg-muted" />
+      <div className="space-y-6">
+        <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
+        <div className="h-52 animate-pulse rounded-xl bg-muted" />
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-28 animate-pulse rounded-xl bg-muted" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="py-12 text-center text-muted-foreground">
+      <div className="py-20 text-center text-muted-foreground">
         主机不存在
       </div>
     );
   }
 
   const { host, user, bindings } = data;
-  const sc = getHostStatus(host);
+  const sc = statusConfig[host.status] || { label: host.status, color: "text-slate-600", dot: "bg-slate-400", bg: "bg-slate-50", border: "border-slate-200" };
+  const isRunning = host.status === "running";
+  const displayName = host.hostname || user.username || host.id.slice(0, 8);
+
+  const sshPort = data.connection_info?.ssh_port;
+  const egressIP = bindings?.[0]?.egress_ip?.ip_address;
 
   function openVNC() {
     const token = getToken();
@@ -127,453 +133,340 @@ function HostDetailPage() {
     );
   }
 
-  function restartVNC() {
-    restartVNCMutation.mutate(host.id, {
-      onSuccess: () => toast.success("VNC 服务已重启"),
-      onError: () => toast.error("重启 VNC 失败，请稍后重试"),
-    });
+  function handleAction(action: "start" | "stop") {
+    actionMutation.mutate(
+      { hostId, action },
+      {
+        onSuccess: () => toast.success(action === "start" ? "启动指令已发送" : "停止指令已发送"),
+        onError: () => toast.error("操作失败"),
+      },
+    );
   }
 
-  const displayName = host.hostname || user.username || host.id.slice(0, 8) + "…";
+  function handleDelete(force: boolean) {
+    deleteMutation.mutate(
+      { hostId, force },
+      {
+        onSuccess: () => {
+          toast.success("主机已删除");
+          window.location.href = "/hosts";
+        },
+        onError: (err: any) => toast.error(err?.message || "删除失败"),
+      },
+    );
+  }
+
+  const connTabs: { key: ConnTab; label: string; value?: string }[] = [
+    { key: "ssh", label: "SSH", value: data.connection_info?.ssh_command },
+    { key: "curl", label: "一键连接", value: data.connection_info?.curl_command },
+    ...(data.connection_info?.vnc_url ? [{ key: "vnc" as ConnTab, label: "VNC", value: data.connection_info.vnc_url }] : []),
+  ];
+
+  const activeConn = connTabs.find((t) => t.key === activeTab) ?? connTabs[0];
 
   return (
     <div className="space-y-6">
-      <nav aria-label="面包屑" className="text-sm text-muted-foreground">
-        <Link to="/hosts" className="hover:text-foreground">
-          主机管理
-        </Link>
-        <span className="mx-2 text-border">/</span>
-        <span className="font-medium text-foreground">{displayName}</span>
-      </nav>
-
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-3">
+      {/* ===== 顶部标题栏 ===== */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <nav className="mb-1.5 flex items-center gap-2 text-sm text-muted-foreground">
+            <Link to="/hosts" className="hover:text-foreground transition-colors">主机管理</Link>
+            <span className="text-border">/</span>
+            <span className="font-medium text-foreground">{displayName}</span>
+          </nav>
+          <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight">{displayName}</h1>
-            <Badge variant={sc.variant}>{sc.label}</Badge>
+            <span className={`inline-flex items-center gap-1.5 rounded-full border ${sc.border} ${sc.bg} px-2.5 py-0.5 text-xs font-semibold ${sc.color}`}>
+              <span className={`relative flex h-2 w-2`}>
+                {isRunning && <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${sc.dot}`} />}
+                <span className={`relative inline-flex h-2 w-2 rounded-full ${sc.dot}`} />
+              </span>
+              {sc.label}
+            </span>
           </div>
-          <p className="text-sm text-muted-foreground">
-            所属用户{" "}
-            <Link
-              to="/users/$userId"
-              params={{ userId: user.id }}
-              className="font-medium text-primary hover:underline"
-            >
-              {user.username}
-            </Link>
-          </p>
+          <div className="mt-1.5 flex items-center gap-3 text-sm text-muted-foreground">
+            <span className="font-mono text-xs">{host.id.slice(0, 12)}…</span>
+            <span className="h-3 w-px bg-border" />
+            <span className="text-xs">{host.template_image_ref}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 主操作 */}
+          {isRunning ? (
+            <Button size="sm" className="h-9 gap-2 bg-primary text-primary-foreground hover:bg-primary/90" onClick={openVNC}>
+              <Monitor className="h-4 w-4" /> VNC 桌面
+            </Button>
+          ) : null}
+          {isRunning ? (
+            <Button size="sm" variant="outline" className="h-9 gap-2" onClick={() => handleAction("stop")} disabled={actionMutation.isPending}>
+              <Square className="h-3.5 w-3.5 fill-current" /> 停止
+            </Button>
+          ) : (
+            <Button size="sm" className="h-9 gap-2 bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => handleAction("start")} disabled={actionMutation.isPending}>
+              <Play className="h-3.5 w-3.5 fill-current" /> 启动
+            </Button>
+          )}
+
+          {/* 分隔 */}
+          <span className="hidden h-6 w-px bg-border sm:inline-block" />
+
+          {/* 次要操作 */}
+          <Button size="sm" variant="outline" className="h-9 gap-2" onClick={() => setRebuildOpen(true)} disabled={actionMutation.isPending}>
+            <RefreshCw className="h-3.5 w-3.5" /> 重建
+          </Button>
+          <Button size="sm" variant="outline" className="h-9 gap-2" onClick={() => setRotateLoginOpen(true)}>
+            <KeyRound className="h-3.5 w-3.5" /> 轮换密码
+          </Button>
+
+          {/* 危险操作 */}
+          <Button size="sm" variant="ghost" className="h-9 w-9 p-0 text-muted-foreground hover:text-destructive" onClick={() => isRunning ? setForceDeleteOpen(true) : setDeleteOpen(true)} disabled={deleteMutation.isPending}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      <div className="rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="border-b border-border/60 px-6 py-4">
-          <h2 className="text-sm font-semibold">基本信息</h2>
-        </div>
-        <div className="grid gap-0 md:grid-cols-2">
-          <div className="border-border/60 p-6 md:border-r">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              标识与归属
-            </h3>
-            <dl className="grid gap-3 text-sm">
-              <div className="space-y-1">
-                <dt className="text-xs text-muted-foreground">主机 ID</dt>
-                <dd className="break-all font-mono text-sm">{host.id}</dd>
-              </div>
-              <div className="space-y-1">
-                <dt className="text-xs text-muted-foreground">主机名</dt>
-                <dd className="text-sm">{host.hostname || "—"}</dd>
-              </div>
-              <div className="space-y-1">
-                <dt className="text-xs text-muted-foreground">所属用户</dt>
-                <dd>
-                  <Link
-                    to="/users/$userId"
-                    params={{ userId: user.id }}
-                    className="text-sm text-primary hover:underline"
-                  >
-                    {user.username}
-                  </Link>
-                </dd>
-              </div>
-              <div className="space-y-1">
-                <dt className="text-xs text-muted-foreground">Slot Key</dt>
-                <dd className="text-sm">{host.slot_key}</dd>
-              </div>
-            </dl>
-          </div>
-          <div className="p-6">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              配置
-            </h3>
-            <dl className="grid gap-3 text-sm">
-              <div className="space-y-1">
-                <dt className="text-xs text-muted-foreground">镜像模板</dt>
-                <dd className="break-all font-mono text-xs">
-                  {host.template_image_ref}
-                </dd>
-              </div>
-              {imageInfo?.container_available && (
-                <>
-                  <div className="space-y-1">
-                    <dt className="text-xs text-muted-foreground">当前镜像 ID</dt>
-                    <dd className="font-mono text-xs">{imageInfo.container_image_id || "—"}</dd>
-                  </div>
-                  {imageInfo.latest_image_id && (
-                    <div className="space-y-1">
-                      <dt className="text-xs text-muted-foreground">最新镜像 ID</dt>
-                      <dd className="font-mono text-xs">
-                        {imageInfo.latest_image_id}
-                        {imageInfo.update_available && (
-                          <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">
-                            有更新
-                          </Badge>
-                        )}
-                        {!imageInfo.update_available && (
-                          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 text-emerald-600 border-emerald-300">
-                            已最新
-                          </Badge>
-                        )}
-                      </dd>
-                    </div>
-                  )}
-                </>
-              )}
-              <div className="space-y-1">
-                <dt className="text-xs text-muted-foreground">时区</dt>
-                <dd className="text-sm">{host.timezone || "—"}</dd>
-              </div>
-            </dl>
-            <h3 className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              时间
-            </h3>
-            <dl className="grid gap-3 text-sm">
-              <div className="space-y-1">
-                <dt className="text-xs text-muted-foreground">创建时间</dt>
-                <dd>{formatDate(host.created_at)}</dd>
-              </div>
-              <div className="space-y-1">
-                <dt className="text-xs text-muted-foreground">更新时间</dt>
-                <dd>{formatDate(host.updated_at)}</dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      </div>
-
+      {/* ===== 连接卡片（页面核心 CTA） ===== */}
       {data.connection_info && (
-        <Card className="overflow-hidden rounded-xl border-border/80 shadow-sm">
-          <CardHeader className="border-b bg-muted/30">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Terminal className="h-5 w-5" />
-              连接方式
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="divide-y divide-border/60">
-              <ConnectionBlock
-                label="一键连接（curl 入口）"
-                command={data.connection_info.curl_command}
-              />
-              <div className="p-6 space-y-3">
-                <ConnectionBlock
-                  label="SSH 直连（配置入站密钥后可免密登录）"
-                  command={data.connection_info.ssh_command}
-                  inline
-                />
-                <Button
-                  type="button"
-                  variant="default"
-                  className="h-10 gap-2"
-                  onClick={() => {
-                    navigator.clipboard.writeText(data.connection_info!.ssh_command);
-                    toast.success("SSH 命令已复制，请在终端中粘贴执行");
-                  }}
-                >
-                  <Terminal className="h-4 w-4" />
-                  复制 SSH 命令
-                </Button>
+        <Card className="overflow-hidden rounded-xl border-border/60 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 px-6 py-4">
+            <CardTitle className="flex items-center gap-2 text-base font-semibold">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                <Terminal className="h-4 w-4 text-primary" />
               </div>
-              {data.connection_info.vnc_url && (
-                <div className="space-y-4 p-6">
-                  <ConnectionBlock
-                    label="VNC 登录入口"
-                    command={data.connection_info.vnc_url}
-                    inline
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 gap-2"
-                    onClick={openVNC}
-                  >
-                    <Monitor className="h-4 w-4" />
-                    打开浏览器桌面
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 gap-2"
-                    disabled={restartVNCMutation.isPending}
-                    onClick={restartVNC}
-                  >
-                    <Monitor className="h-4 w-4" />
-                    {restartVNCMutation.isPending ? "重启中..." : "重启 VNC 服务"}
-                  </Button>
-                </div>
-              )}
+              连接到主机
+            </CardTitle>
+            <div className="flex rounded-lg bg-muted p-0.5">
+              {connTabs.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  className={`rounded-md px-3.5 py-1.5 text-xs font-medium transition-all ${
+                    activeTab === t.key
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
             </div>
+          </CardHeader>
+          <CardContent className="space-y-4 p-6">
+            <div className="relative rounded-xl bg-slate-950 px-5 py-5">
+              <code className="block break-all pr-24 font-mono text-sm leading-relaxed text-slate-100">
+                {activeConn.value}
+              </code>
+              <div className="absolute top-1/2 right-5 -translate-y-1/2">
+                <CopyButton value={activeConn.value ?? ""} />
+              </div>
+            </div>
+
+            {activeTab === "ssh" && sshPort && (
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <Terminal className="h-3.5 w-3.5" />
+                  <span>SSH 端口</span>
+                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">{sshPort}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Globe className="h-3.5 w-3.5" />
+                  <span>用户名</span>
+                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">{user.username}</span>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "curl" && (
+              <p className="text-xs text-muted-foreground">
+                在本地终端运行上述命令，即可自动连接到此主机的 SSH 会话。
+              </p>
+            )}
+
+            {activeTab === "vnc" && (
+              <Button size="sm" className="h-8 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90" onClick={openVNC}>
+                <ExternalLink className="h-3.5 w-3.5" /> 打开 VNC 桌面
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
-        <Card className="rounded-xl border-border/80 shadow-sm">
-          <CardHeader className="border-b bg-muted/30 pb-4">
-            <CardTitle className="text-base">出口 IP 绑定</CardTitle>
-            <CardDescription className="text-xs leading-relaxed">
-              未运行时可增删绑定；运行中主机需先停止后再调整。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-6 pt-5">
-            <BindingManager
-              hostId={hostId}
-              hostStatus={host.status}
-              bindings={bindings}
-            />
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-xl border-border/80 shadow-sm">
-          <CardHeader className="border-b bg-muted/30 pb-4">
-            <CardTitle className="text-base">挂载路径</CardTitle>
-            <CardDescription className="text-xs leading-relaxed">
-              配置宿主机目录到容器的 bind mount。运行中主机需先停止后再编辑。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-6 pt-5">
-            <MountManager
-              hostId={hostId}
-              hostStatus={host.status}
-              mounts={host.host_mounts ?? []}
-            />
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-xl border-border/80 shadow-sm">
-          <CardHeader className="border-b bg-muted/30 pb-4">
-            <CardTitle className="text-base">端口映射</CardTitle>
-            <CardDescription className="text-xs leading-relaxed">
-              配置宿主机端口到容器端口的映射。运行中主机需先停止后再编辑。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-6 pt-5">
-            <PortManager
-              hostId={hostId}
-              hostStatus={host.status}
-              ports={host.host_ports ?? []}
-            />
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-xl border-border/80 shadow-sm">
-          <CardHeader className="border-b bg-muted/30 pb-4">
-            <CardTitle className="text-base">生命周期与密码操作</CardTitle>
-            <CardDescription className="text-xs leading-relaxed">
-              电源与重建会生成任务；密码与桌面操作异步执行。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-0 p-0">
-            <div className="p-6 pt-5">
-              <HostLifecycleActions hostId={hostId} hostStatus={host.status} imageInfo={imageInfo} />
-            </div>
-            <Separator />
-            <div className="space-y-4 bg-muted/25 p-6">
-              <div>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  凭据与远程
-                </p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-11 justify-start gap-2 px-4"
-                    onClick={() => setRotateLoginOpen(true)}
-                  >
-                    <KeyRound className="h-4 w-4 shrink-0" />
-                    <span className="text-left text-sm leading-snug">
-                      轮换用户登录密码
-                    </span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-11 justify-start gap-2 px-4 sm:col-span-1"
-                    onClick={() => setChangeRootPwOpen(true)}
-                  >
-                    <KeyRound className="h-4 w-4 shrink-0" />
-                    <span className="text-left text-sm leading-snug">
-                      修改 Root 密码
-                    </span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-11 justify-start gap-2 px-4 sm:col-span-1"
-                    onClick={() => setClaudeSettingsOpen(true)}
-                  >
-                    <Settings className="h-4 w-4 shrink-0" />
-                    <span className="text-left text-sm leading-snug">
-                      编辑 Claude 配置
-                    </span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-11 justify-start gap-2 px-4 sm:col-span-1"
-                    disabled={host.status !== "running" || exportConfigMutation.isPending}
-                    onClick={() =>
-                      exportConfigMutation.mutate(host.id, {
-                        onError: (err: Error) => toast.error(err.message || "导出配置失败"),
-                      })
-                    }
-                  >
-                    <Download className="h-4 w-4 shrink-0" />
-                    <span className="text-left text-sm leading-snug">
-                      {exportConfigMutation.isPending ? "导出中..." : "导出配置"}
-                    </span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-11 justify-start gap-2 px-4 sm:col-span-1"
-                    disabled={host.status !== "running" || importConfigMutation.isPending}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload className="h-4 w-4 shrink-0" />
-                    <span className="text-left text-sm leading-snug">
-                      {importConfigMutation.isPending ? "导入中..." : "导入配置"}
-                    </span>
-                  </Button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".tar.gz,application/gzip"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      importConfigMutation.mutate(
-                        { hostId: host.id, file },
-                        {
-                          onError: (err: Error) => toast.error(err.message || "导入配置失败"),
-                        }
-                      );
-                      e.target.value = "";
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-11 justify-start gap-2 px-4 sm:col-span-2"
-                    onClick={openVNC}
-                  >
-                    <Monitor className="h-4 w-4 shrink-0" />
-                    <span className="text-left text-sm leading-snug">
-                      打开 VNC 桌面
-                    </span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-11 justify-start gap-2 px-4 sm:col-span-2"
-                    disabled={restartVNCMutation.isPending}
-                    onClick={restartVNC}
-                  >
-                    <Monitor className="h-4 w-4 shrink-0" />
-                    <span className="text-left text-sm leading-snug">
-                      {restartVNCMutation.isPending ? "重启 VNC 中..." : "重启 VNC 服务"}
-                    </span>
-                  </Button>
-                </div>
-              </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                操作提交后将异步执行，请在「任务列表」中查看进度。
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      {/* ===== 关键指标（Dashboard KPI 风格） ===== */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard
+          icon={<Globe className="h-4 w-4 text-primary" />}
+          label="出口 IP"
+          value={egressIP || "未绑定"}
+          mono
+        />
+        <StatCard
+          icon={<Terminal className="h-4 w-4 text-primary" />}
+          label="SSH 端口"
+          value={sshPort ? String(sshPort) : "—"}
+          mono
+        />
+        <StatCard
+          icon={<HardDrive className="h-4 w-4 text-primary" />}
+          label="镜像版本"
+          value={imageInfo?.latest_image_id?.slice(0, 12) || host.template_image_ref}
+          mono
+          suffix={imageInfo?.update_available ? (
+            <span className="ml-1.5 inline-flex items-center rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+              有更新
+            </span>
+          ) : null}
+        />
+        <StatCard
+          icon={<Clock className="h-4 w-4 text-primary" />}
+          label="已创建"
+          value={timeSince(host.created_at)}
+        />
       </div>
 
+      {/* ===== 容器日志 ===== */}
+      <HostLogsBlock hostId={host.id} />
+
+      {/* ===== 配置详情 ===== */}
+      <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+        <button
+          onClick={() => setConfigOpen(!configOpen)}
+          className="flex w-full items-center justify-between px-6 py-4 text-left transition-colors hover:bg-muted/30"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+              <Settings className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <span className="block text-sm font-semibold">配置详情</span>
+              <span className="text-xs text-muted-foreground">出口 IP 绑定、挂载路径、端口映射</span>
+            </div>
+          </div>
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${configOpen ? "" : "-rotate-90"}`} />
+        </button>
+        {configOpen && (
+          <div className="border-t border-border/40 px-6 py-5">
+            <div className="grid grid-cols-1 lg:grid-cols-3">
+              <div className="px-2 py-2 lg:border-r lg:border-border/40 lg:px-4">
+                <h3 className="mb-1 text-sm font-semibold">出口 IP 绑定</h3>
+                <p className="mb-4 text-xs text-muted-foreground">每台主机必须绑定一个出口 IP</p>
+                <BindingManager hostId={hostId} hostStatus={host.status} bindings={bindings} />
+              </div>
+              <div className="px-2 py-2 lg:border-r lg:border-border/40 lg:px-4">
+                <h3 className="mb-1 text-sm font-semibold">挂载路径</h3>
+                <p className="mb-4 text-xs text-muted-foreground">{isRunning ? "运行中不可编辑" : "停止中，可以编辑"}</p>
+                <MountManager hostId={hostId} hostStatus={host.status} mounts={host.host_mounts ?? []} />
+              </div>
+              <div className="px-2 py-2 lg:px-4">
+                <h3 className="mb-1 text-sm font-semibold">端口映射</h3>
+                <p className="mb-4 text-xs text-muted-foreground">{isRunning ? "运行中不可编辑" : "停止中，可以编辑"}</p>
+                <PortManager hostId={hostId} hostStatus={host.status} ports={host.host_ports ?? []} />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ===== Claude 状态 ===== */}
       <ClaudeStatusCard hostId={hostId} hostStatus={host.status} />
 
-      <RotatePasswordDialog
-        userId={user.id}
-        open={rotateLoginOpen}
-        onOpenChange={setRotateLoginOpen}
-      />
-      <ChangeRootPasswordDialog
-        hostId={host.id}
-        open={changeRootPwOpen}
-        onOpenChange={setChangeRootPwOpen}
-      />
-      <ClaudeSettingsDialog
-        hostId={host.id}
-        hostStatus={host.status}
-        open={claudeSettingsOpen}
-        onOpenChange={setClaudeSettingsOpen}
-      />
+      {/* ===== Dialogs ===== */}
+      <RotatePasswordDialog userId={user.id} open={rotateLoginOpen} onOpenChange={setRotateLoginOpen} />
+      <ChangeRootPasswordDialog hostId={host.id} open={changeRootPwOpen} onOpenChange={setChangeRootPwOpen} />
+      <ClaudeSettingsDialog hostId={host.id} hostStatus={host.status} open={claudeSettingsOpen} onOpenChange={setClaudeSettingsOpen} />
+      <RebuildDialog hostId={hostId} open={rebuildOpen} onOpenChange={setRebuildOpen} />
 
-      <HostLogsBlock hostId={host.id} />
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除主机？</AlertDialogTitle>
+            <AlertDialogDescription>将停止并移除容器，删除数据库记录和出口 IP 绑定。不可撤销。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleDelete(false)}>确认删除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={forceDeleteOpen} onOpenChange={setForceDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" /> 强制删除运行中的主机？
+            </AlertDialogTitle>
+            <AlertDialogDescription>主机正在运行，强制删除将立即终止容器并清除数据。不可撤销。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleDelete(true)}>强制删除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".tar.gz,application/gzip"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          importConfigMutation.mutate(
+            { hostId: host.id, file },
+            { onError: (err: Error) => toast.error(err.message || "导入失败") }
+          );
+          e.target.value = "";
+        }}
+      />
     </div>
   );
 }
 
-function ConnectionBlock({
-  label,
-  command,
-  inline,
-}: {
-  label: string;
-  command: string;
-  inline?: boolean;
-}) {
+/* ===== 子组件 ===== */
+
+function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
-
-  function handleCopy() {
-    navigator.clipboard.writeText(command).then(() => {
-      setCopied(true);
-      toast.success("已复制到剪贴板");
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
-  const content = (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <div className="group relative overflow-hidden rounded-lg border border-border/60 bg-muted/40 transition-colors hover:bg-muted/60">
-        <code className="block break-all px-4 py-3 pr-12 font-mono text-sm leading-relaxed text-foreground">
-          {command}
-        </code>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 opacity-60 transition-opacity hover:opacity-100 group-hover:opacity-100"
-          onClick={handleCopy}
-        >
-          {copied ? (
-            <Check className="h-4 w-4 text-emerald-500" />
-          ) : (
-            <Copy className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
-    </div>
+  return (
+    <Button
+      size="sm"
+      className="h-8 gap-1.5 bg-white/10 text-white hover:bg-white/20"
+      onClick={() => {
+        navigator.clipboard.writeText(value).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? "已复制" : "复制"}
+    </Button>
   );
+}
 
-  if (inline) return content;
-  return <div className="p-6">{content}</div>;
+function StatCard({ icon, label, value, mono, suffix }: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+  suffix?: React.ReactNode;
+}) {
+  return (
+    <Card className="overflow-hidden rounded-xl border-border/60 shadow-sm">
+      <CardContent className="flex flex-col p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+            {icon}
+          </div>
+          <span className="text-xs text-muted-foreground">{label}</span>
+        </div>
+        <div className={`text-sm font-semibold text-foreground ${mono ? "font-mono" : ""}`}>
+          {value}
+          {suffix}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function HostLogsBlock({ hostId }: { hostId: string }) {
@@ -581,57 +474,41 @@ function HostLogsBlock({ hostId }: { hostId: string }) {
   const { data, isLoading, refetch, isRefetching } = useHostLogs(hostId, autoRefresh ? 5000 : false);
 
   return (
-    <div className="rounded-xl border border-border/80 bg-card shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border/60 px-6 py-4 bg-muted/30">
-        <div className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          <h2 className="text-sm font-semibold">容器日志</h2>
+    <Card className="overflow-hidden rounded-xl border-border/60 shadow-sm">
+      <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 px-5 py-3.5">
+        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+            <Terminal className="h-4 w-4 text-primary" />
+          </div>
+          容器日志
           {data?.container_name && (
-            <span className="text-xs text-muted-foreground">
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground">
               {data.container_name}
             </span>
           )}
-        </div>
-        <div className="flex items-center gap-2">
-          {data?.error && (
-            <span className="text-xs text-destructive">
-              错误: {data.error}
-            </span>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1"
-            onClick={() => refetch()}
-            disabled={isRefetching}
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isRefetching ? "animate-spin" : ""}`} />
-            刷新
+        </CardTitle>
+        <div className="flex items-center gap-1.5">
+          {data?.error && <span className="text-xs text-destructive">{data.error}</span>}
+          <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => refetch()} disabled={isRefetching}>
+            <RefreshCw className={`h-3 w-3 ${isRefetching ? "animate-spin" : ""}`} /> 刷新
           </Button>
-          <Button
-            variant={autoRefresh ? "default" : "outline"}
-            size="sm"
-            className="h-8 gap-1"
-            onClick={() => setAutoRefresh(!autoRefresh)}
-          >
-            {autoRefresh ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-            {autoRefresh ? "暂停刷新" : "自动刷新"}
+          <Button variant={autoRefresh ? "secondary" : "ghost"} size="sm" className="h-7 gap-1 text-xs" onClick={() => setAutoRefresh(!autoRefresh)}>
+            {autoRefresh ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+            {autoRefresh ? "暂停" : "自动"}
           </Button>
         </div>
-      </div>
-      <div className="relative">
+      </CardHeader>
+      <CardContent className="p-0">
         {isLoading ? (
-          <div className="h-80 flex items-center justify-center bg-black">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-green-500 border-t-transparent" />
+          <div className="flex h-64 items-center justify-center bg-black">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-green-500 border-t-transparent" />
           </div>
         ) : (
-          <pre className="h-80 overflow-auto bg-black text-green-400 font-mono text-[11px] leading-relaxed p-4 whitespace-pre-wrap break-all">
-            {data?.logs || (
-              <span className="text-muted-foreground">暂无日志</span>
-            )}
+          <pre className="h-64 overflow-auto bg-black p-4 font-mono text-[11px] leading-relaxed text-green-400 whitespace-pre-wrap break-all">
+            {data?.logs || <span className="text-muted-foreground">暂无日志</span>}
           </pre>
         )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

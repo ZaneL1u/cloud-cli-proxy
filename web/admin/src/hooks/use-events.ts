@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { useSSE } from "@/hooks/use-sse";
 
 const eventTypeLabelMap: Record<string, string> = {
   "auth.success": "认证成功",
@@ -49,6 +50,7 @@ export interface EventsParams {
 }
 
 export function useEvents(params: EventsParams = {}) {
+  const qc = useQueryClient();
   const searchParams = new URLSearchParams();
   if (params.type) searchParams.set("type", params.type);
   if (params.userId) searchParams.set("user_id", params.userId);
@@ -57,9 +59,17 @@ export function useEvents(params: EventsParams = {}) {
   if (params.offset) searchParams.set("offset", String(params.offset));
 
   const qs = searchParams.toString();
-  return useQuery({
+  const query = useQuery({
     queryKey: ["events", params],
     queryFn: () => apiFetch<EventsResponse>(`/events${qs ? `?${qs}` : ""}`),
-    refetchInterval: 15000,
+    refetchInterval: 30000,
   });
+
+  useSSE(`${window.location.origin}/v1/admin/sse?topics=events`, (msg) => {
+    if (msg.topic === "events") {
+      qc.invalidateQueries({ queryKey: ["events"] });
+    }
+  });
+
+  return query;
 }

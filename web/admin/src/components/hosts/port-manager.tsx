@@ -102,59 +102,61 @@ export function PortManager({ hostId, hostStatus, ports }: PortManagerProps) {
           <p className="text-xs text-muted-foreground">
             将宿主机端口转发到容器内部端口。外部通过"宿主机端口"访问，请求会被自动转发到容器内对应服务。
           </p>
-          <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-4 space-y-3">
-            {localPorts.map((p, i) => (
-              <div key={i} className="flex items-end gap-2">
-                <div className="flex-1 space-y-1">
-                  <span className="text-xs text-muted-foreground">宿主机端口</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={65535}
-                    placeholder="如 8080"
-                    value={p.host_port}
-                    onChange={(e) => updatePortRow(i, "host_port", e.target.value)}
-                  />
+          {localPorts.length > 0 && (
+            <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-4 space-y-3">
+              {localPorts.map((p, i) => (
+                <div key={i} className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <span className="text-xs text-muted-foreground">宿主机端口</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={65535}
+                      placeholder="如 8080"
+                      value={p.host_port}
+                      onChange={(e) => updatePortRow(i, "host_port", e.target.value)}
+                    />
+                  </div>
+                  <span className="pb-2 text-muted-foreground">:</span>
+                  <div className="flex-1 space-y-1">
+                    <span className="text-xs text-muted-foreground">容器端口</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={65535}
+                      placeholder="如 80"
+                      value={p.container_port}
+                      onChange={(e) => updatePortRow(i, "container_port", e.target.value)}
+                    />
+                  </div>
+                  {isRunning ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" disabled>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        运行中主机不允许修改端口映射
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 w-9 p-0 shrink-0"
+                      onClick={() => removePortRow(i)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
-                <span className="pb-2 text-muted-foreground">:</span>
-                <div className="flex-1 space-y-1">
-                  <span className="text-xs text-muted-foreground">容器端口</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={65535}
-                    placeholder="如 80"
-                    value={p.container_port}
-                    onChange={(e) => updatePortRow(i, "container_port", e.target.value)}
-                  />
-                </div>
-                {isRunning ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" disabled>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      运行中主机不允许修改端口映射
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-9 w-9 p-0 shrink-0"
-                    onClick={() => removePortRow(i)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
           {!isRunning && (
             <Button
               type="button"
@@ -184,12 +186,7 @@ export function PortManager({ hostId, hostStatus, ports }: PortManagerProps) {
             已配置端口映射
           </p>
           {ports.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center">
-              <p className="text-sm text-muted-foreground">暂无端口映射</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                停止主机后可在下方添加端口映射。
-              </p>
-            </div>
+            <p className="py-3 text-sm text-muted-foreground">尚未配置端口映射，停止主机后可添加。</p>
           ) : (
             <ul className="space-y-3">
               {ports.map((p, i) => (

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { getToken } from "@/lib/auth";
+import { useSSE } from "@/hooks/use-sse";
 import type { EgressIP } from "./use-egress-ips";
 
 export interface HostWithUsername {
@@ -76,18 +77,46 @@ export interface HostDetail {
 }
 
 export function useHosts() {
-  return useQuery({
+  const qc = useQueryClient();
+
+  const query = useQuery({
     queryKey: ["hosts"],
     queryFn: () => apiFetch<{ hosts: HostWithUsername[] }>("/hosts"),
+    refetchInterval: 30000,
   });
+
+  useSSE(`${window.location.origin}/v1/admin/sse?topics=hosts`, (msg) => {
+    if (msg.topic === "hosts") {
+      qc.invalidateQueries({ queryKey: ["hosts"] });
+      if (msg.id) {
+        qc.invalidateQueries({ queryKey: ["hosts", msg.id] });
+      }
+    }
+  });
+
+  return query;
 }
 
 export function useHostDetail(hostId: string) {
-  return useQuery({
+  const qc = useQueryClient();
+
+  const query = useQuery({
     queryKey: ["hosts", hostId],
     queryFn: () => apiFetch<HostDetail>(`/hosts/${hostId}`),
     enabled: !!hostId,
+    refetchInterval: 30000,
   });
+
+  useSSE(
+    hostId ? `${window.location.origin}/v1/admin/sse?topics=hosts` : "",
+    (msg) => {
+      if (msg.topic === "hosts" && msg.id === hostId) {
+        qc.invalidateQueries({ queryKey: ["hosts", hostId] });
+      }
+    },
+  );
+
+  return query;
 }
 
 export function useCreateHost() {

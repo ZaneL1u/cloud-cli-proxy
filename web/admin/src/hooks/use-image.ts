@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { useSSE } from "@/hooks/use-sse";
 
 export interface ImageCacheStatus {
   image_name: string;
@@ -12,7 +13,9 @@ export interface ImageCacheStatus {
 }
 
 export function useImageStatus(enabled = true) {
-  return useQuery({
+  const qc = useQueryClient();
+
+  const query = useQuery({
     queryKey: ["image-status"],
     queryFn: () => apiFetch<ImageCacheStatus>("/image/status"),
     enabled,
@@ -21,6 +24,14 @@ export function useImageStatus(enabled = true) {
       return 30000;
     },
   });
+
+  useSSE(`${window.location.origin}/v1/admin/sse?topics=image-status`, (msg) => {
+    if (msg.topic === "image-status") {
+      qc.invalidateQueries({ queryKey: ["image-status"] });
+    }
+  });
+
+  return query;
 }
 
 export function useRefreshImage() {
