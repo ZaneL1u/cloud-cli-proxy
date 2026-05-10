@@ -327,11 +327,14 @@ func (a *App) rejoinHostNetworks() {
 	}
 
 	joined := 0
+	alreadyConnected := 0
 	for _, net := range networks {
 		connectCmd := exec.CommandContext(context.Background(), "docker", "network", "connect", net, cpID)
 		if connectOut, err := connectCmd.CombinedOutput(); err != nil {
 			msg := strings.TrimSpace(string(connectOut))
-			if !strings.Contains(msg, "already exists") {
+			if strings.Contains(msg, "already exists") {
+				alreadyConnected++
+			} else {
 				a.logger.Warn("rejoin-networks: connect failed", "network", net, "error", msg)
 			}
 		} else {
@@ -339,9 +342,10 @@ func (a *App) rejoinHostNetworks() {
 		}
 	}
 
-	if joined > 0 {
-		a.logger.Info("rejoin-networks: connected to host networks", "count", joined, "total", len(networks))
-	}
+	a.logger.Info("rejoin-networks: host network status",
+		"joined", joined,
+		"already_connected", alreadyConnected,
+		"total", len(networks))
 }
 
 // dockerInspector 在 embedded 模式下直接调用 docker container inspect，
