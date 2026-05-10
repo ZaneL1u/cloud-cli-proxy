@@ -13,6 +13,8 @@ ExecStart=/opt/cloud-cli-proxy/bin/control-plane
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
+AmbientCapabilities=CAP_NET_ADMIN CAP_SYS_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_SYS_ADMIN
 
 [Install]
 WantedBy=multi-user.target
