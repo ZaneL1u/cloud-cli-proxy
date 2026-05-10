@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v3.4.2 - 2026-05-10
+## What's Changed
+
+### Backend (Go / API)
+- feat: 升级镜像支持实时 pull 进度展示（SSE + 层详情） (e3404a1)
+
+### Frontend (Admin Web)
+- feat: 升级镜像支持实时 pull 进度展示（SSE + 层详情） (e3404a1)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v3.4.1...v3.4.2
+
+
 ## v3.4.1 - 2026-05-10
 ## What's Changed
 
