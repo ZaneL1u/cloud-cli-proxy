@@ -54,7 +54,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { BindingManager } from "@/components/hosts/binding-manager";
 import { MountManager } from "@/components/hosts/mount-manager";
-import { PortManager } from "@/components/hosts/port-manager";
 import { RotatePasswordDialog } from "@/components/users/rotate-password-dialog";
 import { ChangeRootPasswordDialog } from "@/components/hosts/change-root-password-dialog";
 import { ClaudeSettingsDialog } from "@/components/hosts/claude-settings-dialog";
@@ -412,7 +411,6 @@ function HostDetailPage() {
               <div className="px-2 py-2 lg:px-4">
                 <h3 className="mb-1 text-sm font-semibold">端口映射</h3>
                 <p className="mb-4 text-xs text-muted-foreground">{isRunning ? "运行中不可编辑" : "停止中，可以编辑"}</p>
-                <PortManager hostId={hostId} hostStatus={host.status} ports={host.host_ports ?? []} />
               </div>
             </div>
           </div>

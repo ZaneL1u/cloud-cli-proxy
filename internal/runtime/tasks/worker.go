@@ -264,22 +264,6 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 		args = append(args, "--mount", opts)
 	}
 
-	for _, pm := range request.PortMappings {
-		if pm.HostPort <= 0 || pm.HostPort > 65535 || pm.ContainerPort <= 0 || pm.ContainerPort > 65535 {
-			return nil, fmt.Errorf("invalid port mapping: host=%d container=%d", pm.HostPort, pm.ContainerPort)
-		}
-		// Linux: 跳过 Docker -p，端口映射由 ContainerProxyProvider 通过宿主机 iptables DNAT
-		// 转发到隔离网络 IP 实现（bridge 已断开以防 IP 泄漏，Docker -p 依赖 bridge）。
-		// 非 Linux: 使用 Docker -p，Docker Desktop 通过 vpnkit 在任意网络上工作。
-		if runtime.GOOS != "linux" {
-			portSpec := fmt.Sprintf("%d:%d", pm.HostPort, pm.ContainerPort)
-			if pm.Protocol != "" {
-				portSpec += "/" + pm.Protocol
-			}
-			args = append(args, "-p", portSpec)
-		}
-	}
-
 	for key, value := range request.Labels {
 		args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
 	}
@@ -385,7 +369,6 @@ func (w *Worker) createHost(ctx context.Context, request agentapi.HostActionRequ
 		spec := network.HostNetworkSpec{
 			HostID:       request.HostID,
 			Egress:       egressCfg,
-			PortMappings: request.PortMappings,
 		}
 		if err := w.provider.PrepareHost(ctx, spec); err != nil {
 			w.recordNetworkError(ctx, request.HostID, err)
@@ -427,7 +410,6 @@ func (w *Worker) startHost(ctx context.Context, request agentapi.HostActionReque
 		spec := network.HostNetworkSpec{
 			HostID:       request.HostID,
 			Egress:       egressCfg,
-			PortMappings: request.PortMappings,
 		}
 		if err := w.provider.PrepareHost(ctx, spec); err != nil {
 			w.recordNetworkError(ctx, request.HostID, err)

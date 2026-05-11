@@ -16,13 +16,13 @@ import (
 
 // ApplyWorkerFirewallRules 在 worker 容器 netns 内设置严格的 nftables 默认 DROP 规则。
 // 规则设计：
-//   - INPUT 默认 DROP：允许 lo、ESTABLISHED/RELATED、来自 gwIP 的流量、来自 bridgeGW 的流量（端口映射回包源 IP 被 SNAT 成 bridgeGW）、SSH(22)、端口映射端口
+//   - INPUT 默认 DROP：允许 lo、ESTABLISHED/RELATED、来自 gwIP 的流量、SSH(22)
 //   - OUTPUT 默认 DROP：允许 lo、ESTABLISHED/RELATED、到 gwIP 的所有流量（代理隧道）、UDP/TCP 53（DNS）
 //   - IPv6 全部丢弃（已有 --sysctl net.ipv6.conf.all.disable_ipv6=1，再保险一层）
 //
 // 关键：规则基于接口索引（eth0 为隔离网络接口，lo 为回环），防止 Docker reconnect bridge 后新接口被滥用。
 // 使用 github.com/google/nftables 库，在宿主机上通过 nftables.WithNetNSFd(int(containerNS)) 操作 worker netns。
-func ApplyWorkerFirewallRules(containerNS netns.NsHandle, gwIP, bridgeGW net.IP, sshPort uint16, allowedPorts []uint16) error {
+func ApplyWorkerFirewallRules(containerNS netns.NsHandle, gwIP, bridgeGW net.IP, sshPort uint16) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -78,7 +78,7 @@ func ApplyWorkerFirewallRules(containerNS netns.NsHandle, gwIP, bridgeGW net.IP,
 		}
 	}
 
-	applyWorkerIPv4Rules(conn, eth0IfIndex, loIfIndex, gwIP, bridgeGW, sshPort, allowedPorts)
+	applyWorkerIPv4Rules(conn, eth0IfIndex, loIfIndex, gwIP, bridgeGW, sshPort)
 	applyWorkerIPv6Rules(conn, loIfIndex)
 
 	if err := conn.Flush(); err != nil {
@@ -129,7 +129,7 @@ func CleanupWorkerFirewallRules(containerNS netns.NsHandle) error {
 	return nil
 }
 
-func applyWorkerIPv4Rules(conn *nftables.Conn, eth0IfIndex, loIfIndex int, gwIP, bridgeGW net.IP, sshPort uint16, allowedPorts []uint16) {
+func applyWorkerIPv4Rules(conn *nftables.Conn, eth0IfIndex, loIfIndex int, gwIP, bridgeGW net.IP, sshPort uint16) {
 	policyDrop := nftables.ChainPolicyDrop
 
 	table := conn.AddTable(&nftables.Table{
@@ -156,16 +156,8 @@ func applyWorkerIPv4Rules(conn *nftables.Conn, eth0IfIndex, loIfIndex int, gwIP,
 	// 来自 gwIP 的流量允许（eth0）
 	addIifSrcIPAcceptRule(conn, table, inputChain, eth0IfIndex, gwIP)
 
-	// 来自 bridgeGW 的流量允许（eth0，端口映射回包源 IP 被 SNAT 成 bridgeGW）
-	addIifSrcIPAcceptRule(conn, table, inputChain, eth0IfIndex, bridgeGW)
-
 	// SSH 端口允许
 	addIifTCPDportAcceptRule(conn, table, inputChain, eth0IfIndex, sshPort)
-
-	// 端口映射端口允许
-	for _, port := range allowedPorts {
-		addIifTCPDportAcceptRule(conn, table, inputChain, eth0IfIndex, port)
-	}
 
 	// OUTPUT 链：默认 DROP
 	outputChain := conn.AddChain(&nftables.Chain{

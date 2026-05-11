@@ -375,16 +375,10 @@ func (r *Repository) UpsertHost(ctx context.Context, params UpsertHostParams) (H
 	if err != nil {
 		return Host{}, fmt.Errorf("marshal host mounts: %w", err)
 	}
-	portsJSON, err := json.Marshal(params.HostPorts)
-	if err != nil {
-		return Host{}, fmt.Errorf("marshal host ports: %w", err)
-	}
-
 	var item Host
 	var rawMounts json.RawMessage
-	var rawPorts json.RawMessage
 	if err := r.db.QueryRow(ctx, `
-		INSERT INTO hosts (user_id, status, short_id, template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, host_ports)
+		INSERT INTO hosts (user_id, status, short_id, template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (user_id, slot_key)
 		DO UPDATE SET
@@ -397,11 +391,11 @@ func (r *Repository) UpsertHost(ctx context.Context, params UpsertHostParams) (H
 			cpu_limit = EXCLUDED.cpu_limit,
 			disk_limit_gb = EXCLUDED.disk_limit_gb,
 			host_mounts = EXCLUDED.host_mounts,
-			host_ports = EXCLUDED.host_ports,
+			
 			updated_at = NOW()
 		RETURNING id::text, user_id::text, status, COALESCE(short_id, ''),
 		          template_image_ref, home_volume_name, slot_key, timezone, hostname,
-		          memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, host_ports, created_at, updated_at
+		          memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, created_at, updated_at
 	`,
 		params.UserID,
 		params.Status,
@@ -415,7 +409,6 @@ func (r *Repository) UpsertHost(ctx context.Context, params UpsertHostParams) (H
 		cpuLimit,
 		diskLimitGB,
 		mountsJSON,
-		portsJSON,
 	).Scan(
 		&item.ID,
 		&item.UserID,
@@ -430,7 +423,6 @@ func (r *Repository) UpsertHost(ctx context.Context, params UpsertHostParams) (H
 		&item.CPULimit,
 		&item.DiskLimitGB,
 		&rawMounts,
-		&rawPorts,
 		&item.CreatedAt,
 		&item.UpdatedAt,
 	); err != nil {
@@ -439,9 +431,7 @@ func (r *Repository) UpsertHost(ctx context.Context, params UpsertHostParams) (H
 	if len(rawMounts) > 0 {
 		_ = json.Unmarshal(rawMounts, &item.HostMounts)
 	}
-	if len(rawPorts) > 0 {
-		_ = json.Unmarshal(rawPorts, &item.HostPorts)
-	}
+
 
 	return item, nil
 }
@@ -735,7 +725,7 @@ func (r *Repository) GetEgressIPByHost(ctx context.Context, hostID string) (Egre
 
 // getHostSQL 将 SQL 文本提升为包级常量，方便仓储层回归测试断言。
 const getHostSQL = `
-	SELECT id::text, user_id::text, status, COALESCE(short_id, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, host_ports, created_at, updated_at
+	SELECT id::text, user_id::text, status, COALESCE(short_id, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, disk_limit_gb, host_mounts, created_at, updated_at
 	FROM hosts
 	WHERE id = $1
 `
@@ -743,7 +733,6 @@ const getHostSQL = `
 func (r *Repository) GetHost(ctx context.Context, hostID string) (Host, error) {
 	var item Host
 	var rawMounts json.RawMessage
-	var rawPorts json.RawMessage
 	if err := r.db.QueryRow(ctx, getHostSQL, hostID).Scan(
 		&item.ID,
 		&item.UserID,
@@ -758,7 +747,6 @@ func (r *Repository) GetHost(ctx context.Context, hostID string) (Host, error) {
 		&item.CPULimit,
 		&item.DiskLimitGB,
 		&rawMounts,
-		&rawPorts,
 		&item.CreatedAt,
 		&item.UpdatedAt,
 	); err != nil {
@@ -767,9 +755,7 @@ func (r *Repository) GetHost(ctx context.Context, hostID string) (Host, error) {
 	if len(rawMounts) > 0 {
 		_ = json.Unmarshal(rawMounts, &item.HostMounts)
 	}
-	if len(rawPorts) > 0 {
-		_ = json.Unmarshal(rawPorts, &item.HostPorts)
-	}
+
 
 	return item, nil
 }
@@ -1540,14 +1526,7 @@ func (r *Repository) UpdateHostMounts(ctx context.Context, hostID string, mounts
 	return err
 }
 
-func (r *Repository) UpdateHostPorts(ctx context.Context, hostID string, ports HostPorts) error {
-	data, err := json.Marshal(ports)
-	if err != nil {
-		return fmt.Errorf("marshal host ports: %w", err)
-	}
-	_, err = r.db.Exec(ctx, `UPDATE hosts SET host_ports = $1, updated_at = NOW() WHERE id = $2`, data, hostID)
-	return err
-}
+
 
 func (r *Repository) GetSSHKey(ctx context.Context, keyID string) (SSHKey, error) {
 	var k SSHKey

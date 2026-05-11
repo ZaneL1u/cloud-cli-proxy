@@ -73,9 +73,6 @@ func (s *stubHostStore) UpdateHostMounts(_ context.Context, _ string, _ reposito
 	return nil
 }
 
-func (s *stubHostStore) UpdateHostPorts(_ context.Context, _ string, _ repository.HostPorts) error {
-	return nil
-}
 
 func TestAdminHostsHandler(t *testing.T) {
 	now := time.Now().Truncate(time.Second)

@@ -105,7 +105,7 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 		return fmt.Errorf("gateway: configure worker routes/DNS: %w", err)
 	}
 
-	if err := applyWorkerFirewall(ctx, workerName, gwIP, bridgeGW, spec.PortMappings); err != nil {
+	if err := applyWorkerFirewall(ctx, workerName, gwIP, bridgeGW); err != nil {
 		p.teardownGateway(ctx, hostID)
 		return fmt.Errorf("gateway: apply worker firewall: %w", err)
 	}
@@ -132,17 +132,6 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 		"egress_ip", result.ActualEgressIP,
 		"dns_server", result.ActualDNS,
 	)
-
-	if len(spec.PortMappings) > 0 {
-		if err := ensurePortMapChain(ctx); err != nil {
-			p.teardownGateway(ctx, hostID)
-			return fmt.Errorf("gateway: setup portmap chain: %w", err)
-		}
-		if err := setupPortForwarding(ctx, hostID, bridgeGW, gwIP, spec.PortMappings); err != nil {
-			p.teardownGateway(ctx, hostID)
-			return fmt.Errorf("gateway: setup port forwarding: %w", err)
-		}
-	}
 
 	if cpID, _ := os.Hostname(); cpID != "" {
 		if err := dockerNetworkConnect(ctx, netName, cpID, ""); err != nil {
@@ -174,7 +163,6 @@ func (p *ContainerProxyProvider) teardownGateway(ctx context.Context, hostID str
 	workerName := workerContainerName(hostID)
 
 	cleanupWorkerFirewall(ctx, workerName)
-	teardownPortForwarding(ctx, hostID)
 
 	if cpID, _ := os.Hostname(); cpID != "" {
 		_ = exec.CommandContext(ctx, "docker", "network", "disconnect", "-f", netName, cpID).Run()

@@ -191,18 +191,6 @@ func (s *Service) QueueHostAction(ctx context.Context, hostID string, action age
 		}
 	}
 
-	// 宿主机端口映射：repository.HostPorts -> agentapi.PortMappings
-	if len(host.HostPorts) > 0 {
-		request.PortMappings = make([]agentapi.PortMapping, 0, len(host.HostPorts))
-		for _, hp := range host.HostPorts {
-			request.PortMappings = append(request.PortMappings, agentapi.PortMapping{
-				HostPort:      hp.HostPort,
-				ContainerPort: hp.ContainerPort,
-				Protocol:      hp.Protocol,
-			})
-		}
-	}
-
 	if request.EntryPassword == "" {
 		hid := hostID
 		if s.repo != nil {

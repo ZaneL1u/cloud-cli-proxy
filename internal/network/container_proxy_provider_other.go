@@ -4,11 +4,9 @@ package network
 
 import (
 	"context"
-
-	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
 )
 
-func applyWorkerFirewall(_ context.Context, _, _, _ string, _ []agentapi.PortMapping) error {
+func applyWorkerFirewall(_ context.Context, _, _, _ string) error {
 	return nil
 }
 

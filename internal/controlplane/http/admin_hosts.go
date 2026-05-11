@@ -40,7 +40,6 @@ type AdminHostStore interface {
 	ListRunningHosts(ctx context.Context) ([]repository.Host, error)
 	GetHostWithClaudeAccount(ctx context.Context, hostID string) (repository.HostWithClaudeAccount, error) // Phase 33 D-22
 	UpdateHostMounts(ctx context.Context, hostID string, mounts repository.HostMounts) error
-	UpdateHostPorts(ctx context.Context, hostID string, ports repository.HostPorts) error
 }
 
 type AdminHostsHandler struct {
@@ -155,7 +154,6 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 			CPULimit      float64               `json:"cpu_limit"`
 			DiskLimitGB   int                   `json:"disk_limit_gb"`
 			HostMounts    repository.HostMounts `json:"host_mounts"`
-			HostPorts     repository.HostPorts  `json:"host_ports"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.UserID == "" {
 			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "user_id is required"})
@@ -230,7 +228,6 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 				CPULimit:         body.CPULimit,
 				DiskLimitGB:      body.DiskLimitGB,
 				HostMounts:       expandHostMountSources(body.HostMounts),
-				HostPorts:        body.HostPorts,
 			})
 			if err == nil {
 				break
@@ -1061,49 +1058,6 @@ func (h *AdminHostsHandler) UpdateMounts() nethttp.Handler {
 				Metadata: map[string]any{"operator": "admin", "mount_count": len(body.Mounts)},
 			}); err != nil {
 				h.logger.Error("record event failed", "type", "admin.host.update_mounts", "error", err)
-			}
-		}
-		writeJSON(w, nethttp.StatusOK, map[string]string{"status": "ok"})
-	})
-}
-
-func (h *AdminHostsHandler) UpdatePorts() nethttp.Handler {
-	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
-		hostID := r.PathValue("hostID")
-		var body struct {
-			Ports repository.HostPorts `json:"ports"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "invalid request body"})
-			return
-		}
-		for _, p := range body.Ports {
-			if p.HostPort <= 0 || p.HostPort > 65535 {
-				writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": fmt.Sprintf("invalid host port: %d", p.HostPort)})
-				return
-			}
-			if p.ContainerPort <= 0 || p.ContainerPort > 65535 {
-				writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": fmt.Sprintf("invalid container port: %d", p.ContainerPort)})
-				return
-			}
-			if p.Protocol != "" && p.Protocol != "tcp" && p.Protocol != "udp" {
-				writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": fmt.Sprintf("invalid protocol: %s (must be tcp or udp)", p.Protocol)})
-				return
-			}
-		}
-		if err := h.store.UpdateHostPorts(r.Context(), hostID, body.Ports); err != nil {
-			h.logger.Error("update host ports failed", "host_id", hostID, "error", err)
-			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "update ports failed"})
-			return
-		}
-		if h.events != nil {
-			hid := hostID
-			if _, err := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
-				HostID: &hid, Level: "info", Type: "admin.host.update_ports",
-				Message: "管理员更新主机端口映射配置",
-				Metadata: map[string]any{"operator": "admin", "port_count": len(body.Ports)},
-			}); err != nil {
-				h.logger.Error("record event failed", "type", "admin.host.update_ports", "error", err)
 			}
 		}
 		writeJSON(w, nethttp.StatusOK, map[string]string{"status": "ok"})
