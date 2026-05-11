@@ -120,19 +120,6 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 		return fmt.Errorf("gateway: configure worker routes/DNS: %w", err)
 	}
 
-	// 宿主机 iptables 路由规则（端口映射 DNAT + SNAT + 策略路由到 gateway）。
-	// 仅 Linux 有效；macOS Docker Desktop 由 vpnkit 处理。
-	if len(spec.PortMappings) > 0 {
-		if err := ensurePortMapChain(ctx); err != nil {
-			p.teardownGateway(ctx, hostID)
-			return fmt.Errorf("gateway: setup portmap chain: %w", err)
-		}
-		if err := setupPortForwarding(ctx, hostID, bridgeGW, gwIP, spec.PortMappings); err != nil {
-			p.teardownGateway(ctx, hostID)
-			return fmt.Errorf("gateway: setup port forwarding: %w", err)
-		}
-	}
-
 	if cpID, _ := os.Hostname(); cpID != "" {
 		if err := dockerNetworkConnect(ctx, netName, cpID, ""); err != nil {
 			p.logger.Warn("container-proxy: connect control-plane to isolated network failed (VNC may not work)",
@@ -161,9 +148,6 @@ func (p *ContainerProxyProvider) teardownGateway(ctx context.Context, hostID str
 	netName := networkName(hostID)
 	gwName := gatewayContainerName(hostID)
 	workerName := workerContainerName(hostID)
-
-	// 清理宿主机 iptables 端口转发规则
-	teardownPortForwarding(ctx, hostID)
 
 	if cpID, _ := os.Hostname(); cpID != "" {
 		_ = exec.CommandContext(ctx, "docker", "network", "disconnect", "-f", netName, cpID).Run()
