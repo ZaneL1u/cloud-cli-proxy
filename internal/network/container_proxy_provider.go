@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -107,30 +106,11 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 	// 等待隔离网络的接口就绪（disconnect 后可能有短暂延迟）
 	time.Sleep(1 * time.Second)
 
-	// Linux: 默认路由指向宿主机 bridge IP，由 iptables 做路由决策（端口映射 DNAT + 隧道转发）。
-	// macOS: 默认路由指向 gateway 容器，Docker Desktop vpnkit 处理端口映射。
-	defaultGW := bridgeGW
-	if runtime.GOOS != "linux" {
-		defaultGW = gwIP
-	}
-	if err := configureWorkerEgress(ctx, workerName, defaultGW, workerIP); err != nil {
+	// 默认路由指向 gateway 容器，确保所有流量（包括 DNS）都经过 sing-box tun 隧道。
+	// Linux 端口映射回包问题后续单独处理，当前优先保证 DNS 和隧道正常工作。
+	if err := configureWorkerEgress(ctx, workerName, gwIP, workerIP); err != nil {
 		p.teardownGateway(ctx, hostID)
 		return fmt.Errorf("gateway: configure worker routes/DNS: %w", err)
-	}
-
-	// 宿主机 iptables 路由规则（端口映射 DNAT + 回包 MASQUERADE + 隧道转发）。
-	// 仅 Linux 有效（iptables 在宿主机上可用）；macOS Docker Desktop 由 vpnkit 处理。
-	// 必须在 configureWorkerEgress 之后调用。
-	// 详见 host_forwarding_linux.go 中 setupPortForwarding 的架构说明。
-	if len(spec.PortMappings) > 0 {
-		if err := ensurePortMapChain(ctx); err != nil {
-			p.teardownGateway(ctx, hostID)
-			return fmt.Errorf("gateway: setup portmap chain: %w", err)
-		}
-		if err := setupPortForwarding(ctx, hostID, spec.PortMappings); err != nil {
-			p.teardownGateway(ctx, hostID)
-			return fmt.Errorf("gateway: setup port forwarding: %w", err)
-		}
 	}
 
 	if cpID, _ := os.Hostname(); cpID != "" {
