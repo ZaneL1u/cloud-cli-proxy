@@ -1,3 +1,5 @@
+//go:build linux
+
 package network
 
 import (
@@ -9,8 +11,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"net"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/vishvananda/netns"
 )
 
 const gatewayTPProxyPort = 7892
@@ -107,17 +113,63 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 	// 等待隔离网络的接口就绪（disconnect 后可能有短暂延迟）
 	time.Sleep(1 * time.Second)
 
-	// Linux: 默认路由指向宿主机 bridge IP，由宿主机做路由决策。
-	//   - 一般出站流量（DNS/HTTP等）→ 策略路由 → gateway → sing-box 代理隧道
-	//   - 端口映射回复 → SNAT 后 worker 直接回复给宿主机，避免被 sing-box 劫持
-	// macOS: 默认路由指向 gateway 容器，Docker Desktop vpnkit 处理端口映射。
-	defaultGW := bridgeGW
+	// 默认路由指向 gateway，所有流量必须经过 sing-box 代理隧道。
+	// 端口映射回包由宿主机 SNAT 后源 IP 变为 bridgeGW，worker 防火墙允许来自 bridgeGW 的流量。
+	// macOS: Docker Desktop vpnkit 处理端口映射。
+	defaultGW := gwIP
 	if runtime.GOOS != "linux" {
 		defaultGW = gwIP
 	}
 	if err := configureWorkerEgress(ctx, workerName, defaultGW, workerIP); err != nil {
 		p.teardownGateway(ctx, hostID)
 		return fmt.Errorf("gateway: configure worker routes/DNS: %w", err)
+	}
+
+	// 在 worker 容器内设置严格 nftables 防火墙，确保所有流量必须经过 gateway。
+	// 规则基于接口索引匹配，防止 Docker reconnect bridge 后新接口被滥用。
+	if runtime.GOOS == "linux" {
+		var allowedPorts []uint16
+		for _, pm := range spec.PortMappings {
+			if pm.ContainerPort > 0 {
+				allowedPorts = append(allowedPorts, uint16(pm.ContainerPort))
+			}
+		}
+
+		workerNS, workerPID, err := GetContainerNetNS(workerName)
+		if err != nil {
+			p.teardownGateway(ctx, hostID)
+			return fmt.Errorf("gateway: get worker netns: %w", err)
+		}
+		defer workerNS.Close()
+
+		if err := ApplyWorkerFirewallRules(workerNS, net.ParseIP(gwIP), net.ParseIP(bridgeGW), 22, allowedPorts); err != nil {
+			p.teardownGateway(ctx, hostID)
+			return fmt.Errorf("gateway: apply worker firewall: %w", err)
+		}
+		p.logger.Info("container-proxy: worker firewall rules applied", "host_id", hostID)
+
+		// 网络验证：验证 egress IP、DNS、泄漏阻断
+		result, verifyErr := VerifyNetworkIntegrity(ctx, workerPID, *spec.Egress)
+		if verifyErr != nil {
+			p.logger.Error("container-proxy: network verification failed",
+				"host_id", hostID,
+				"egress_ip_match", result.EgressIPMatch,
+				"dns_correct", result.DNSCorrect,
+				"leak_blocked", result.LeakBlocked,
+				"actual_egress_ip", result.ActualEgressIP,
+				"actual_dns", result.ActualDNS,
+			)
+			p.teardownGateway(ctx, hostID)
+			if netErr, ok := verifyErr.(*NetworkError); ok {
+				netErr.HostID = hostID
+			}
+			return verifyErr
+		}
+		p.logger.Info("container-proxy: network verification passed",
+			"host_id", hostID,
+			"egress_ip", result.ActualEgressIP,
+			"dns_server", result.ActualDNS,
+		)
 	}
 
 	// 宿主机 iptables 路由规则（端口映射 DNAT + SNAT + 策略路由到 gateway）。
@@ -132,6 +184,7 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 			return fmt.Errorf("gateway: setup port forwarding: %w", err)
 		}
 	}
+
 
 	if cpID, _ := os.Hostname(); cpID != "" {
 		if err := dockerNetworkConnect(ctx, netName, cpID, ""); err != nil {
@@ -161,6 +214,18 @@ func (p *ContainerProxyProvider) teardownGateway(ctx context.Context, hostID str
 	netName := networkName(hostID)
 	gwName := gatewayContainerName(hostID)
 	workerName := workerContainerName(hostID)
+
+	// 先清理 worker 内部防火墙规则（worker 容器若仍在运行）
+	if runtime.GOOS == "linux" {
+		if pidOut, err := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.State.Pid}}", workerName).Output(); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(pidOut))); err == nil && pid > 0 {
+				if ns, err := netns.GetFromPid(pid); err == nil {
+					_ = CleanupWorkerFirewallRules(ns)
+					ns.Close()
+				}
+			}
+		}
+	}
 
 	// 清理宿主机 iptables 端口转发规则
 	teardownPortForwarding(ctx, hostID)
@@ -278,11 +343,11 @@ func waitGatewayHealthy(ctx context.Context, gwName string) error {
 	return fmt.Errorf("gateway container not healthy in time: %s", strings.TrimSpace(string(logs)))
 }
 
-func configureWorkerEgress(ctx context.Context, workerName, bridgeGW, workerIP string) error {
+func configureWorkerEgress(ctx context.Context, workerName, gwIP, workerIP string) error {
 	const maxRetry = 3
 	var lastErr error
 	for attempt := 1; attempt <= maxRetry; attempt++ {
-		if err := tryConfigureWorkerEgress(ctx, workerName, bridgeGW, workerIP); err == nil {
+		if err := tryConfigureWorkerEgress(ctx, workerName, gwIP, workerIP); err == nil {
 			return nil
 		} else {
 			lastErr = err
@@ -294,12 +359,9 @@ func configureWorkerEgress(ctx context.Context, workerName, bridgeGW, workerIP s
 	return fmt.Errorf("configureWorkerEgress failed after %d attempts: %w", maxRetry, lastErr)
 }
 
-func tryConfigureWorkerEgress(ctx context.Context, workerName, bridgeGW, workerIP string) error {
-	// 默认路由指向宿主机的隔离网络 bridge IP（如 10.99.X.1），而非 gateway 容器（10.99.X.2）。
-	// 原因：gateway 的 sing-box TUN auto_route 会劫持所有经过的出站流量（包括转发的回复包），
-	// 导致端口映射回包被送进代理隧道。指向宿主机后，宿主机 iptables 做路由决策：
-	//   - ESTABLISHED/RELATED → MASQUERADE 直出（端口映射回包）
-	//   - 新连接 → 转发到 gateway → 代理隧道
+func tryConfigureWorkerEgress(ctx context.Context, workerName, gwIP, workerIP string) error {
+	// 默认路由指向 gateway 容器（10.99.X.2），所有流量必须经过 sing-box 代理隧道。
+	// 端口映射回包由宿主机 SNAT 后源 IP 变为 bridgeGW，worker 防火墙允许来自 bridgeGW 的流量。
 	script := fmt.Sprintf(`set -e
 # 等待网络接口就绪
 for i in 1 2 3 4 5; do
@@ -321,13 +383,13 @@ ip route show default | while read -r line; do
   fi
 done
 ip route del default 2>/dev/null || true
-# 默认路由指向宿主机 bridge IP（非 gateway），由宿主机 iptables 做路由决策
+# 默认路由指向 gateway，所有流量必须经过 sing-box 代理隧道
 ip route add default via %s dev "$DEV" metric 0
 # 立即 verify
 default_route=$(ip route show default | head -1)
 echo "$default_route" | grep -q "via %s"
 echo 'nameserver 8.8.8.8' > /etc/resolv.conf
-`, workerIP, workerIP, bridgeGW, bridgeGW)
+`, workerIP, workerIP, gwIP, gwIP)
 
 	cmd := exec.CommandContext(ctx, "docker", "exec", workerName, "sh", "-c", script)
 	out, err := cmd.CombinedOutput()
@@ -337,3 +399,44 @@ echo 'nameserver 8.8.8.8' > /etc/resolv.conf
 	return nil
 }
 
+
+// getWorkerNetNS 通过 docker inspect 获取 worker 容器的 PID，然后获取其网络命名空间。
+func getWorkerNetNS(ctx context.Context, workerName string) (netns.NsHandle, error) {
+	out, err := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.State.Pid}}", workerName).Output()
+	if err != nil {
+		return 0, fmt.Errorf("inspect worker %s pid: %w", workerName, err)
+	}
+
+	pid, err := strconv.ParseUint(strings.TrimSpace(string(out)), 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("parse worker pid: %w", err)
+	}
+	if pid == 0 {
+		return 0, fmt.Errorf("worker %s not running (pid=0)", workerName)
+	}
+
+	ns, err := netns.GetFromPid(int(pid))
+	if err != nil {
+		return 0, fmt.Errorf("get netns from pid %d: %w", pid, err)
+	}
+
+	return ns, nil
+}
+
+// getWorkerPID 通过 docker inspect 获取 worker 容器的 PID。
+func getWorkerPID(ctx context.Context, workerName string) (uint32, error) {
+	out, err := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.State.Pid}}", workerName).Output()
+	if err != nil {
+		return 0, fmt.Errorf("inspect worker %s pid: %w", workerName, err)
+	}
+
+	pid, err := strconv.ParseUint(strings.TrimSpace(string(out)), 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("parse worker pid: %w", err)
+	}
+	if pid == 0 {
+		return 0, fmt.Errorf("worker %s not running (pid=0)", workerName)
+	}
+
+	return uint32(pid), nil
+}
