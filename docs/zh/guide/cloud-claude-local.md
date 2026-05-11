@@ -31,7 +31,7 @@ cloud-claude local up
 cloud-claude local status
 ```
 
-显示本地容器状态、SSH 端口映射和 sing-box 隧道状态。
+显示本地容器状态、SSH 端口和 sing-box 隧道状态。
 
 ### 4. 停止容器
 

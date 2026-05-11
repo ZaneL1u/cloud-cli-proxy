@@ -125,7 +125,7 @@ func runLocalStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("容器:     %s\n", status.Name)
 	fmt.Printf("状态:     %s\n", status.Status)
 	fmt.Printf("镜像:     %s\n", status.Image)
-	fmt.Printf("端口映射: %s\n", status.PortMapping)
+	fmt.Printf("SSH 端口: %s\n", status.PortMapping)
 	fmt.Printf("创建时间: %s\n", status.CreatedAt)
 
 	return nil

@@ -96,10 +96,10 @@ func TestResolveProbeNetworking_InspectSucceeds(t *testing.T) {
 		t.Fatalf("args mismatch:\n  got=%v\n want=%v", args, want)
 	}
 
-	// 同时确认输出里没有 -p 端口映射（host-binary 专属标记）
+	// 同时确认输出里没有 -p 端口暴露（host-binary 专属标记）
 	for _, a := range args {
 		if strings.HasPrefix(a, "127.0.0.1:") {
-			t.Fatalf("in-container 分支不应包含端口映射: %v", args)
+			t.Fatalf("in-container 分支不应包含端口暴露: %v", args)
 		}
 	}
 }

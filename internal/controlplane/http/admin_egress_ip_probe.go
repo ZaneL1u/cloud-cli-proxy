@@ -287,7 +287,7 @@ var dockerInspectRunner = func(ctx context.Context, name string) ([]byte, error)
 //   - 当 hostname 非空且 `docker inspect <hostname>` 成功并返回非空容器 ID 时，
 //     说明控制面就跑在该容器里，复用其 namespace（in-container 模式）。
 //   - 其它情况（hostname 为空 / inspect 失败 / 输出为空）一律 fallback
-//     到宿主机直跑模式：用 bridge 网络 + 端口映射，让控制面通过
+//     到宿主机直跑模式：用 bridge 网络 + 端口暴露，让控制面通过
 //     127.0.0.1:<port> 访问 sing-box 探针。
 func resolveProbeNetworking(ctx context.Context, port int) []string {
 	hostname, _ := hostnameProvider()

@@ -41,7 +41,7 @@ bash deploy/scripts/setup-env.sh
 |------|------|--------|------|
 | `ADMIN_PORT` | 否 | `3000` | 管理后台前端端口（映射到容器 80 端口） |
 
-### Docker Compose 端口映射
+### Docker Compose 服务端口
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|

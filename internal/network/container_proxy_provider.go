@@ -101,7 +101,6 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 
 	// 所有平台统一断开 Worker 的 bridge 网络，防止 restart 后 default route 被 bridge 覆盖。
 	// 这是防 IP 泄漏的关键机制：不断开 bridge 则容器内流量可通过 bridge 直接出网。
-	// Linux 端口映射通过宿主机 iptables DNAT 到隔离网络 IP 实现（见 setupPortForwarding）。
 	_ = exec.CommandContext(ctx, "docker", "network", "disconnect", "-f", "bridge", workerName).Run()
 
 	// 等待隔离网络的接口就绪（disconnect 后可能有短暂延迟）
@@ -109,8 +108,7 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 
 	// Linux: 默认路由指向宿主机 bridge IP，由宿主机做路由决策。
 	//   - 一般出站流量（DNS/HTTP等）→ 策略路由 → gateway → sing-box 代理隧道
-	//   - 端口映射回复 → SNAT 后 worker 直接回复给宿主机，避免被 sing-box 劫持
-	// macOS: 默认路由指向 gateway 容器，Docker Desktop vpnkit 处理端口映射。
+	// macOS: 默认路由指向 gateway 容器，Docker Desktop vpnkit 处理网络转发。
 	defaultGW := bridgeGW
 	if runtime.GOOS != "linux" {
 		defaultGW = gwIP
@@ -280,9 +278,8 @@ func configureWorkerEgress(ctx context.Context, workerName, bridgeGW, workerIP s
 
 func tryConfigureWorkerEgress(ctx context.Context, workerName, bridgeGW, workerIP string) error {
 	// 默认路由指向宿主机的隔离网络 bridge IP（如 10.99.X.1），而非 gateway 容器（10.99.X.2）。
-	// 原因：gateway 的 sing-box TUN auto_route 会劫持所有经过的出站流量（包括转发的回复包），
-	// 导致端口映射回包被送进代理隧道。指向宿主机后，宿主机 iptables 做路由决策：
-	//   - ESTABLISHED/RELATED → MASQUERADE 直出（端口映射回包）
+	// 原因：gateway 的 sing-box TUN auto_route 会劫持所有经过 gateway 的出站流量。
+	// 指向宿主机后，宿主机 iptables 做路由决策：
 	//   - 新连接 → 转发到 gateway → 代理隧道
 	script := fmt.Sprintf(`set -e
 # 等待网络接口就绪

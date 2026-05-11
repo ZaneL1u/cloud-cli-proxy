@@ -43,7 +43,7 @@ uat-vscode-remote-ssh.sh — Phase 40+43 VS Code Remote-SSH E2E UAT（9 场景�
   --confirm-destructive     触发实际断言：需要运行中的容器
   --container=NAME          指定容器名（默认自动检测 cloud-claude-local-*）
   --expected-egress-ip=IP   指定期望的出口 IP（不指定则跳过出口 IP 断言）
-  --ssh-port=PORT           SSH 代理端口（默认自动检测容器端口映射）
+  --ssh-port=PORT           SSH 代理端口（默认自动检测容器 SSH 端口）
   --output-dir=DIR          报告输出目录
   --help, -h                显示本帮助
 
@@ -590,7 +590,7 @@ scenario_direct_tcpip_forward() {
   local ssh_port
   ssh_port="$(detect_ssh_port "$container")"
   if [ -z "$ssh_port" ]; then
-    skip "direct_tcpip_forward" "无法确定 SSH 端口（设置 --ssh-port 或确保容器有端口映射）"
+    skip "direct_tcpip_forward" "无法确定 SSH 端口（设置 --ssh-port 或确保容器有 SSH 端口暴露）"
     write_json_report "direct_tcpip_forward" "skip"
     return 0
   fi
