@@ -123,7 +123,7 @@ func TestApplyWorkerFirewallRules_Basic(t *testing.T) {
 	gwIP := net.ParseIP("10.0.0.1")
 	bridgeGW := net.ParseIP("172.18.0.1")
 
-	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22, nil)
+	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22)
 	if err != nil {
 		t.Fatalf("ApplyWorkerFirewallRules failed: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestCleanupWorkerFirewallRules(t *testing.T) {
 	bridgeGW := net.ParseIP("172.18.0.1")
 
 	// 先应用规则
-	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22, nil)
+	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22)
 	if err != nil {
 		t.Fatalf("ApplyWorkerFirewallRules failed: %v", err)
 	}
@@ -271,7 +271,7 @@ func TestCleanupWorkerFirewallRules_Idempotent(t *testing.T) {
 	bridgeGW := net.ParseIP("172.18.0.1")
 
 	// 先应用规则
-	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22, nil)
+	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22)
 	if err != nil {
 		t.Fatalf("ApplyWorkerFirewallRules failed: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestApplyWorkerFirewallRules_IPv6Rules(t *testing.T) {
 	gwIP := net.ParseIP("10.0.0.1")
 	bridgeGW := net.ParseIP("172.18.0.1")
 
-	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22, nil)
+	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22)
 	if err != nil {
 		t.Fatalf("ApplyWorkerFirewallRules failed: %v", err)
 	}
@@ -410,7 +410,7 @@ func TestApplyThenCleanupThenApply(t *testing.T) {
 	bridgeGW := net.ParseIP("172.18.0.1")
 
 	// 第一次应用
-	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22, nil)
+	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22)
 	if err != nil {
 		t.Fatalf("first ApplyWorkerFirewallRules failed: %v", err)
 	}
@@ -422,7 +422,7 @@ func TestApplyThenCleanupThenApply(t *testing.T) {
 	}
 
 	// 第二次应用
-	err = ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22, []uint16{3000})
+	err = ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22)
 	if err != nil {
 		t.Fatalf("second ApplyWorkerFirewallRules failed: %v", err)
 	}
@@ -448,8 +448,8 @@ func TestApplyThenCleanupThenApply(t *testing.T) {
 		t.Fatalf("get input rules: %v", err)
 	}
 
-	// 基础 5 条 + 端口 3000 = 6 条
-	if len(inputRules) != 6 {
-		t.Fatalf("input rules = %d, want 6", len(inputRules))
+	// 基础 5 条
+	if len(inputRules) != 5 {
+		t.Fatalf("input rules = %d, want 5", len(inputRules))
 	}
 }

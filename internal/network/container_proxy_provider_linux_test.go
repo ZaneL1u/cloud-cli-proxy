@@ -11,7 +11,7 @@ import (
 func TestApplyWorkerFirewall_ErrorPaths(t *testing.T) {
 	// Test with a nonexistent container - should return error, not panic
 	ctx := context.Background()
-	err := applyWorkerFirewall(ctx, "nonexistent-worker-12345", "10.99.1.2", "10.99.1.1", nil)
+	err := applyWorkerFirewall(ctx, "nonexistent-worker-12345", "10.99.1.2", "10.99.1.1")
 	if err == nil {
 		t.Error("expected error for nonexistent container")
 	}
