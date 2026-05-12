@@ -11,9 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { useApplyBypass } from "@/hooks/use-bypass-snapshots";
 import { useTaskPolling } from "@/hooks/use-tasks";
-import { useSSE } from "@/hooks/use-sse";
-import { getToken } from "@/lib/auth";
-import { buildSSEUrl } from "@/lib/sse-manager";
 import {
   parseBypassError,
   bypassErrorMessage,
@@ -63,16 +60,12 @@ export function ApplyProgressDialog({
 
   const { data: task } = useTaskPolling(taskId);
 
-  // SSE 仅用于更早唤醒 UI（task polling 已经每 2s 拉一次）。
-  // 未打开时传空 url，避免组件嵌入到父容器时常驻 EventSource 订阅
-  // （也让 jsdom 测试环境无需 mock window.EventSource）。
-  // CR-07：必须带 token 走 ?token=... 鉴权；后端 /v1/admin/sse 现已套 adminGuard。
-  useSSE(
-    open ? buildSSEUrl("/v1/admin/sse", "tasks", getToken()) : "",
-    () => {
-      // 无需操作，react-query invalidate 已经在 useTasks 里处理
-    },
-  );
+  // WR-09：原本这里又开了一条 useSSE("/v1/admin/sse?topics=tasks") 给 dialog
+  // 自己。但 useTaskPolling 已经每 2s 主动拉一次，dialog 生命周期短（apply 完
+  // 自动关闭），多开一条 EventSource 只会浪费一条 HTTP/1.1 槽位（单 origin
+  // 限 6 路），且 useTasks 全局已经订阅过同一 topic。直接去掉 SSE 订阅。
+  // 若后续需要"立即唤醒 UI"，应让 useTaskPolling 自己挂 SSE，而不是每个
+  // 调用方各开一条。
 
   // Dialog 打开 → 自动调 apply mutation；关闭 → 清空所有状态
   useEffect(() => {
