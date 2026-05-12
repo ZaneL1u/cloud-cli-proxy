@@ -18,11 +18,16 @@ import (
 // 规则设计：
 //   - INPUT 默认 DROP：允许 lo、ESTABLISHED/RELATED、来自 gwIP 的流量、SSH(22)
 //   - OUTPUT 默认 DROP：允许 lo、ESTABLISHED/RELATED、到 gwIP 的所有流量（代理隧道）、UDP/TCP 53（DNS）
+//     + Phase 47 Plan 02：白名单 set / uid 锁 / mDNS/LLMNR/NetBIOS 显式 drop / 链末 log drop
 //   - IPv6 全部丢弃（已有 --sysctl net.ipv6.conf.all.disable_ipv6=1，再保险一层）
 //
 // 关键：规则基于接口索引（eth0 为隔离网络接口，lo 为回环），防止 Docker reconnect bridge 后新接口被滥用。
 // 使用 github.com/google/nftables 库，在宿主机上通过 nftables.WithNetNSFd(int(containerNS)) 操作 worker netns。
-func ApplyWorkerFirewallRules(containerNS netns.NsHandle, gwIP, bridgeGW net.IP, sshPort uint16) error {
+//
+// Phase 47 Plan 02：proxyIP 参数携带 v3 容器代理服务器 IP（对应 EgressConfig.Proxy 的
+// 解析结果）。proxyIP == nil 时 ConfigureBypassFirewall 会 skip uid 锁规则，保持与
+// Phase 1+ 旧路径（无代理 IP 场景）兼容。
+func ApplyWorkerFirewallRules(containerNS netns.NsHandle, gwIP, bridgeGW, proxyIP net.IP, sshPort uint16) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -78,7 +83,7 @@ func ApplyWorkerFirewallRules(containerNS netns.NsHandle, gwIP, bridgeGW net.IP,
 		}
 	}
 
-	applyWorkerIPv4Rules(conn, eth0IfIndex, loIfIndex, gwIP, bridgeGW, sshPort)
+	applyWorkerIPv4Rules(conn, eth0IfIndex, loIfIndex, gwIP, bridgeGW, proxyIP, sshPort)
 	applyWorkerIPv6Rules(conn, loIfIndex)
 
 	if err := conn.Flush(); err != nil {
@@ -129,7 +134,7 @@ func CleanupWorkerFirewallRules(containerNS netns.NsHandle) error {
 	return nil
 }
 
-func applyWorkerIPv4Rules(conn *nftables.Conn, eth0IfIndex, loIfIndex int, gwIP, bridgeGW net.IP, sshPort uint16) {
+func applyWorkerIPv4Rules(conn *nftables.Conn, eth0IfIndex, loIfIndex int, gwIP, bridgeGW, proxyIP net.IP, sshPort uint16) {
 	policyDrop := nftables.ChainPolicyDrop
 
 	table := conn.AddTable(&nftables.Table{
@@ -155,6 +160,9 @@ func applyWorkerIPv4Rules(conn *nftables.Conn, eth0IfIndex, loIfIndex int, gwIP,
 
 	// 来自 gwIP 的流量允许（eth0）
 	addIifSrcIPAcceptRule(conn, table, inputChain, eth0IfIndex, gwIP)
+
+	// 来自 bridgeGW 的流量允许（eth0）—— 控制面经 docker network connect 接入时的入站
+	addIifSrcIPAcceptRule(conn, table, inputChain, eth0IfIndex, bridgeGW)
 
 	// SSH 端口允许
 	addIifTCPDportAcceptRule(conn, table, inputChain, eth0IfIndex, sshPort)
@@ -183,8 +191,25 @@ func applyWorkerIPv4Rules(conn *nftables.Conn, eth0IfIndex, loIfIndex int, gwIP,
 
 	// DNS TCP 53 允许
 	addOifProtoDstPortAcceptRule(conn, table, outputChain, eth0IfIndex, 53, ipprotoTCP)
+
+	// Phase 47 Plan 02：v3.5 白名单 set + uid 锁 + mDNS/LLMNR/NetBIOS drop + 链末 log drop。
+	// ConfigureBypassFirewall 内部任何 AddRule / AddSet 失败都会在 conn.Flush 阶段集中暴露，
+	// 此处忽略返回的 *Set（Phase 47 Plan 01 的 ApplyBypassRuleSet 通过 nft -f 引用 set name 即可）。
+	// 错误处理：仅 conn.AddSet 立即返回错误的极端场景；为不破坏 applyWorkerIPv4Rules 的 void 签名，
+	// 将其作为告警吸收 —— 真正的下发失败由后续 conn.Flush 报。
+	_, _ = ConfigureBypassFirewall(conn, table, outputChain, eth0IfIndex, proxyIP)
 }
 
+// applyWorkerIPv6Rules 在 worker netns 内强制 IPv6 全部 drop（仅放行 lo）。
+//
+// I6 双保险：worker 容器启动参数已 --sysctl net.ipv6.conf.all.disable_ipv6=1
+// 与 default.disable_ipv6=1（见 internal/runtime/tasks/worker.go::buildCreateArgs），
+// 容器内 IPv6 协议栈不工作；此处 IPv6 表 input6 / output6 policy=drop + 仅放 lo
+// 是 nft 层的第二道保险，防止未来某次配置回退（去掉 sysctl）导致 IPv6 流量静默逃逸。
+// 两层任意一层失效不会立刻泄漏，必须同时失效才会泄漏 —— 这是 fail-closed 的最强形态。
+//
+// 同时也是 ip6tables 默认 drop 的等价物：由于 inet 表 family=ipv6 的 nft 规则已经
+// 在 worker netns 内强制 drop，无需再额外调用 ip6tables -P FORWARD DROP / OUTPUT DROP。
 func applyWorkerIPv6Rules(conn *nftables.Conn, loIfIndex int) {
 	policyDrop := nftables.ChainPolicyDrop
 

@@ -190,7 +190,7 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 		return fmt.Errorf("gateway: configure worker routes: %w", err)
 	}
 
-	if err := applyWorkerFirewall(ctx, workerName, gwIP, bridgeGW); err != nil {
+	if err := applyWorkerFirewall(ctx, workerName, gwIP, bridgeGW, proxyServerIP(spec.Egress)); err != nil {
 		p.teardownGateway(ctx, hostID)
 		return fmt.Errorf("gateway: apply worker firewall: %w", err)
 	}
@@ -320,6 +320,22 @@ func WriteContainerDNSConfig(hostID string) error {
 
 func networkName(hostID string) string {
 	return "cloudproxy-net-" + hostID
+}
+
+// proxyServerIP 从 EgressConfig 中解析 sing-box outbound 的代理服务器 IP（字符串形式）。
+// 返回空字符串表示无代理 IP（Phase 1+ 兼容路径或解析失败）；调用方应据此 skip uid 锁规则。
+// 解析失败仅在底层 outbound JSON 缺失字段或域名解析失败时发生，控制面侧已经在
+// PrepareGateway 阶段先做过一次 extractProxyServer + dockerRunGateway 引用了相同 IP，
+// 此处再次解析极少失败；为避免 nft 加固阻断主流程，失败一律降级为「无 uid 锁」。
+func proxyServerIP(egress *EgressConfig) string {
+	if egress == nil || egress.Proxy == nil {
+		return ""
+	}
+	ip, _, err := extractProxyServer(egress.Proxy.OutboundConfig)
+	if err != nil {
+		return ""
+	}
+	return ip
 }
 
 func gatewayContainerName(hostID string) string {

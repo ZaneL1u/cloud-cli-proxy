@@ -216,7 +216,12 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 		"--label", fmt.Sprintf("cloud-cli-proxy.host_id=%s", request.HostID),
 		"--hostname", hostname,
 		"--shm-size", "1g",
+		// Phase 47 Plan 02 I6 双保险：disable_ipv6 同时锁 all + default。
+		// all 锁现有接口，default 锁未来创建的接口（如 Docker bridge reconnect）；
+		// 仅设 all 会在某些 Docker / 内核组合下被 default 路径绕过。配合 worker
+		// netns nft IPv6 表 input6 / output6 policy=drop，构成双层 fail-closed。
 		"--sysctl", "net.ipv6.conf.all.disable_ipv6=1",
+		"--sysctl", "net.ipv6.conf.default.disable_ipv6=1",
 	}
 
 	// macOS/Windows: expose SSH port via host port mapping because Docker Desktop

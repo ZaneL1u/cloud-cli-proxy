@@ -6,7 +6,7 @@ import (
 	"context"
 )
 
-func applyWorkerFirewall(_ context.Context, _, _, _ string) error {
+func applyWorkerFirewall(_ context.Context, _, _, _, _ string) error {
 	return nil
 }
 

@@ -8,7 +8,7 @@ import (
 	"net"
 )
 
-func applyWorkerFirewall(ctx context.Context, workerName, gwIP, bridgeGW string) error {
+func applyWorkerFirewall(ctx context.Context, workerName, gwIP, bridgeGW, proxyIP string) error {
 	containerNS, _, err := GetContainerNetNS(workerName)
 	if err != nil {
 		return fmt.Errorf("get worker netns: %w", err)
@@ -17,8 +17,13 @@ func applyWorkerFirewall(ctx context.Context, workerName, gwIP, bridgeGW string)
 
 	gw := net.ParseIP(gwIP)
 	bgw := net.ParseIP(bridgeGW)
+	// proxyIP 允许为空（Phase 1+ 兼容路径，无代理 IP 时 ConfigureBypassFirewall skip uid 锁）
+	var pip net.IP
+	if proxyIP != "" {
+		pip = net.ParseIP(proxyIP)
+	}
 
-	if err := ApplyWorkerFirewallRules(containerNS, gw, bgw, 22); err != nil {
+	if err := ApplyWorkerFirewallRules(containerNS, gw, bgw, pip, 22); err != nil {
 		return fmt.Errorf("apply worker firewall rules: %w", err)
 	}
 	return nil

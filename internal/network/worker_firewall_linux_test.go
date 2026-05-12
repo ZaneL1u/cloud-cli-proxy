@@ -123,7 +123,7 @@ func TestApplyWorkerFirewallRules_Basic(t *testing.T) {
 	gwIP := net.ParseIP("10.0.0.1")
 	bridgeGW := net.ParseIP("172.18.0.1")
 
-	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22)
+	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, nil, 22)
 	if err != nil {
 		t.Fatalf("ApplyWorkerFirewallRules failed: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestApplyWorkerFirewallRules_InvalidNetNS(t *testing.T) {
 	// 传入无效的 netns handle
 	invalidNS := netns.NsHandle(0)
 
-	err := ApplyWorkerFirewallRules(invalidNS, gwIP, bridgeGW, 22, nil)
+	err := ApplyWorkerFirewallRules(invalidNS, gwIP, bridgeGW, nil, 22)
 	if err == nil {
 		t.Fatal("expected error for invalid netns, got nil")
 	}
@@ -225,7 +225,7 @@ func TestCleanupWorkerFirewallRules(t *testing.T) {
 	bridgeGW := net.ParseIP("172.18.0.1")
 
 	// 先应用规则
-	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22)
+	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, nil, 22)
 	if err != nil {
 		t.Fatalf("ApplyWorkerFirewallRules failed: %v", err)
 	}
@@ -271,7 +271,7 @@ func TestCleanupWorkerFirewallRules_Idempotent(t *testing.T) {
 	bridgeGW := net.ParseIP("172.18.0.1")
 
 	// 先应用规则
-	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22)
+	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, nil, 22)
 	if err != nil {
 		t.Fatalf("ApplyWorkerFirewallRules failed: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestApplyWorkerFirewallRules_IPv6Rules(t *testing.T) {
 	gwIP := net.ParseIP("10.0.0.1")
 	bridgeGW := net.ParseIP("172.18.0.1")
 
-	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22)
+	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, nil, 22)
 	if err != nil {
 		t.Fatalf("ApplyWorkerFirewallRules failed: %v", err)
 	}
@@ -368,7 +368,7 @@ func TestApplyWorkerFirewallRules_CustomSSHPort(t *testing.T) {
 	bridgeGW := net.ParseIP("172.18.0.1")
 	customSSHPort := uint16(2222)
 
-	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, customSSHPort, nil)
+	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, nil, customSSHPort)
 	if err != nil {
 		t.Fatalf("ApplyWorkerFirewallRules failed: %v", err)
 	}
@@ -410,7 +410,7 @@ func TestApplyThenCleanupThenApply(t *testing.T) {
 	bridgeGW := net.ParseIP("172.18.0.1")
 
 	// 第一次应用
-	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22)
+	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, nil, 22)
 	if err != nil {
 		t.Fatalf("first ApplyWorkerFirewallRules failed: %v", err)
 	}
@@ -422,7 +422,7 @@ func TestApplyThenCleanupThenApply(t *testing.T) {
 	}
 
 	// 第二次应用
-	err = ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, 22)
+	err = ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, nil, 22)
 	if err != nil {
 		t.Fatalf("second ApplyWorkerFirewallRules failed: %v", err)
 	}
