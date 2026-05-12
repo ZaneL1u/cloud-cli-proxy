@@ -50,7 +50,6 @@ describe("BypassTab", () => {
               host_id: "h-1",
               rule_type: "ip",
               value: "1.2.3.4",
-              port: null,
               is_risky: false,
               note: null,
               created_at: "",

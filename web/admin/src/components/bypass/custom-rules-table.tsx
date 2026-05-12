@@ -202,7 +202,6 @@ export function CustomRulesTable({ hostId }: CustomRulesTableProps) {
             <TableRow>
               <TableHead className="w-28">类型</TableHead>
               <TableHead>值</TableHead>
-              <TableHead className="w-24">端口</TableHead>
               <TableHead className="w-24">风险</TableHead>
               <TableHead>备注</TableHead>
               <TableHead className="w-32 text-right">操作</TableHead>
@@ -226,9 +225,6 @@ export function CustomRulesTable({ hostId }: CustomRulesTableProps) {
                 </TableCell>
                 <TableCell className="font-mono text-sm">
                   {rule.value}
-                </TableCell>
-                <TableCell className="font-mono text-sm text-muted-foreground">
-                  {rule.port || "—"}
                 </TableCell>
                 <TableCell>
                   {rule.is_risky ? (

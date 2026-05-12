@@ -49,8 +49,8 @@ const TYPE_LABELS: Record<BypassRuleType, string> = {
   domain_keyword: "域名关键词",
 };
 
-// 端口字段格式：空 / 单端口 / 范围 80-443
-const PORT_RE = /^\d{1,5}(-\d{1,5})?$/;
+// v3.5 不支持端口区分：plan 46-01 truth 没有 port 持久化承诺，
+// 后端 BypassRule 也无 port 列。前端因此不再渲染端口输入。
 const IPV4_RE =
   /^((25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(25[0-5]|2[0-4]\d|[01]?\d?\d)$/;
 const CIDR_RE = /^\S+\/\d{1,3}$/;
@@ -66,17 +66,9 @@ const baseSchema = z
       "domain_keyword",
     ]),
     value: z.string().min(1, "值不能为空"),
-    port: z.string().optional(),
     note: z.string().max(200, "备注不能超过 200 字").optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.port && !PORT_RE.test(data.port)) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["port"],
-        message: "端口格式不合法，应为数字或 80-443 范围",
-      });
-    }
     switch (data.rule_type) {
       case "ip":
         if (!IPV4_RE.test(data.value)) {
@@ -153,7 +145,6 @@ export function BypassRuleDrawer({
     defaultValues: {
       rule_type: "domain",
       value: "",
-      port: "",
       note: "",
     },
   });
@@ -164,14 +155,12 @@ export function BypassRuleDrawer({
       form.reset({
         rule_type: rule.rule_type,
         value: rule.value,
-        port: rule.port ?? "",
         note: rule.note ?? "",
       });
     } else {
       form.reset({
         rule_type: "domain",
         value: "",
-        port: "",
         note: "",
       });
     }
@@ -186,7 +175,6 @@ export function BypassRuleDrawer({
     const payload = {
       rule_type: values.rule_type,
       value: values.value,
-      port: values.port || undefined,
       note: values.note || undefined,
       confirm_risky: confirmRisky || undefined,
     };
@@ -208,7 +196,6 @@ export function BypassRuleDrawer({
           ruleId: rule.id,
           payload: {
             value: payload.value,
-            port: payload.port,
             note: payload.note,
             confirm_risky: payload.confirm_risky,
           },
@@ -294,21 +281,6 @@ export function BypassRuleDrawer({
               {form.formState.errors.value && (
                 <p className="text-sm text-destructive">
                   {form.formState.errors.value.message}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="port">端口（可选）</Label>
-              <Input
-                id="port"
-                placeholder="留空表示所有端口；80 / 80-443"
-                {...form.register("port")}
-                className="font-mono text-sm"
-              />
-              {form.formState.errors.port && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.port.message}
                 </p>
               )}
             </div>

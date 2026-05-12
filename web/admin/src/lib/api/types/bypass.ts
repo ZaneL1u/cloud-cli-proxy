@@ -31,7 +31,6 @@ export interface BypassRule {
   host_id: string;
   rule_type: BypassRuleType;
   value: string;
-  port: string | null; // 单端口 "80" 或范围 "80-443"
   is_risky: boolean;
   note: string | null;
   created_at: string;
@@ -49,14 +48,12 @@ export interface BypassBinding {
 export interface BypassRuleCreatePayload {
   rule_type: BypassRuleType;
   value: string;
-  port?: string;
   note?: string;
   confirm_risky?: boolean;
 }
 
 export interface BypassRuleUpdatePayload {
   value?: string;
-  port?: string;
   note?: string;
   confirm_risky?: boolean;
 }
