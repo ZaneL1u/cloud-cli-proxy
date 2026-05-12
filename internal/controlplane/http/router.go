@@ -45,6 +45,10 @@ type Dependencies struct {
 	AdminUsers      AdminUserStore
 	AdminEgressIPs  AdminEgressIPStore
 	AdminBindings   AdminBindingStore
+	AdminBypassPresets  AdminBypassPresetStore
+	AdminBypassRules    AdminBypassRuleStore
+	AdminBypassBindings AdminBypassBindingStore
+	AdminBypassProxy    AdminBypassProxyIPProvider // 通常复用 AdminEgressIPs
 	AdminHosts          AdminHostStore
 	AdminClaudeAccounts AdminClaudeAccountStore // Phase 33 D-17
 	AgentClient         HostActionRunner        // Phase 33 D-17 — interface 兼容 embedded + 远端两种模式
@@ -234,6 +238,37 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			bindingsHandler := NewAdminBindingsHandler(deps.Logger, deps.AdminBindings, deps.EventRecorder)
 			mux.Handle("POST /v1/admin/bindings", adminGuard(bindingsHandler.Bind()))
 			mux.Handle("DELETE /v1/admin/bindings/{bindingID}", adminGuard(bindingsHandler.Unbind()))
+		}
+
+		// Phase 46 Plan 01：Bypass Preset / Rule / Binding 后台 API
+		if deps.AdminBypassPresets != nil {
+			presetHandler := NewAdminBypassPresetsHandler(deps.Logger, deps.AdminBypassPresets, deps.EventRecorder)
+			mux.Handle("GET /v1/admin/bypass/presets", adminGuard(presetHandler.List()))
+			mux.Handle("POST /v1/admin/bypass/presets", adminGuard(presetHandler.Create()))
+			mux.Handle("GET /v1/admin/bypass/presets/{presetID}", adminGuard(presetHandler.Get()))
+			mux.Handle("PATCH /v1/admin/bypass/presets/{presetID}", adminGuard(presetHandler.Update()))
+			mux.Handle("DELETE /v1/admin/bypass/presets/{presetID}", adminGuard(presetHandler.Delete()))
+		}
+
+		if deps.AdminBypassRules != nil {
+			// 若未显式注入 ProxyIPProvider，退化到 AdminEgressIPs（接口子集兼容）。
+			var proxy AdminBypassProxyIPProvider = deps.AdminBypassProxy
+			if proxy == nil && deps.AdminEgressIPs != nil {
+				proxy = deps.AdminEgressIPs
+			}
+			ruleHandler := NewAdminBypassRulesHandler(deps.Logger, deps.AdminBypassRules, proxy, deps.EventRecorder)
+			mux.Handle("GET /v1/admin/bypass/rules", adminGuard(ruleHandler.List()))
+			mux.Handle("POST /v1/admin/bypass/rules", adminGuard(ruleHandler.Create()))
+			mux.Handle("POST /v1/admin/bypass/rules/validate", adminGuard(ruleHandler.Validate()))
+			mux.Handle("PATCH /v1/admin/bypass/rules/{ruleID}", adminGuard(ruleHandler.Update()))
+			mux.Handle("DELETE /v1/admin/bypass/rules/{ruleID}", adminGuard(ruleHandler.Delete()))
+		}
+
+		if deps.AdminBypassBindings != nil {
+			bypassBindingHandler := NewAdminBypassBindingsHandler(deps.Logger, deps.AdminBypassBindings, deps.EventRecorder)
+			mux.Handle("GET /v1/admin/hosts/{hostID}/bypass", adminGuard(bypassBindingHandler.ListByHost()))
+			mux.Handle("POST /v1/admin/hosts/{hostID}/bypass", adminGuard(bypassBindingHandler.Bind()))
+			mux.Handle("DELETE /v1/admin/bypass/bindings/{bindingID}", adminGuard(bypassBindingHandler.Unbind()))
 		}
 
 		if deps.AdminHosts != nil {
