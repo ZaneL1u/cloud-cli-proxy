@@ -5,6 +5,11 @@ import type {
   BypassBinding,
   BypassRuleCreatePayload,
   BypassRuleUpdatePayload,
+  BypassPreviewResponse,
+  BypassApplyResponse,
+  BypassRollbackResponse,
+  BypassEffectiveResponse,
+  BypassAuditLogResponse,
 } from "./types/bypass";
 
 // 系统预设列表（admin 全局可用预设）
@@ -70,4 +75,44 @@ export function deleteBypassBinding(hostId: string, bindingId: string) {
   return apiFetch<void>(`/hosts/${hostId}/bypass/bindings/${bindingId}`, {
     method: "DELETE",
   });
+}
+
+// ===== 46-04 扩展：preview / apply / rollback / effective / auditLog =====
+
+export function previewBypass(hostId: string) {
+  return apiFetch<BypassPreviewResponse>(`/hosts/${hostId}/bypass/preview`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export function applyBypass(hostId: string, note?: string) {
+  return apiFetch<BypassApplyResponse>(`/hosts/${hostId}/bypass/apply`, {
+    method: "POST",
+    body: JSON.stringify({ note: note ?? "" }),
+  });
+}
+
+export function rollbackBypass(hostId: string, targetSnapshotId: string) {
+  return apiFetch<BypassRollbackResponse>(`/hosts/${hostId}/bypass/rollback`, {
+    method: "POST",
+    body: JSON.stringify({ target_snapshot_id: targetSnapshotId }),
+  });
+}
+
+export function effectiveBypass(hostId: string) {
+  return apiFetch<BypassEffectiveResponse>(`/hosts/${hostId}/bypass/effective`);
+}
+
+export function auditLogBypass(
+  hostId: string,
+  opts?: { limit?: number; before?: string },
+) {
+  const q = new URLSearchParams();
+  if (opts?.limit) q.set("limit", String(opts.limit));
+  if (opts?.before) q.set("before", opts.before);
+  const qs = q.toString();
+  return apiFetch<BypassAuditLogResponse>(
+    `/hosts/${hostId}/bypass/audit-log${qs ? "?" + qs : ""}`,
+  );
 }

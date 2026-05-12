@@ -65,3 +65,68 @@ export interface BypassErrorPayload {
   code: string;
   message: string;
 }
+
+// ===== 46-04 扩展：快照 / 应用 / 回滚 / 生效快照 / 审计日志 =====
+// 与后端 Plan 02 SUMMARY 的响应体 100% 对齐。
+
+export interface BypassRenderedRuleSet {
+  version: number;
+  rules: unknown[];
+}
+
+export interface BypassPreviewResponse {
+  config_hash: string;
+  version_current: number;
+  version_next: number;
+  whitelist_cidrs_rendered: BypassRenderedRuleSet;
+  whitelist_domains_rendered: BypassRenderedRuleSet;
+  nft_diff: string;
+  risky_count: number;
+  summary: string;
+}
+
+export type BypassAppliedStatus =
+  | "pending"
+  | "applied"
+  | "failed"
+  | "rolled_back";
+
+export interface BypassApplyResponse {
+  snapshot_id: string;
+  version: number;
+  config_hash: string;
+  applied_status: BypassAppliedStatus;
+  task_id: string;
+  message: string;
+}
+
+export interface BypassRollbackResponse {
+  snapshot_id: string;
+  task_id: string;
+  message: string;
+}
+
+export interface BypassEffectiveResponse {
+  presets_active: BypassPreset[];
+  rules_active: BypassRule[];
+  whitelist_cidrs_rendered: BypassRenderedRuleSet;
+  whitelist_domains_rendered: BypassRenderedRuleSet;
+}
+
+export interface BypassAuditLogEntry {
+  id: string;
+  actor_id: string | null;
+  actor_ip: string;
+  action: string;
+  target_kind: string;
+  target_id: string | null;
+  before: unknown;
+  after: unknown;
+  note: string;
+  created_at: string;
+}
+
+export interface BypassAuditLogResponse {
+  audit_log: BypassAuditLogEntry[];
+  next_before: string;
+}
