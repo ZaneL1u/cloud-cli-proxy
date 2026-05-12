@@ -306,13 +306,27 @@ func (h *AdminBypassSnapshotsHandler) Apply() nethttp.Handler {
 		})
 		if err != nil {
 			// UNIQUE(host_id, config_hash) 冲突 → 幂等命中：找回原 snapshot 直接 200。
+			// 同时补一次 dispatch —— worker 占位实现是幂等的（Phase 47 接管真实 reload）。
+			// CR-06：原本只 writeJSON 不 dispatch，TaskID 为零值 ""；前端 setTaskId("")
+			// 不被 useTaskPolling 的 enabled 守卫 trigger，stageStatuses 永远卡在 dispatch
+			// active，dialog 既不自动关闭也不报错。
 			if isUniqueViolation(err) {
 				if existing, found, ferr := h.findSnapshotByConfigHash(r.Context(), hostID, out.ConfigHash); ferr == nil && found {
+					var taskID string
+					if h.actions != nil {
+						task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, existing.ID)
+						if qErr != nil {
+							h.logger.Error("apply (idempotent): queue host action failed", "host_id", hostID, "snapshot_id", existing.ID, "error", qErr)
+						} else {
+							taskID = task.ID
+						}
+					}
 					writeJSON(w, nethttp.StatusOK, applyResponse{
 						SnapshotID:    existing.ID,
 						Version:       existing.Version,
 						ConfigHash:    existing.ConfigHash,
 						AppliedStatus: existing.AppliedStatus,
+						TaskID:        taskID,
 						Message:       "config_hash 已存在，返回现有 snapshot（幂等）",
 					})
 					return

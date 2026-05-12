@@ -324,12 +324,17 @@ func TestAdminBypassSnapshotsHandler(t *testing.T) {
 		if resp.SnapshotID != "snap-existing" {
 			t.Errorf("expected snapshot_id=snap-existing, got %s", resp.SnapshotID)
 		}
-		// 幂等命中：未写 audit、未 dispatch
+		// CR-06：幂等路径需要补一次 dispatch（worker 占位是幂等的），
+		// 这样前端 useTaskPolling 拿到非空 task_id 能正常推进/收敛 UI。
+		// 仍然保持不写 audit、不写 events（幂等命中 = 配置未变，无需重复留痕）。
+		if resp.TaskID == "" {
+			t.Errorf("expected non-empty task_id on idempotent dispatch, got empty")
+		}
 		if len(store.auditLogs) != 0 {
 			t.Errorf("expected 0 audit rows on idempotent path, got %d", len(store.auditLogs))
 		}
-		if len(q.calls) != 0 {
-			t.Errorf("expected 0 queue calls on idempotent path, got %d", len(q.calls))
+		if len(q.calls) != 1 {
+			t.Errorf("expected 1 queue call (idempotent dispatch), got %d", len(q.calls))
 		}
 		if len(ev.events) != 0 {
 			t.Errorf("expected 0 events on idempotent path, got %d", len(ev.events))
