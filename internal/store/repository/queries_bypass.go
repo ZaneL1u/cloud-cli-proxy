@@ -123,6 +123,15 @@ const updateBypassRuleSQL = `
 
 const deleteBypassRuleSQL = `DELETE FROM host_bypass_rules WHERE id = $1`
 
+// getBypassRuleByIDSQL：Phase 46 Plan 01 扩展（Task 4 WARN-5 修复）。
+// handler 的 Update / Delete 需要先取 before 快照写入 audit_log.before。
+// 列顺序与 createBypassRuleSQL / updateBypassRuleSQL RETURNING 段一致。
+const getBypassRuleByIDSQL = `
+	SELECT id::text, scope, host_id::text, rule_type, value, COALESCE(note, ''),
+	       is_risky, created_at, updated_at
+	FROM host_bypass_rules WHERE id = $1
+`
+
 const listBypassBindingsByHostSQL = `
 	SELECT id::text, host_id::text, preset_id::text, rule_id::text,
 	       enabled, source, created_at
@@ -442,6 +451,16 @@ func (r *Repository) DeleteBypassRule(ctx context.Context, id string) error {
 		return fmt.Errorf("delete bypass rule: %w", pgx.ErrNoRows)
 	}
 	return nil
+}
+
+// GetBypassRuleByID 返回单条规则，主要供 Phase 46 handler 在 Update / Delete 前取
+// before 快照写 audit_log。pgx.ErrNoRows 在调用方做 404 翻译。
+func (r *Repository) GetBypassRuleByID(ctx context.Context, id string) (BypassRule, error) {
+	var it BypassRule
+	if err := scanBypassRule(r.db.QueryRow(ctx, getBypassRuleByIDSQL, id), &it); err != nil {
+		return BypassRule{}, fmt.Errorf("get bypass rule by id: %w", err)
+	}
+	return it, nil
 }
 
 func (r *Repository) ListBypassBindingsByHost(ctx context.Context, hostID string) ([]BypassBinding, error) {

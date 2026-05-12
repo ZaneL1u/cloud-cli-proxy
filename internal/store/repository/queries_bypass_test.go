@@ -28,6 +28,7 @@ func TestBypassRepository_Signatures(t *testing.T) {
 		{"CreateBypassRule", 3, 2},
 		{"UpdateBypassRule", 4, 2},
 		{"DeleteBypassRule", 3, 1},
+		{"GetBypassRuleByID", 3, 2},                // Phase 46 Plan 01 Task 4 扩展（audit log before 字段）
 		{"ListBypassBindingsByHost", 3, 2},
 		{"CreateBypassBinding", 3, 2},
 		{"DeleteBypassBinding", 3, 1},
@@ -88,6 +89,7 @@ func TestBypassRepository_SQLConstants(t *testing.T) {
 		"createBypassRuleSQL":               {createBypassRuleSQL, []string{"INSERT INTO host_bypass_rules", "RETURNING"}},
 		"updateBypassRuleSQL":               {updateBypassRuleSQL, []string{"UPDATE host_bypass_rules"}},
 		"deleteBypassRuleSQL":               {deleteBypassRuleSQL, []string{"DELETE FROM host_bypass_rules"}},
+		"getBypassRuleByIDSQL":              {getBypassRuleByIDSQL, []string{"host_bypass_rules", "WHERE", "id = $1"}},
 		"listBypassBindingsByHostSQL":       {listBypassBindingsByHostSQL, []string{"host_bypass_bindings", "host_id"}},
 		"createBypassBindingSQL":            {createBypassBindingSQL, []string{"INSERT INTO host_bypass_bindings"}},
 		"deleteBypassBindingSQL":            {deleteBypassBindingSQL, []string{"DELETE FROM host_bypass_bindings"}},
