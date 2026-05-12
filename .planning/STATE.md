@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: 网络白名单与 DNS 拆分解析
-status: milestone_complete
-stopped_at: v3.5 ROADMAP.md / REQUIREMENTS.md (traceability) / STATE.md 三件套全部写盘
-last_updated: "2026-05-12T09:04:34.088Z"
-last_activity: 2026-05-12 -- Phase 46 planning complete
+status: in_progress
+stopped_at: Phase 47 Plan 01 完成（热更新链路 + Consistency endpoint 落地）
+last_updated: "2026-05-12T20:50:00.000Z"
+last_activity: 2026-05-12
 progress:
-  total_phases: 2
+  total_phases: 3
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 3
+  total_plans: 10
+  completed_plans: 10
   percent: 100
 ---
 
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-05-12)
 
 ## Current Position
 
-Phase: 46
-Plan: Not started
-Status: Milestone complete
+Phase: 47
+Plan: 01 完成（02 已完成；03 待执行）
+Status: Phase 47 in progress（2/3 plan 完成）
 Last activity: 2026-05-12
 
 ## Accumulated Context
@@ -45,6 +45,13 @@ v3.5 关键技术决策（已研究确定，不再讨论）：
 - fail-closed：sing-box 起不来则容器 unhealthy 不开 SSH；nft `output policy drop` + uid 锁定 sing-box 直连代理 IP:443
 - v3.5 仅管理员可配置，不做用户自助
 - 系统预设仅 `loopback`（强制开启）+ `lan`（默认关闭），`cn-dev` / `oss-dev` / `ai-api` 推到 P1
+
+Phase 47 Plan 01 关键决策：
+
+- QueueHostAction 第 5 参用专属 `bypassSnapshotID string` 形参替代通用 payload —— 把 Phase 46 「借 requestedBy 传 snapshot ID」hack 编译期闭死。
+- ApplyBypassRuleSet 严格顺序「先 nft 事务 → 后 atomic write」，文件 / nft 漂移由 VerifyBypassConsistency 主动侦测。
+- 健康检查 3 次失败 + 自动 rollback 上一 applied snapshot → Execute return nil（rollback 视为最终成功）；只有连 prev 都没有才映射 ErrBypassReloadFailed。
+- Consistency endpoint 包裹 3s context.WithTimeout，DeadlineExceeded 显式映射 504 BYPASS_CONSISTENCY_TIMEOUT，与一般 500 BYPASS_CONSISTENCY_ERROR 区分。
 
 ### Pending Todos
 
@@ -70,8 +77,8 @@ v3.5 roadmap 草案（基于 `.planning/research/SUMMARY.md` §6 建议路径，
 ## Session Continuity
 
 Last session: 2026-05-12
-Stopped at: v3.5 ROADMAP.md / REQUIREMENTS.md (traceability) / STATE.md 三件套全部写盘
-Resume: `/gsd-plan-phase 45` 进入 Phase 45 规划
+Stopped at: Phase 47 Plan 01 完成（4 task commits c9bf709/1385c95/5c596d9/e887afb；47-01-SUMMARY.md 写盘）
+Resume: `/gsd:execute-phase 47` 继续执行 Plan 47-03
 
 ## Deferred Items
 
@@ -84,4 +91,4 @@ v3.5 暂无 deferred 项目（milestone 刚启动）
 
 ---
 
-<!-- State updated: 2026-05-12 — v3.5 milestone roadmap drafted (Phases 45-47, 34 requirements mapped) -->
+<!-- State updated: 2026-05-12 — Phase 47 Plan 01 完成（bypass reload 真实链路 + Consistency endpoint） -->

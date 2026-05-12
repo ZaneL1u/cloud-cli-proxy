@@ -74,17 +74,17 @@
 
 ### Agent 热更新链路（BYPASS-RELOAD）
 
-- [ ] **BYPASS-RELOAD-01**: `internal/agentapi/contracts.go` 新增 `ActionReloadHostBypass HostAction = "reload_host_bypass"`；worker dispatch（`internal/runtime/tasks/worker.go`）新增对应 case，读取最新 snapshot 并下发到 host-agent。
+- [x] **BYPASS-RELOAD-01**: `internal/agentapi/contracts.go` 新增 `ActionReloadHostBypass HostAction = "reload_host_bypass"`；worker dispatch（`internal/runtime/tasks/worker.go`）新增对应 case，读取最新 snapshot 并下发到 host-agent。
 
-- [ ] **BYPASS-RELOAD-02**: host-agent 收到 reload 指令后执行：
+- [x] **BYPASS-RELOAD-02**: host-agent 收到 reload 指令后执行：
   1. 写 rule-set 文件用 `tmpfile + rename` 原子语义，路径 `/var/lib/cloud-cli-proxy/host/<host_id>/whitelist-{cidrs,domains}.json`，并 bind mount 到 gateway 容器 `/etc/sing-box/`；
   2. 同步更新容器 netns nftables `@whitelist_v4` set（用 `nft -f` 事务批量更新）；
   3. 等 1s 让 sing-box 文件 watch reload；
   4. 健康检查（nsenter + curl 验证白名单流量从 eth0 出 + 非白名单仍走代理出口）。
 
-- [ ] **BYPASS-RELOAD-03**: 失败自动回滚 —— reload 健康检查 3 次失败后，自动用上一个 `applied` snapshot 重新下发，并把当前 snapshot 标记为 `rolled_back`，触发事件日志告警。
+- [x] **BYPASS-RELOAD-03**: 失败自动回滚 —— reload 健康检查 3 次失败后，自动用上一个 `applied` snapshot 重新下发，并把当前 snapshot 标记为 `rolled_back`，触发事件日志告警。
 
-- [ ] **BYPASS-RELOAD-04**: nft set 内容与 rule-set 文件的 SHA-256 必须 hash 一致；控制面提供 `GET /v1/admin/hosts/{hostID}/bypass/consistency` 健康检查接口，定期对账。
+- [x] **BYPASS-RELOAD-04**: nft set 内容与 rule-set 文件的 SHA-256 必须 hash 一致；控制面提供 `GET /v1/admin/hosts/{hostID}/bypass/consistency` 健康检查接口，定期对账。
 
 ### fail-closed 加固（BYPASS-NFT）
 
@@ -160,10 +160,10 @@
 | BYPASS-UI-03      | Phase 46 | TBD   |
 | BYPASS-UI-04      | Phase 46 | TBD   |
 | BYPASS-UI-05      | Phase 46 | TBD   |
-| BYPASS-RELOAD-01  | Phase 47 | TBD   |
-| BYPASS-RELOAD-02  | Phase 47 | TBD   |
-| BYPASS-RELOAD-03  | Phase 47 | TBD   |
-| BYPASS-RELOAD-04  | Phase 47 | TBD   |
+| BYPASS-RELOAD-01  | Phase 47 | 47-01 |
+| BYPASS-RELOAD-02  | Phase 47 | 47-01 |
+| BYPASS-RELOAD-03  | Phase 47 | 47-01 |
+| BYPASS-RELOAD-04  | Phase 47 | 47-01 |
 | BYPASS-NFT-01     | Phase 47 | TBD   |
 | BYPASS-NFT-02     | Phase 47 | TBD   |
 | BYPASS-NFT-03     | Phase 47 | TBD   |

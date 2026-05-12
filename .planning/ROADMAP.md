@@ -199,8 +199,8 @@
 **Plans**: 3 plans
 
 Plans:
-- [ ] 47-01-PLAN.md — worker dispatcher 真实实现 + agentapi BypassSnapshotID + ApplyBypassRuleSet（原子写 + nft -f）+ 自动 rollback + consistency endpoint（Wave 1）
-- [ ] 47-02-PLAN.md — worker netns nft 加固：@whitelist_v4 set + uid 锁 + mDNS/LLMNR/NetBIOS drop + 链末 log drop + I6 IPv6 双保险（Wave 1）
+- [x] 47-01-PLAN.md — worker dispatcher 真实实现 + agentapi BypassSnapshotID + ApplyBypassRuleSet（原子写 + nft -f）+ 自动 rollback + consistency endpoint（Wave 1）
+- [x] 47-02-PLAN.md — worker netns nft 加固：@whitelist_v4 set + uid 锁 + mDNS/LLMNR/NetBIOS drop + 链末 log drop + I6 IPv6 双保险（Wave 1）
 - [ ] 47-03-PLAN.md — verify.go 扩展 3 项检查 + scripts/uat-bypass.sh 6 场景 × 10 不变量 + CI matrix（Wave 2）
 
 ## Progress
@@ -219,8 +219,8 @@ Plans:
 | 38-44. v3.4 多形态容器接入 | v3.4 | 14/14 | Complete | 2026-05-08 |
 | 45. v3.5 网络配置基础与数据模型 | v3.5 | 3/3 | Complete    | 2026-05-12 |
 | 46. v3.5 控制面 API 与后台 UI | v3.5 | 4/4 | Complete    | 2026-05-12 |
-| 47. v3.5 热更新链路与流量验证 | v3.5 | 0/3 | Planning | — |
+| 47. v3.5 热更新链路与流量验证 | v3.5 | 2/3 | In Progress | — |
 
 ---
 
-*Last updated: 2026-05-12 — v3.5 roadmap drafted (Phases 45-47), 34/34 requirements mapped.*
+*Last updated: 2026-05-12 — Phase 47 Plan 01 完成（bypass reload 真实链路 + Consistency endpoint）。*
