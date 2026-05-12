@@ -91,12 +91,24 @@ func verifyDNS(ctx context.Context, prefix []string, expectedDNS string, result 
 	out, err := exec.CommandContext(checkCtx, args[0], args[1:]...).Output()
 	if err != nil {
 		result.DNSCorrect = false
-		result.ActualDNS = ""
+		// Phase 45 WR-07：err 时区分「nsenter 失败 / resolv.conf 缺失」与
+		// 「内容为空」，给运维一个可识别的 sentinel 而不是空串。
+		result.ActualDNS = fmt.Sprintf("<read failed: %v>", err)
 		return
 	}
 
+	// Phase 45 WR-07：旧实现只校验第一行 nameserver 是否等于 expectedDNS，
+	// 任何附加 fallback nameserver（例如 `nameserver 8.8.8.8` 跟在后面）都
+	// 会让 verifyDNS 通过，但实际容器 resolv.conf 在 172.19.0.1 超时后会
+	// fallback 到 8.8.8.8，等同 DNS 入口锁失效。
+	//
+	// 修复：与 PrepareGateway 写盘的 resolvConfContent **整体逐字节相等**比对。
+	// 任何额外行、注释、缺行都会立即识别为 DNS lock-in 被破坏。
+	rawContent := string(out)
+
+	// 同时抓出第一行 nameserver 用作 ActualDNS 字段，便于日志与上层 metadata。
 	var firstNS string
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range strings.Split(rawContent, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "nameserver") {
 			fields := strings.Fields(line)
@@ -106,8 +118,14 @@ func verifyDNS(ctx context.Context, prefix []string, expectedDNS string, result 
 			}
 		}
 	}
-
 	result.ActualDNS = firstNS
+
+	if rawContent != resolvConfContent {
+		result.DNSCorrect = false
+		return
+	}
+	// 双保险：首行 nameserver 必须等于期望值（在内容完全相等的前提下永远成立，
+	// 但保持显式断言以便未来 resolvConfContent 演进时仍能 catch 该不变量）。
 	result.DNSCorrect = firstNS == expectedDNS
 }
 
