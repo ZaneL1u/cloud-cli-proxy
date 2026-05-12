@@ -78,7 +78,11 @@ type HostLister interface {
 }
 
 type HostActionQueuer interface {
-	QueueHostAction(context.Context, string, agentapi.HostAction, string) (repository.Task, error)
+	// QueueHostAction 入队一个 host action。
+	// 第 4 参 requestedBy 是触发者标识（admin UI / system / user-id），用于 audit。
+	// 第 5 参 bypassSnapshotID 仅在 action=ActionReloadHostBypass 时承载 host_bypass_snapshots.id，
+	// 其它 action 传 "" 即可（runtime_service 会按 action 类型 gating）。
+	QueueHostAction(ctx context.Context, hostID string, action agentapi.HostAction, requestedBy string, bypassSnapshotID string) (repository.Task, error)
 }
 
 type TaskLister interface {
@@ -281,6 +285,7 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			mux.Handle("POST /v1/admin/hosts/{hostID}/bypass/apply", adminGuard(sh.Apply()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/bypass/rollback", adminGuard(sh.Rollback()))
 			mux.Handle("GET /v1/admin/hosts/{hostID}/bypass/effective", adminGuard(sh.Effective()))
+			mux.Handle("GET /v1/admin/hosts/{hostID}/bypass/consistency", adminGuard(sh.Consistency()))
 		}
 		if deps.AdminBypassAuditLog != nil {
 			ah := NewAdminBypassAuditLogHandler(deps.Logger, deps.AdminBypassAuditLog)

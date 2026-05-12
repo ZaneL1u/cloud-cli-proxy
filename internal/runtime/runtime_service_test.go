@@ -142,7 +142,7 @@ func TestQueueHostAction_InjectsClaudeAccountID(t *testing.T) {
 	}
 	svc, disp := newTestService(t, repo)
 
-	if _, err := svc.QueueHostAction(context.Background(), "h1", agentapi.ActionRebuildHost, "admin"); err != nil {
+	if _, err := svc.QueueHostAction(context.Background(), "h1", agentapi.ActionRebuildHost, "admin", ""); err != nil {
 		t.Fatalf("QueueHostAction: %v", err)
 	}
 
@@ -165,7 +165,7 @@ func TestQueueHostAction_NoClaudeAccount_FallsBack(t *testing.T) {
 	}
 	svc, disp := newTestService(t, repo)
 
-	if _, err := svc.QueueHostAction(context.Background(), "h1", agentapi.ActionRebuildHost, "admin"); err != nil {
+	if _, err := svc.QueueHostAction(context.Background(), "h1", agentapi.ActionRebuildHost, "admin", ""); err != nil {
 		t.Fatalf("QueueHostAction: %v", err)
 	}
 	got := disp.waitFor(t, 2*time.Second)
@@ -184,11 +184,50 @@ func TestQueueHostAction_ResolveError_DoesNotBlockQueue(t *testing.T) {
 	}
 	svc, disp := newTestService(t, repo)
 
-	if _, err := svc.QueueHostAction(context.Background(), "h1", agentapi.ActionRebuildHost, "admin"); err != nil {
+	if _, err := svc.QueueHostAction(context.Background(), "h1", agentapi.ActionRebuildHost, "admin", ""); err != nil {
 		t.Fatalf("QueueHostAction must not return error on resolve failure: %v", err)
 	}
 	got := disp.waitFor(t, 2*time.Second)
 	if got.ClaudeAccountID != "" {
 		t.Errorf("on resolve error, ClaudeAccountID must be empty, got %q", got.ClaudeAccountID)
+	}
+}
+
+// TestQueueHostAction_BypassSnapshotID_ReloadAction 守护 Phase 47 Plan 01：
+// 当 action == ActionReloadHostBypass 时，第 5 参 bypassSnapshotID 必须被透传到
+// request.BypassSnapshotID，让 worker 端 handleReloadHostBypass 用它去 Repository
+// 取真实 snapshot 数据。
+func TestQueueHostAction_BypassSnapshotID_ReloadAction(t *testing.T) {
+	repo := &stubQueueRepo{
+		host: repository.Host{ID: "h1", UserID: "u1", Hostname: "h1"},
+		user: repository.User{ID: "u1", Username: "alice", EntryPassword: "secret"},
+	}
+	svc, disp := newTestService(t, repo)
+
+	if _, err := svc.QueueHostAction(context.Background(), "h1", agentapi.ActionReloadHostBypass, "admin", "snap-uuid-42"); err != nil {
+		t.Fatalf("QueueHostAction: %v", err)
+	}
+	got := disp.waitFor(t, 2*time.Second)
+	if got.BypassSnapshotID != "snap-uuid-42" {
+		t.Errorf("expected BypassSnapshotID=snap-uuid-42, got %q", got.BypassSnapshotID)
+	}
+}
+
+// TestQueueHostAction_BypassSnapshotID_NonReloadAction_StaysEmpty 守护 Phase 47 Plan 01：
+// 即使调用方误传非空 bypassSnapshotID 给非 reload 的 action，request.BypassSnapshotID 也必须保持空 ——
+// 避免字段语义被滥用（worker dispatcher 不会对非 reload action 触发 GetBypassSnapshotByID）。
+func TestQueueHostAction_BypassSnapshotID_NonReloadAction_StaysEmpty(t *testing.T) {
+	repo := &stubQueueRepo{
+		host: repository.Host{ID: "h1", UserID: "u1", Hostname: "h1"},
+		user: repository.User{ID: "u1", Username: "alice", EntryPassword: "secret"},
+	}
+	svc, disp := newTestService(t, repo)
+
+	if _, err := svc.QueueHostAction(context.Background(), "h1", agentapi.ActionRebuildHost, "admin", "snap-uuid-leak"); err != nil {
+		t.Fatalf("QueueHostAction: %v", err)
+	}
+	got := disp.waitFor(t, 2*time.Second)
+	if got.BypassSnapshotID != "" {
+		t.Errorf("non-reload action must keep BypassSnapshotID empty, got %q", got.BypassSnapshotID)
 	}
 }

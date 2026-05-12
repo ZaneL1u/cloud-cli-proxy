@@ -67,7 +67,7 @@ func (h HostActionsHandler) handleLifecycleAction(route string, action agentapi.
 			requestedBy = "control-plane"
 		}
 
-		task, err := h.queue.QueueHostAction(r.Context(), hostID, action, requestedBy)
+		task, err := h.queue.QueueHostAction(r.Context(), hostID, action, requestedBy, "")
 		if err != nil {
 			if h.logger != nil {
 				h.logger.Error("queue host action failed", "route", route, "host_id", hostID, "error", err)

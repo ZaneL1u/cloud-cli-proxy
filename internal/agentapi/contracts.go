@@ -65,6 +65,11 @@ type HostActionRequest struct {
 	ClaudeAccountID string `json:"claude_account_id,omitempty"`
 	// BindMounts 携带宿主机目录 bind mount 配置，由 Runtime Service 从 repository.HostMounts 映射而来。
 	BindMounts []BindMount `json:"bind_mounts,omitempty"`
+	// BypassSnapshotID Phase 47 — 仅当 Action=ActionReloadHostBypass 时非空。
+	// 承载 host_bypass_snapshots.id（UUID 文本），由 runtime_service.QueueHostAction 透传给 worker，
+	// worker 用它去 Repository.GetBypassSnapshotByID 取规则。Phase 46 旧实现把 snapshot ID 借用
+	// requestedBy 形参传递的 hack 在 Plan 47-01 一并修复。
+	BypassSnapshotID string `json:"bypass_snapshot_id,omitempty"`
 }
 
 type TaskStatusUpdate struct {

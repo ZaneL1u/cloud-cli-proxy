@@ -250,7 +250,7 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 			return
 		}
 
-		task, err := h.queue.QueueHostAction(r.Context(), host.ID, agentapi.ActionCreateHost, "admin")
+		task, err := h.queue.QueueHostAction(r.Context(), host.ID, agentapi.ActionCreateHost, "admin", "")
 		if err != nil {
 			h.logger.Error("queue create_host failed", "host_id", host.ID, "error", err)
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "queue create action failed"})
@@ -306,7 +306,7 @@ func (h *AdminHostsHandler) lifecycleAction(action agentapi.HostAction) nethttp.
 			}
 		}
 
-		task, err := h.queue.QueueHostAction(r.Context(), hostID, action, "admin")
+		task, err := h.queue.QueueHostAction(r.Context(), hostID, action, "admin", "")
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})

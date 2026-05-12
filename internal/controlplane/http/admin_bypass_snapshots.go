@@ -10,11 +10,13 @@ import (
 	"log/slog"
 	nethttp "net/http"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
+	"github.com/zanel1u/cloud-cli-proxy/internal/network"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
 
@@ -57,6 +59,17 @@ func NewAdminBypassSnapshotsHandler(
 	events EventRecorder,
 ) *AdminBypassSnapshotsHandler {
 	return &AdminBypassSnapshotsHandler{logger: logger, store: store, actions: actions, events: events}
+}
+
+// actorIDOrAdmin 把 r.Context() 里的 actor user-id 取出来作为 task.requested_by 写入。
+// 没有 actor（例如纯内部触发或测试） → fallback "admin"。Phase 47 Plan 01 引入：
+// 把 Phase 46 旧 hack「把 snapshot ID 借用 requestedBy 形参传」拆开 —— 现在
+// QueueHostAction 的第 4 参是真实 actor，第 5 参才是 snapshot ID。
+func actorIDOrAdmin(ctx context.Context) string {
+	if id := actorIDPtr(ctx); id != nil && *id != "" {
+		return *id
+	}
+	return "admin"
 }
 
 // collectRenderInput 把 host 的所有有效 binding 展开为 RenderBypassConfig 所需的输入。
@@ -327,7 +340,7 @@ func (h *AdminBypassSnapshotsHandler) Apply() nethttp.Handler {
 				if existing, found, ferr := h.findSnapshotByConfigHash(r.Context(), hostID, out.ConfigHash); ferr == nil && found {
 					var taskID string
 					if h.actions != nil {
-						task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, existing.ID)
+						task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, actorIDOrAdmin(r.Context()), existing.ID)
 						if qErr != nil {
 							h.logger.Error("apply (idempotent): queue host action failed", "host_id", hostID, "snapshot_id", existing.ID, "error", qErr)
 						} else {
@@ -357,7 +370,7 @@ func (h *AdminBypassSnapshotsHandler) Apply() nethttp.Handler {
 		var taskID string
 		var dispatchErr error
 		if h.actions != nil {
-			task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, snap.ID)
+			task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, actorIDOrAdmin(r.Context()), snap.ID)
 			if qErr != nil {
 				h.logger.Error("apply: queue host action failed", "host_id", hostID, "snapshot_id", snap.ID, "error", qErr)
 				dispatchErr = qErr
@@ -526,7 +539,7 @@ func (h *AdminBypassSnapshotsHandler) Rollback() nethttp.Handler {
 		// 6. dispatch ActionReloadHostBypass —— payload 是 new snapshot.ID，不是 target.ID
 		var taskID string
 		if h.actions != nil {
-			task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, newSnap.ID)
+			task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, actorIDOrAdmin(r.Context()), newSnap.ID)
 			if qErr != nil {
 				h.logger.Error("rollback: queue host action failed", "host_id", hostID, "snapshot_id", newSnap.ID, "error", qErr)
 			} else {
@@ -610,6 +623,64 @@ func (h *AdminBypassSnapshotsHandler) Effective() nethttp.Handler {
 			WhitelistCIDRsRendered:   out.CIDRsJSON,
 			WhitelistDomainsRendered: out.DomainsJSON,
 		})
+	})
+}
+
+// verifyConsistencyHook 是 Consistency handler 的注入点，默认绑定到真实实现
+// network.VerifyBypassConsistency。单测把它替换为 fake 闭包，避免依赖宿主机 nft。
+var verifyConsistencyHook = network.VerifyBypassConsistency
+
+// consistencyTimeout 限制单次对账 RPC 上限。3s 与 worker 健康检查上限对齐，
+// 防止 admin endpoint 因 nft 命令卡死永远 hold（T-47-05 D DoS mitigation）。
+const consistencyTimeout = 3 * time.Second
+
+// Consistency 返回 GET /v1/admin/hosts/{hostID}/bypass/consistency 的 handler。
+//
+// 行为：
+//   - hostID 缺失 → 400 BYPASS_INVALID_REQUEST
+//   - host 不存在 → 404 BYPASS_HOST_NOT_FOUND
+//   - 调 network.VerifyBypassConsistency（受 consistencyTimeout 包裹）：
+//     · context.DeadlineExceeded → 504 BYPASS_CONSISTENCY_TIMEOUT
+//     · 其它 error → 500 BYPASS_CONSISTENCY_ERROR
+//     · OK=false（hash 不一致）→ 409 + ConsistencyResult JSON
+//     · OK=true → 200 + ConsistencyResult JSON
+//
+// adminGuard 已在 router 层守好 admin-only，本 handler 不重复鉴权。
+func (h *AdminBypassSnapshotsHandler) Consistency() nethttp.Handler {
+	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		hostID := strings.TrimSpace(r.PathValue("hostID"))
+		if hostID == "" {
+			writeBypassError(w, nethttp.StatusBadRequest, ErrCodeBypassInvalidRequest, "hostID is required")
+			return
+		}
+		if _, err := h.store.GetHost(r.Context(), hostID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassHostNotFound, "host not found")
+				return
+			}
+			h.logger.Error("consistency: get host failed", "host_id", hostID, "error", err)
+			writeBypassError(w, nethttp.StatusInternalServerError, "INTERNAL", "get host failed")
+			return
+		}
+
+		checkCtx, cancel := context.WithTimeout(r.Context(), consistencyTimeout)
+		defer cancel()
+
+		res, err := verifyConsistencyHook(checkCtx, hostID)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(checkCtx.Err(), context.DeadlineExceeded) {
+				writeBypassError(w, nethttp.StatusGatewayTimeout, "BYPASS_CONSISTENCY_TIMEOUT", "consistency check timeout")
+				return
+			}
+			h.logger.Error("consistency: verify failed", "host_id", hostID, "error", err)
+			writeBypassError(w, nethttp.StatusInternalServerError, "BYPASS_CONSISTENCY_ERROR", err.Error())
+			return
+		}
+		if !res.OK {
+			writeJSON(w, nethttp.StatusConflict, res)
+			return
+		}
+		writeJSON(w, nethttp.StatusOK, res)
 	})
 }
 

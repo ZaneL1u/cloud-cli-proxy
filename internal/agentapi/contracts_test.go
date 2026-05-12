@@ -2,6 +2,7 @@ package agentapi
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -181,5 +182,45 @@ func TestClaudeAccountID_OmitEmpty(t *testing.T) {
 	json.Unmarshal(b, &m)
 	if _, ok := m["claude_account_id"]; ok {
 		t.Error("claude_account_id should be omitted when empty")
+	}
+}
+
+// TestHostActionRequest_BypassSnapshotID 守护 Phase 47 Plan 01：
+//   - HostActionRequest 必须有 BypassSnapshotID 字段，承载 reload_host_bypass action 的 snapshot ID
+//   - json tag = "bypass_snapshot_id,omitempty"
+//   - 字段为空时 marshal 出来的 JSON 不含 bypass_snapshot_id key
+//   - 字段非空时正确 round-trip
+func TestHostActionRequest_BypassSnapshotID(t *testing.T) {
+	// Test A: 字段存在且 json tag 正确（reflect 守护）
+	rt := reflect.TypeOf(HostActionRequest{})
+	field, ok := rt.FieldByName("BypassSnapshotID")
+	if !ok {
+		t.Fatal("HostActionRequest 必须有 BypassSnapshotID 字段")
+	}
+	if got, want := field.Tag.Get("json"), "bypass_snapshot_id,omitempty"; got != want {
+		t.Errorf("json tag = %q, want %q", got, want)
+	}
+	if field.Type.Kind() != reflect.String {
+		t.Errorf("BypassSnapshotID 字段类型必须是 string，got %s", field.Type.Kind())
+	}
+
+	// Test B: 空值 omitempty
+	req := HostActionRequest{TaskID: "t1", Action: ActionReloadHostBypass}
+	b, _ := json.Marshal(req)
+	var m map[string]any
+	json.Unmarshal(b, &m)
+	if _, ok := m["bypass_snapshot_id"]; ok {
+		t.Error("bypass_snapshot_id should be omitted when empty")
+	}
+
+	// Test C: 非空值 round-trip
+	req.BypassSnapshotID = "snap-uuid-1"
+	b, _ = json.Marshal(req)
+	var decoded HostActionRequest
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		t.Fatalf("json.Unmarshal = %v", err)
+	}
+	if decoded.BypassSnapshotID != "snap-uuid-1" {
+		t.Errorf("BypassSnapshotID round-trip = %q, want snap-uuid-1", decoded.BypassSnapshotID)
 	}
 }

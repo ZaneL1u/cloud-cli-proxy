@@ -94,7 +94,15 @@ func NewService(
 	}
 }
 
-func (s *Service) QueueHostAction(ctx context.Context, hostID string, action agentapi.HostAction, requestedBy string) (repository.Task, error) {
+// QueueHostAction 入队一个 host action。
+//
+//   - requestedBy 是触发者标识（admin UI / system / user-id），写入 audit + task.requested_by。
+//   - bypassSnapshotID 仅当 action == ActionReloadHostBypass 时被透传到 request.BypassSnapshotID；
+//     其它 action 调用方传 "" 即可，本函数会按 action 类型 gating，避免误用语义。
+//
+// Phase 47 Plan 01：把 Phase 46 旧实现「借用 requestedBy 形参承载 snapshot ID」的 hack
+// 改为显式字段透传，让 admin_bypass_snapshots / runtime_service 的契约自洽。
+func (s *Service) QueueHostAction(ctx context.Context, hostID string, action agentapi.HostAction, requestedBy string, bypassSnapshotID string) (repository.Task, error) {
 	host, err := s.repo.GetHost(ctx, hostID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -189,6 +197,12 @@ func (s *Service) QueueHostAction(ctx context.Context, hostID string, action age
 				ReadOnly: hm.ReadOnly,
 			})
 		}
+	}
+
+	// Phase 47 Plan 01：仅当 action 是 reload_host_bypass 时把 snapshot ID 透传给 worker。
+	// 其它 action 即使调用方误传非空 bypassSnapshotID 也不会污染 request（避免语义混淆）。
+	if action == agentapi.ActionReloadHostBypass {
+		request.BypassSnapshotID = bypassSnapshotID
 	}
 
 	if request.EntryPassword == "" {

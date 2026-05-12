@@ -49,6 +49,20 @@ func (r *mockWorkerRepo) ReportTaskProgress(_ context.Context, _ string, _ int, 
 	return nil
 }
 
+// Phase 47 Plan 01：扩展 WorkerRepo 后必须实现 Bypass 三件套；agent server 测试
+// 走 POST host-actions 调度路径，不触发这三个方法 —— 给最小 no-op 返回。
+func (r *mockWorkerRepo) GetBypassSnapshotByID(_ context.Context, _ string) (repository.BypassSnapshot, error) {
+	return repository.BypassSnapshot{}, nil
+}
+
+func (r *mockWorkerRepo) UpdateBypassSnapshotStatus(_ context.Context, _ string, _ string) (repository.BypassSnapshot, error) {
+	return repository.BypassSnapshot{}, nil
+}
+
+func (r *mockWorkerRepo) GetLatestAppliedBypassSnapshot(_ context.Context, _ string) (repository.BypassSnapshot, error) {
+	return repository.BypassSnapshot{}, nil
+}
+
 func TestServer_POSTHandler_PanicRecovered(t *testing.T) {
 	// 注入 testPanicTrigger，让 worker.Execute panic
 	origTrigger := runtimetasks.TestPanicTrigger

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
+	"github.com/zanel1u/cloud-cli-proxy/internal/network"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
 
@@ -141,6 +142,8 @@ func (s *stubBypassSnapshotStore) InsertBypassAuditLog(_ context.Context, p repo
 }
 
 // stubHostActionQueuer 实现 HostActionQueuer，计数 QueueHostAction 调用并捕获 payload。
+// Phase 47 Plan 01 起，第 4 参是真实 requestedBy（admin / actor user-id），第 5 参 Payload
+// 才是 reload_host_bypass 的 snapshot ID。Phase 46 的「借用 requestedBy 传 snapshot ID」hack 已修复。
 type stubHostActionQueuer struct {
 	mu        sync.Mutex
 	calls     []stubHostActionCall
@@ -149,15 +152,16 @@ type stubHostActionQueuer struct {
 }
 
 type stubHostActionCall struct {
-	HostID  string
-	Action  agentapi.HostAction
-	Payload string
+	HostID      string
+	Action      agentapi.HostAction
+	RequestedBy string
+	Payload     string
 }
 
-func (q *stubHostActionQueuer) QueueHostAction(_ context.Context, hostID string, action agentapi.HostAction, payload string) (repository.Task, error) {
+func (q *stubHostActionQueuer) QueueHostAction(_ context.Context, hostID string, action agentapi.HostAction, requestedBy string, payload string) (repository.Task, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.calls = append(q.calls, stubHostActionCall{HostID: hostID, Action: action, Payload: payload})
+	q.calls = append(q.calls, stubHostActionCall{HostID: hostID, Action: action, RequestedBy: requestedBy, Payload: payload})
 	if q.queueErr != nil {
 		return repository.Task{}, q.queueErr
 	}
@@ -569,3 +573,123 @@ type fakeError struct{ msg string }
 
 func (e *fakeError) Error() string { return e.msg }
 func newFakeError(s string) error  { return &fakeError{msg: s} }
+
+// ---------------------------------------------------------------------------
+// Phase 47 Plan 01 Task 4：GET /v1/admin/hosts/{hostID}/bypass/consistency
+// ---------------------------------------------------------------------------
+
+// withFakeConsistencyHook 替换包级 verifyConsistencyHook，t.Cleanup 自动还原。
+// 直接 import internal/network 包：生产代码已经 import 它，不存在循环依赖。
+func withFakeConsistencyHook(t *testing.T, fn func(ctx context.Context, hostID string) (network.ConsistencyResult, error)) {
+	t.Helper()
+	prev := verifyConsistencyHook
+	verifyConsistencyHook = fn
+	t.Cleanup(func() { verifyConsistencyHook = prev })
+}
+
+// TestConsistency_OK 守护 acceptance Test 1：mock VerifyBypassConsistency 返回 OK=true
+// → 200 + JSON {ok:true, ruleset_sha256, nft_set_sha256}。
+func TestConsistency_OK(t *testing.T) {
+	store := newStubSnapStore()
+	store.host = repository.Host{ID: "h1"}
+	h := newSnapHandler(store, &stubHostActionQueuer{}, &stubEventRecorderSnap{})
+
+	withFakeConsistencyHook(t, func(_ context.Context, _ string) (network.ConsistencyResult, error) {
+		return network.ConsistencyResult{OK: true, RuleSetSHA256: "abc", NftSetSHA256: "abc"}, nil
+	})
+
+	rec := doRequest(h.Consistency(), "GET", "/v1/admin/hosts/h1/bypass/consistency", "h1", nil)
+	if rec.Code != nethttp.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		OK            bool   `json:"ok"`
+		RuleSetSHA256 string `json:"ruleset_sha256"`
+		NftSetSHA256  string `json:"nft_set_sha256"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !body.OK {
+		t.Errorf("expected ok=true, got %+v", body)
+	}
+	if body.RuleSetSHA256 != "abc" || body.NftSetSHA256 != "abc" {
+		t.Errorf("expected hash=abc/abc, got %+v", body)
+	}
+}
+
+// TestConsistency_Drift 守护 acceptance Test 2：OK=false → 409 + 两 hash 字面值 + detail。
+func TestConsistency_Drift(t *testing.T) {
+	store := newStubSnapStore()
+	store.host = repository.Host{ID: "h1"}
+	h := newSnapHandler(store, &stubHostActionQueuer{}, &stubEventRecorderSnap{})
+
+	withFakeConsistencyHook(t, func(_ context.Context, _ string) (network.ConsistencyResult, error) {
+		return network.ConsistencyResult{
+			OK:            false,
+			RuleSetSHA256: "rs-aaa",
+			NftSetSHA256:  "nft-bbb",
+			Detail:        "cidr set mismatch: file=2 entries, nft=1 entries",
+		}, nil
+	})
+
+	rec := doRequest(h.Consistency(), "GET", "/v1/admin/hosts/h1/bypass/consistency", "h1", nil)
+	if rec.Code != nethttp.StatusConflict {
+		t.Fatalf("expected 409, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	bodyStr := rec.Body.String()
+	for _, want := range []string{"rs-aaa", "nft-bbb", "cidr set mismatch"} {
+		if !strings.Contains(bodyStr, want) {
+			t.Errorf("expected drift body to contain %q, got %s", want, bodyStr)
+		}
+	}
+}
+
+// TestConsistency_AdminOnly 守护 acceptance Test 3：路由层 adminGuard 控制访问；
+// 这里直接对 handler 做 doRequest 验证 handler 自身不重复鉴权也不泄露内部信息 —
+// host 不存在时仍稳定返回 404 BYPASS_HOST_NOT_FOUND，确认 handler 落在路由 guard 之后。
+//
+// 真正的 403 路径在 router_test 里覆盖 adminGuard（本任务对 admin endpoint 不引入
+// 新的鉴权逻辑，复用已有 adminGuard）。
+func TestConsistency_AdminOnly(t *testing.T) {
+	store := newStubSnapStore()
+	store.hostErr = pgx.ErrNoRows
+	h := newSnapHandler(store, &stubHostActionQueuer{}, &stubEventRecorderSnap{})
+
+	called := false
+	withFakeConsistencyHook(t, func(_ context.Context, _ string) (network.ConsistencyResult, error) {
+		called = true
+		return network.ConsistencyResult{OK: true}, nil
+	})
+
+	rec := doRequest(h.Consistency(), "GET", "/v1/admin/hosts/missing/bypass/consistency", "missing", nil)
+	if rec.Code != nethttp.StatusNotFound {
+		t.Fatalf("expected 404 BYPASS_HOST_NOT_FOUND, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "BYPASS_HOST_NOT_FOUND") {
+		t.Errorf("expected error_code=BYPASS_HOST_NOT_FOUND, got body=%s", rec.Body.String())
+	}
+	if called {
+		t.Errorf("verifyConsistencyHook must not be called when host lookup 404s")
+	}
+}
+
+// TestConsistency_Timeout 守护 acceptance Test 4：mock 返回 context.DeadlineExceeded
+// → 504 + JSON {error_code:"BYPASS_CONSISTENCY_TIMEOUT"}。
+func TestConsistency_Timeout(t *testing.T) {
+	store := newStubSnapStore()
+	store.host = repository.Host{ID: "h1"}
+	h := newSnapHandler(store, &stubHostActionQueuer{}, &stubEventRecorderSnap{})
+
+	withFakeConsistencyHook(t, func(_ context.Context, _ string) (network.ConsistencyResult, error) {
+		return network.ConsistencyResult{}, context.DeadlineExceeded
+	})
+
+	rec := doRequest(h.Consistency(), "GET", "/v1/admin/hosts/h1/bypass/consistency", "h1", nil)
+	if rec.Code != nethttp.StatusGatewayTimeout {
+		t.Fatalf("expected 504, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "BYPASS_CONSISTENCY_TIMEOUT") {
+		t.Errorf("expected BYPASS_CONSISTENCY_TIMEOUT error code, got body=%s", rec.Body.String())
+	}
+}

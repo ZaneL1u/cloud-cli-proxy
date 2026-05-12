@@ -44,6 +44,11 @@ type WorkerRepo interface {
 	RecordEvent(ctx context.Context, params repository.RecordEventParams) (repository.Event, error)
 	UpsertClaudeAccountPersistentVolumeName(ctx context.Context, accountID, volumeName string) error // Phase 33 D-06
 	ReportTaskProgress(ctx context.Context, taskID string, percent int, message string) error
+	// Phase 47 Plan 01：worker.handleReloadHostBypass 依赖以下三个 Bypass 方法。
+	// Repository 已在 Phase 45-03 落地三套查询（见 internal/store/repository/queries_bypass.go）。
+	GetBypassSnapshotByID(ctx context.Context, id string) (repository.BypassSnapshot, error)
+	UpdateBypassSnapshotStatus(ctx context.Context, id string, status string) (repository.BypassSnapshot, error)
+	GetLatestAppliedBypassSnapshot(ctx context.Context, hostID string) (repository.BypassSnapshot, error)
 }
 
 type Worker struct {
@@ -99,16 +104,9 @@ func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest
 	case agentapi.ActionVolumeRemove:
 		err = w.removeVolumes(ctx, request)
 	case agentapi.ActionReloadHostBypass:
-		// Phase 46 占位实现：仅写日志返回 nil。Phase 47 实现真实 reload：
-		//   1. 从 host_bypass_snapshots 拉 pending 行（task payload 携带 snapshot id）
-		//   2. 把 whitelist_cidrs_json / whitelist_domains_json 落盘到 gateway config dir
-		//   3. 触发 sing-box rule-set 热加载 + nft set 原子更新
-		//   4. 健康检查通过则 UpdateBypassSnapshotStatus -> applied；失败 -> rolled_back
-		// 注意：日志字面量必须含 "Phase 46 placeholder; no-op until Phase 47" 字符串
-		// （Plan 46-02 must_haves truth #6 + success_criteria #2 字面对齐）。
-		slog.Info("reload_host_bypass dispatched (Phase 46 placeholder; no-op until Phase 47)",
-			"task_id", request.TaskID, "host_id", request.HostID)
-		err = nil
+		// Phase 47 Plan 01：真实 reload 流程在 worker_bypass_reload.go。
+		// 旧 Phase 46 占位字面量已移除（Plan 47-01 Task 3 success_criteria）。
+		err = w.handleReloadHostBypass(ctx, request)
 	default:
 		err = fmt.Errorf("unsupported host action: %s", request.Action)
 	}
@@ -121,6 +119,14 @@ func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest
 		errorCode := "host_action_failed"
 		if strings.HasPrefix(err.Error(), "volume_in_use:") {
 			errorCode = "volume_in_use"
+		}
+		// Phase 47 Plan 01：reload_host_bypass 错误码映射。
+		// ErrBypassReloadInvalidInput → 调用方契约违规（空 snapshot id），不可重试。
+		// ErrBypassReloadFailed → 健康检查耗尽且无可回滚 snapshot，状态终态。
+		if errors.Is(err, ErrBypassReloadInvalidInput) {
+			errorCode = "bypass_reload_invalid_input"
+		} else if errors.Is(err, ErrBypassReloadFailed) {
+			errorCode = "bypass_reload_failed"
 		}
 		var sshErr *SSHNotReadyError
 		var netErr *network.NetworkError

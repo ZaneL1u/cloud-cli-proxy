@@ -93,6 +93,20 @@ func (r *fakeWorkerRepo) ReportTaskProgress(_ context.Context, _ string, _ int, 
 	return nil
 }
 
+// Phase 47 Plan 01：扩展 WorkerRepo 后必须实现 Bypass 三件套；ssh_inject_test 系列
+// 走的是 SSH 注入路径，不会触发这三个方法 —— 给最小 no-op 返回即可。
+func (r *fakeWorkerRepo) GetBypassSnapshotByID(_ context.Context, _ string) (repository.BypassSnapshot, error) {
+	return repository.BypassSnapshot{}, nil
+}
+
+func (r *fakeWorkerRepo) UpdateBypassSnapshotStatus(_ context.Context, _ string, _ string) (repository.BypassSnapshot, error) {
+	return repository.BypassSnapshot{}, nil
+}
+
+func (r *fakeWorkerRepo) GetLatestAppliedBypassSnapshot(_ context.Context, _ string) (repository.BypassSnapshot, error) {
+	return repository.BypassSnapshot{}, nil
+}
+
 // setupInjectTest 装配 fake 容器、fake repo、代理公钥与 execInContainer 注入点，
 // 返回 worker + 容器 + repo，供测试断言。
 func setupInjectTest(t *testing.T, proxyPub string) (*Worker, *fakeContainer, *fakeWorkerRepo) {

@@ -42,7 +42,7 @@ type stubQueuer struct {
 	calledRequestedBy string
 }
 
-func (s *stubQueuer) QueueHostAction(_ context.Context, _ string, action agentapi.HostAction, requestedBy string) (repository.Task, error) {
+func (s *stubQueuer) QueueHostAction(_ context.Context, _ string, action agentapi.HostAction, requestedBy string, _ string) (repository.Task, error) {
 	s.called = true
 	s.calledAction = action
 	s.calledRequestedBy = requestedBy

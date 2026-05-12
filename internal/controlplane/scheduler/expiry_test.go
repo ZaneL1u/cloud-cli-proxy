@@ -50,7 +50,7 @@ type mockQueuer struct {
 	err error
 }
 
-func (m *mockQueuer) QueueHostAction(_ context.Context, hostID string, action agentapi.HostAction, requestedBy string) (repository.Task, error) {
+func (m *mockQueuer) QueueHostAction(_ context.Context, hostID string, action agentapi.HostAction, requestedBy string, _ string) (repository.Task, error) {
 	m.queuedActions = append(m.queuedActions, struct {
 		HostID      string
 		Action      agentapi.HostAction
