@@ -1,219 +1,263 @@
-# v3.4 多形态容器接入 · 研究综述（SUMMARY）
+# v3.5 网络白名单与 DNS 拆分解析 · 研究综述（SUMMARY）
 
 **Project:** Cloud CLI Proxy
-**Milestone:** v3.4 多形态容器接入
-**Domain:** 扩展容器接入方式 — Cloud 版 VS Code Remote SSH + 本地版 VS Code Dev Containers
-**Researched:** 2026-05-08
-**Confidence:** HIGH（PITFALLS 基于官方 VS Code 文档、gliderlabs/ssh 源码、sing-box issue tracker 交叉验证）
-
-> 本文档是 STACK.md / FEATURES.md / ARCHITECTURE.md / PITFALLS.md 的"决策提炼版"，
-> 下游 agent（roadmapper / REQUIREMENTS drafter / planner）应直接消费本文。
+**Milestone:** v3.5
+**研究方式:** 4 个并行专题 agent（sing-box 技术 / 项目代码现状 / DNS 泄漏防护 / UX 数据模型）输出，已在前置对话完成；本文档为浓缩版供 roadmapper 直接消费。
 
 ---
 
-## 1. Executive Summary
+## 0. 核心问题
 
-v3.4 在 v3.0/v3.1 已交付的三层文件系统 + 会话可靠性基础上，**扩展容器接入方式**，让同一套受管镜像同时支持两种新形态：**Cloud 版 VS Code Remote SSH**（通过 SSH Proxy 直接连接）和**本地版 VS Code Dev Containers**（通过 `.devcontainer.json` 配置本地 Docker 启动）。核心目标不是替换现有 `cloud-claude` CLI 体验，而是让同一容器平台兼容开发者已有的 IDE 工作流。
-
-**唯一关键的技术决策：SSH Proxy 必须扩展 `direct-tcpip` 通道支持。** 当前 `internal/sshproxy/proxy.go:206-210` 硬编码拒绝所有非 `session` 通道，这导致 VS Code Remote SSH 完全无法工作（其架构依赖 `direct-tcpip` 做端口转发）。扩展方案推荐在现有 proxy 上直接增加 handler（约 100-150 行），而非引入新组件。扩展时必须配套**严格的目的地校验**（只放行容器自身管理 veth IP 和 127.0.0.1，阻断管理子网、Docker 网桥、云元数据端点），否则等同于打开内网穿透后门。
-
-**Cloud 版与本地版共享同一受管镜像**，通过 `MODE=cloud|local` 环境变量在 entrypoint.sh 分支。本地版独立入口 `cloud-claude local`（或新子命令）不连接 control-plane/PostgreSQL，直接通过本地 Docker 启动容器。这种设计让 bug 修复和特性更新只需改一处镜像，同时保持本地版的零外部依赖。
-
-**v3.4 不引入任何新运行时依赖。** 不需要新数据库、新网络组件、新前端框架。改动集中在：Go SSH Proxy 扩展、Docker 镜像 entrypoint 分支、Shell 本地启动器、`.devcontainer.json` 模板。
-
-最大风险是 `direct-tcpip` 与 sing-box tun 全隧道的交互：如果 sing-box `strict_route: true` 把 127.0.0.0/8 也路由进隧道，VS Code Server 在容器内的内部 HTTP 服务将不可达。必须在 sing-box 配置中显式排除 127.0.0.0/8 和管理 veth 子网。
+当前 sing-box tun 全隧道导致用户容器访问本地宿主机、局域网、特定白名单服务（GitHub 镜像、AI API 等）不通。需要让管理员能在后台配置白名单（IP/CIDR/域名/端口），让特定流量不走代理直连本地或互联网，**同时绝对避免 DNS 泄漏**。
 
 ---
 
-## 2. 关键技术决策表
+## 1. 技术选型（来自 sing-box 1.x 官方文档研究）
 
-### 2.1 新增 / 修改组件
+### 1.1 关键技术决策
 
-| 组件 | 决策 | 范围 | 与 v3.1 兼容性 |
-|------|------|------|----------------|
-| SSH Proxy | **扩展 `direct-tcpip` + `tcpip-forward` + `forwarded-tcpip` handler** | `internal/sshproxy/proxy.go` 新增 ~100-150 行 | 向后兼容：原有 `session` 通道行为不变 |
-| 目的地校验器 | **强制 allowlist：仅容器自身 veth IP + 127.0.0.1** | 同文件内嵌 `validateForwardDestination` | 无性能影响，每连接一次校验 |
-| 受管镜像 entrypoint | **增加 `MODE=cloud\|local` 分支** | `deploy/docker/managed-user/entrypoint.sh` | Cloud 模式行为与 v3.1 完全一致 |
-| 本地启动器 | **新增 `cloud-claude local` 子命令** | `cmd/cloud-claude/main.go` 新增 subcommand | 不干扰现有命令 |
-| `.devcontainer.json` | **提供模板配置** | `deploy/devcontainer/devcontainer.json` | 纯模板文件，无运行时影响 |
+| 决策点 | 选择 | 理由 |
+|--------|------|------|
+| 白名单作用层 | sing-box `route.rules` 主导 + 容器 netns nftables 兜底（双层一致） | sing-box 表达力强；nft 兜底保证 sing-box 崩溃时 fail-closed |
+| 本地/局域网识别 | sing-box `ip_is_private: true`（1.8+ 内置） | 替代旧 `geoip:private`，无需额外 rule-set |
+| DNS 安全模型 | **拆分 DNS** | 内网域名 → `dns-local`；公网白名单域名 → 代理 DoH（保护查询隐私） |
+| 热更新机制 | sing-box `type:"local"` rule-set 文件 watch | **唯一可行的无重启进程方案**（Clash API 不能改 route 规则本体，sing-box 无 SIGHUP） |
+| 配置形态 | **两段式** | 静态 config.json（变更需重启）+ 动态 rule-set 文件（实时 watch） |
+| DNS 入口锁 | 容器 `/etc/resolv.conf` 只读挂载指向 sing-box tun IP（172.19.0.1） | 应用层 DNS 全部被 sing-box 接管 |
+| IPv6 策略 | v1 容器内全禁 | 最简、最稳，未来再开 |
+| FakeIP | **不用** | 主流量 SSH 不会被 sniff，FakeIP 会让 SSH 锁死在假 IP |
 
-### 2.2 明确不引入
+### 1.2 核心 sing-box 配置骨架
 
-| 不要引入 | 原因 | 替代方案 |
-|----------|------|----------|
-| 新 SSH 库替代 gliderlabs/ssh | 现有库已支持 DirectTCPIPHandler，只需配置 callback | 复用 gliderlabs/ssh，加 LocalPortForwardingCallback |
-| 新容器网络模型 | `--network=none + sing-box tun` 已满足，无需改 | 保持现有网络架构 |
-| 新数据库 / 新前端 | 本地版明确不依赖 control-plane + Postgres | 本地配置用文件/env var |
-| Docker Compose 编排（本地版） | 增加复杂度，与"单命令启动"承诺冲突 | `docker run` 直接启动 |
-| Web Terminal / 浏览器 IDE | v1 范围明确不做 | 保持 SSH-only 接入 |
+```json
+{
+  "dns": {
+    "servers": [
+      { "tag": "dns-local", "type": "local" },
+      { "tag": "dns-proxy", "type": "https", "server": "1.1.1.1",
+        "domain_resolver": "dns-local", "detour": "proxy-out" }
+    ],
+    "rules": [
+      { "domain_suffix": [".lan",".local",".internal"], "action": "route", "server": "dns-local" },
+      { "rule_set": ["whitelist-domains"], "action": "route", "server": "dns-proxy" }
+    ],
+    "final": "dns-proxy",
+    "strategy": "ipv4_only"
+  },
+  "inbounds": [{
+    "type": "tun", "tag": "tun-in",
+    "interface_name": "sb-tun0",
+    "address": ["172.19.0.1/30"],
+    "auto_route": true, "strict_route": true,
+    "stack": "system"
+  }],
+  "outbounds": [
+    { "type": "direct", "tag": "direct-out", "bind_interface": "eth0" },
+    { "type": "vless", "tag": "proxy-out", /* from egress_ips.proxy_config */ }
+  ],
+  "route": {
+    "default_interface": "eth0",
+    "rule_set": [
+      { "type": "local", "tag": "whitelist-cidrs", "format": "source",
+        "path": "/etc/sing-box/whitelist-cidrs.json" },
+      { "type": "local", "tag": "whitelist-domains", "format": "source",
+        "path": "/etc/sing-box/whitelist-domains.json" }
+    ],
+    "rules": [
+      { "action": "sniff", "sniffer": ["tls","http","quic","dns"] },
+      { "protocol": "dns", "action": "hijack-dns" },
+      { "ip_cidr": ["<proxy_ip>/32"], "action": "route", "outbound": "direct-out" },
+      { "ip_is_private": true, "action": "route", "outbound": "direct-out" },
+      { "rule_set": ["whitelist-cidrs"], "action": "route", "outbound": "direct-out" },
+      { "rule_set": ["whitelist-domains"], "action": "route", "outbound": "direct-out" }
+    ],
+    "final": "proxy-out"
+  }
+}
+```
 
----
+### 1.3 sing-box 常见陷阱（必须避免）
 
-## 3. Cloud / Local 组件复用矩阵
-
-| 组件 | Cloud 版 | 本地版 | 复用策略 |
-|------|----------|--------|----------|
-| 受管 Docker 镜像 | 使用 | 使用 | **完全共享**，MODE 环境变量分支 |
-| SSH Proxy | 使用（入口） | 可选（直接容器端口也可） | **共享实现**，本地版可直连 |
-| sing-box tun | 使用 | 使用 | **共享配置生成**，本地版同样全隧道 |
-| entrypoint.sh | 使用 | 使用 | **共享**，MODE=cloud\|local 分支 |
-| control-plane API | 使用 | **不使用** | 本地版零依赖 |
-| PostgreSQL | 使用 | **不使用** | 本地版零依赖 |
-| Admin Dashboard | 使用 | **不使用** | 本地版无管理后台 |
-| JWT 认证 | 使用 | **不使用** | 本地版用本地配置文件或 env var |
-| 容器生命周期调度 | control-plane 管理 | `cloud-claude local` 管理 | **独立** |
-| `.devcontainer.json` | N/A | 使用 | 本地版独有 |
-
-**架构边界原则：**
-- **共享（library packages）：** SSH Proxy、容器网络设置（namespace/veth/tun）、sing-box 配置生成、错误码体系
-- **Cloud-only：** control-plane API、PostgreSQL、Admin Dashboard、JWT、生命周期调度
-- **Local-only：** 独立 CLI 入口、本地配置管理、`.devcontainer.json` 模板
-
----
-
-## 4. 每个 Feature 的必做行为清单
-
-### F1 · SSH Proxy `direct-tcpip` 支持
-
-- **REQ-F1-A：** SSH Proxy 必须接受并正确处理 `direct-tcpip` 通道（RFC 4254），解析 dest_addr/dest_port/originator_addr/originator_port。
-- **REQ-F1-B：** 实现严格的目的地校验，阻断以下目标：管理 veth 子网（10.99.0.0/16）、Docker 桥接网（172.17.0.0/12）、云元数据（169.254.169.254）、Unix socket 路径。
-- **REQ-F1-C：** 允许的目标仅限：容器自身管理 veth IP（来自 `DeriveManagementSSHAccess`）、127.0.0.1/::1（容器内本地服务）。
-- **REQ-F1-D：** 所有 `direct-tcpip` 请求必须记审计日志（用户、源、目的地、时间戳）。
-
-### F2 · Cloud 版 VS Code Remote SSH 完整功能
-
-- **REQ-F2-A：** VS Code Remote SSH 扩展必须能完整连接、打开终端、浏览文件、使用端口转发面板。
-- **REQ-F2-B：** sing-box TUN 配置必须排除 127.0.0.0/8 和管理 veth 子网，避免 VS Code Server 内部 HTTP 通信被路由进隧道。
-- **REQ-F2-C：** 容器内 `lo` 接口必须正常 UP，即使 `--network=none`。
-- **REQ-F2-D：** 可选：实现 `tcpip-forward` + `forwarded-tcpip` 以支持 VS Code Ports 面板自动转发。
-
-### F3 · 本地版独立启动入口
-
-- **REQ-F3-A：** `cloud-claude local`（或等效子命令）必须能在**不连接 control-plane、不依赖 PostgreSQL** 的情况下启动本地容器。
-- **REQ-F3-B：** 本地版使用本地配置文件（`~/.cloud-claude/local.yaml`）或环境变量获取必要参数（镜像名、出口 IP 配置、用户凭证）。
-- **REQ-F3-C：** 本地版启动的容器同样使用 sing-box tun 全隧道，保证出口 IP 强约束不变。
-- **REQ-F3-D：** 本地版二进制不得引入 control-plane 的 Go package 依赖。
-
-### F4 · 本地版 VS Code Dev Containers 支持
-
-- **REQ-F4-A：** 提供 `.devcontainer/devcontainer.json` 模板，配置 `postCreateCommand`（安装 sshd）和 `postStartCommand`（启动 sshd）。
-- **REQ-F4-B：** 模板必须正确处理生命周期顺序：`postCreateCommand` 只跑一次，`postStartCommand` 每次启动都跑。
-- **REQ-F4-C：** 端口转发统一使用 SSH `forwardPorts`，不使用 Docker `ports`（因为 `--network=none` 下 Docker 端口映射无效）。
-- **REQ-F4-D：** `remoteUser` 必须与容器内 SSH 用户一致，必要时 `updateRemoteUserUID: true`。
-
-### F5 · Cloud/Local 架构边界分析
-
-- **REQ-F5-A：** 明确文档化共享组件 vs 独立组件的边界（见 §3 矩阵）。
-- **REQ-F5-B：** 本地版代码不得导入 control-plane 的 DB model、migration、API handler。
-- **REQ-F5-C：** 共享代码抽取为独立 internal package，通过 interface 隔离 Cloud/Local 差异。
+1. 没写 `route.final` → 落到 outbound 列表第一项，可能就是 direct，全网泄漏
+2. 没写 `hijack-dns` → tun 抓到的 53 端口 UDP 被代理走，DNS 模块完全没看到
+3. 没启用 sniff，又用 `domain_suffix` → IP literal 连接根本拿不到域名，规则永不命中
+4. `auto_route=true` 但没 `default_interface` → direct outbound 又被 tun 抢回，回环
+5. `strict_route: false` → 未支持网络用系统默认路由出去，等同泄漏
+6. 容器 `/etc/resolv.conf` 仍指向 8.8.8.8 → 应用层 DNS 绕过 sing-box
 
 ---
 
-## 5. TOP Critical Pitfalls（必须在对应 Phase 防御）
+## 2. 当前代码现状（来自项目代码探索）
 
-| # | Pitfall | 触发症状 | 防御 Phase | 验证手段 |
-|---|---------|---------|-----------|----------|
-| **1** | SSH Proxy 拒绝 `direct-tcpip` | VS Code 连接失败在 "Setting up SSH tunnel" | P1 | `ssh -L` 手动测试；VS Code 实际连接 |
-| **2** | `direct-tcpip` 无目的地校验 | 用户可穿透到 Docker socket、管理 API、其他容器 | P1 | 单元测试校验器；渗透测试内网服务 |
-| **3** | 缺失 `tcpip-forward`/`forwarded-tcpip` | VS Code Ports 面板不显示转发端口 | P1/P2 | `ssh -R` 测试；Ports 面板自动转发测试 |
-| **4** | sing-box TUN 劫持 127.0.0.1 | VS Code Server 启动但扩展无法激活 | P2 | 容器内 `curl 127.0.0.1:PORT`；扩展激活测试 |
-| **5** | Dev Containers `forwardPorts` 与 Docker `ports` 冲突 | 端口已绑定错误 | P3 | `docker-compose up` 双配置验证 |
-| **6** | Dev Containers 生命周期脚本顺序错误 | 重启后 sshd 未启动 | P3 | 停/启容器验证 `sshd` 进程存在 |
-| **7** | SSH Agent 转发 socket 路径冲突 | `ssh-add -l` 显示无身份 | P3 | 容器内 `ssh-add -l`；git push 测试 |
-| **8** | Cloud/Local 代码耦合 | 本地版二进制体积膨胀、需要 Postgres | P0 | Code review：无 control-plane import |
+### 2.1 关键文件与扩展点
 
----
+| 维度 | 现状 | 扩展点 |
+|------|------|--------|
+| sing-box 配置生成 | `internal/network/gateway_singbox_config.go:10` Go map 拼装；当前 route.rules 仅 2 条（proxy IP/32 + port 53 hijack-dns） | 加 rule_set 数组 + `ip_is_private` 规则 + 白名单 rule_set 引用 |
+| 容器架构 | sidecar gateway 模式：`cloudproxy-net-<hostID>` bridge + gateway 容器（sing-box）+ worker 容器（用户 shell） | sing-box 跑在 gateway 容器，白名单 rule-set 文件挂入 gateway |
+| 防火墙 | `internal/network/worker_firewall_linux.go:25` 已 `output policy drop` + allowlist（lo / gateway / 22 / 53） | 加 `@whitelist_v4` set + nftables 与 rule-set 文件 hash 一致校验 |
+| 热更新 | **无** —— 改 `proxy_config` 必须 stop/start/rebuild 容器（teardownGateway） | 新增 `ActionReloadHostBypass`，agent 端写文件 + 更新 nft set + 健康检查 |
+| 数据模型 | pgx + UUID 主键（`gen_random_uuid()`）+ `TIMESTAMPTZ DEFAULT NOW()` + migration 顺序号 0001–0018 | 新增 0019_host_bypass_rules.sql |
+| `/etc/resolv.conf` | `container_proxy_provider.go:323` 写死 `nameserver 8.8.8.8` 占位 | **改为只读挂载 → 172.19.0.1（sing-box tun IP）** |
+| 控制面 API | 标准库 `net/http` + Go 1.22 mux + JWT；`internal/controlplane/http/admin_egress_ips.go` 是模仿模板 | 新增 `internal/controlplane/http/admin_bypass.go` |
+| React 后台 | TanStack Router + TanStack Query + Radix UI + Tailwind v4，shadcn 风格自建组件 | host 详情页加 Bypass Tab，复用 `egress-ip-drawer` 模式 |
+| 测试 | `internal/network/verify.go` 已用 nsenter + curl 真实流量验证 | 扩展验证白名单流量走向 + 10 条安全不变量 |
 
-## 6. 建议的 Phase 切分
+### 2.2 当前网络拓扑
 
-| # | Phase 名称 | 范围 | Features | 工作量 | Depends on |
-|---|-----------|------|----------|--------|-----------|
-| **P0** | **架构边界分析** | 文档化 Cloud/Local 组件复用矩阵；抽取共享 package；定义 interface 边界 | F5 | **S** | — |
-| **P1** | **SSH Proxy 转发支持** | 实现 `direct-tcpip` handler + 目的地校验；可选 `tcpip-forward`/`forwarded-tcpip`；审计日志 | F1 | **M** | P0 |
-| **P2** | **Cloud 版 VS Code Remote SSH 验证** | sing-box TUN 排除 127.0.0.0/8；容器内 lo 验证；VS Code 完整功能 UAT | F2 | **M** | P1 |
-| **P3** | **本地版 Dev Containers 支持** | `cloud-claude local` 子命令；`.devcontainer.json` 模板；生命周期脚本；SSH agent 集成 | F3, F4 | **L** | P0 |
-| **P4** | **E2E 验证 + 文档** | Cloud/Local 双路径完整 UAT；架构边界文档；运维手册更新 | 验收 | **S-M** | P1-P3 |
-
-**合并选项：** P0+P1 可合并为"Proxy 扩展 + 架构边界"。P2+P3 可部分并行（P2 验证 Cloud，P3 开发 Local，两者接触不同代码路径）。
-
----
-
-## 7. Confidence Assessment
-
-| 维度 | Confidence | 依据 |
-|------|------------|------|
-| SSH Proxy 扩展方案 | **HIGH** | gliderlabs/ssh 源码已验证 DirectTCPIPHandler 存在；实现模式明确 |
-| 目的地校验规则 | **HIGH** | 基于现有网络架构（管理 veth 子网、Docker 网桥）直接推导 |
-| sing-box TUN 排除配置 | **HIGH** | sing-box 官方文档支持 `route.rules` + `ip_cidr` 排除 |
-| VS Code Remote SSH 行为 | **HIGH** | 官方文档确认 `AllowTcpForwarding yes` 要求；社区 issue 验证 |
-| Dev Containers 生命周期 | **HIGH** | 官方文档明确 `postCreateCommand` vs `postStartCommand` 语义 |
-| Cloud/Local 架构边界 | **MEDIUM** | 需要实际代码重构验证 interface 边界是否干净 |
-
-**Overall confidence: HIGH** — 可直接进入 roadmap → REQUIREMENTS → plan-phase。
-
-### 7.1 需要在 plan-phase 验证的潜在 gap
-
-1. **VS Code Server 在容器内的具体端口范围** — 影响 `direct-tcpip` allowlist 的精确度。
-2. **本地版 sing-box 配置来源** — 用户如何提供出口 IP 配置（文件模板、交互式输入、环境变量）。
-3. **macOS 本地版 Docker Desktop 与 sing-box tun 的兼容性** — 需要真机验证。
-4. **Dev Containers Features 市场兼容性** — 是否允许用户使用官方 Features，还是完全自管。
+```
+用户进程 (worker container)
+  ↓ (worker 默认路由 → gateway 容器 IP)
+gateway container (运行 sing-box, tun0)
+  ↓ (sing-box route.rules)
+  ├─ proxy 流量 → proxy-out → 出口代理服务器
+  └─ 白名单(新增) → direct-out → eth0 → 宿主机/局域网
+```
 
 ---
 
-## 8. Out-of-Scope 强化清单
+## 3. 安全模型（来自 DNS 泄漏防护研究）
 
-| # | 不做的功能 | 理由 |
-|---|-----------|------|
-| 1 | 替换现有 `cloud-claude` CLI 主路径 | v3.4 是扩展，不是替换 |
-| 2 | 多宿主机编排 | 沿用 v1 单宿主机约束 |
-| 3 | Web Terminal / 浏览器 IDE | v1 范围明确不做 |
-| 4 | 本地版连接 Cloud 版容器 | 本地版是独立形态，不混合 |
-| 5 | 用户自定义任意镜像 | 会削弱就绪性和可支持性 |
-| 6 | 计费/套餐/支付流程 | 沿用 v1 不做商业化 |
+### 3.1 四层防御
 
----
+| 层 | 内容 | 必要性 |
+|----|------|--------|
+| L4 容器 `/etc/resolv.conf` | 唯一 nameserver = sing-box tun IP，只读挂载 | 必需（DNS 入口锁） |
+| L1 sing-box route + DNS | 拆分 DNS + 白名单 route 规则 | 必需（业务逻辑） |
+| L2 容器 netns nftables | `output policy drop` + 仅放行 `oifname sb-tun0` + sing-box uid 锁定到代理 IP + 白名单 `@whitelist_v4` set | 必需（fail-closed 关键） |
+| L3 宿主 nftables | FORWARD 链按 netns 出口 IP 严校验 | 推荐（防容器内 root 篡改） |
 
-## 9. Sources
+### 3.2 13 种 DNS 泄漏场景（必须全部封堵）
 
-### Primary（HIGH，官方文档 / 源码）
-- gliderlabs/ssh `tcpip.go`：<https://github.com/gliderlabs/ssh/blob/master/tcpip.go> — DirectTCPIPHandler 和 ForwardedTCPHandler 源码
-- VS Code Remote Development Troubleshooting：<https://code.visualstudio.com/docs/remote/troubleshooting>
-- VS Code Dev Containers Lifecycle：<https://code.visualstudio.com/docs/devcontainers/containers#_lifecycle-scripts>
-- sing-box TUN 路由排除：<https://github.com/SagerNet/sing-box/issues/2700>、<https://github.com/SagerNet/sing-box/issues/1666>
+L1 resolv.conf 指向公网 DNS · L2 Docker embedded DNS · L3 IP literal 直连 · L4 白名单域名用容器外 resolver · L5 Chrome 内建 DoH · L6 Go cgo resolver 行为不一致 · L7 mDNS/LLMNR/NetBIOS · L8 sing-box 重启窗口期 · L9 sing-box 启动失败 fail-open · L10 IPv6 未禁用 · L11 ICMP/raw socket · L12 /etc/hosts 注入 · L13 系统服务自带 resolver
 
-### Secondary（MEDIUM，社区验证）
-- Fly.io VS Code Remote SSH Discussion：<https://community.fly.io/t/how-to-connect-vscode-remote-development-to-a-fly-machine/23541>
-- Tailscale SSH Issue #5295：<https://github.com/tailscale/tailscale/issues/5295>
-- VS Code Remote-SSH Issue #3025：<https://github.com/microsoft/vscode-remote-release/issues/3025>
-- Dev Containers Discussion #224：<https://github.com/orgs/devcontainers/discussions/224>
+### 3.3 安全不变量（10 条，CI 必须验证）
 
-### 项目内部（HIGH）
-- `.planning/PROJECT.md` — v3.4 milestone 目标与约束
-- `internal/sshproxy/proxy.go:206-210` — 当前硬编码 channel 拒绝逻辑
-- v3.0/v3.1 已交付基础设施（三层文件系统、tmux、会话可靠性）
+| # | 不变量 | 验证 |
+|---|--------|------|
+| I1 | 容器 `/etc/resolv.conf` 唯一 nameserver = sing-box tun IP | `nsenter -t $PID -m cat /etc/resolv.conf` |
+| I2 | 容器 netns `output` policy = drop | `nsenter ... nft list chain inet sbfw output` |
+| I3 | 出 eth0 的包只能去白名单或代理 IP | `tcpdump -ni eth0 'not (host PROXY or net WHITELIST)'` 计数为 0 |
+| I4 | 容器内 dig 8.8.8.8 必失败 | `nsenter ... dig @8.8.8.8 +time=2` 必超时 |
+| I5 | sing-box 停止 → 白名单也断（fail-closed） | `pkill sing-box; curl WHITELIST_IP` 必失败 |
+| I6 | IPv6 全禁 | `nsenter ... ip -6 addr` 仅 `::1` |
+| I7 | nft set 与 rule-set 文件 hash 一致 | `/health/bypass-consistency` 接口 |
+| I8 | rule-set 文件存在且有效 JSON | sing-box 启动健康检查 |
+| I9 | mDNS/LLMNR/NetBIOS 外向流量为 0 | `nft list counter inet sbfw mdns-drop` |
+| I10 | 白名单变更后 SSH 连接不断 | `ssh ... 'while true; do echo .; sleep 1; done'` 跨越 reload 不中断 |
 
 ---
 
-## 10. 与下游 agent 的对接清单
+## 4. 数据模型与 API 设计（来自 UX 研究）
 
-**给 gsd-roadmapper：**
-- 直接采用 §6 的 5 phase 切分；P0 是架构决策必须在编码前完成。
-- 每个 phase 的 `goal` 段引用对应 §4 REQ-ID + §5 Pitfall 编号。
-- P1 必须把 Pitfall 1/2/3 作为硬性 success criteria。
+### 4.1 五张表（命名遵循项目约定：snake_case、UUID 主键）
 
-**给 REQUIREMENTS drafter：**
-- §4 的 15 条 REQ-F*-* 直接转写为 active requirements。
-- §7.1 的 4 个 gap 收录为 `### Open Questions`。
-- §8 Out-of-Scope 追加到 PROJECT.md。
+- `host_bypass_presets` — 预设方案（系统内置 + 平台维护）
+- `host_bypass_rules` — 自定义规则（scope: global / host）
+- `host_bypass_bindings` — host ↔ 预设/规则绑定
+- `host_bypass_snapshots` — 配置版本快照（apply / rollback 用）
+- `host_bypass_audit_log` — 审计日志（actor、action、before、after）
 
-**给 gsd-planner：**
-- P1 的 PLAN.md 必须为 Pitfall 1/2 创建独立防御任务。
-- P1 验证段必须包含 `ssh -L` 测试和目的地校验单元测试。
-- P0 必须在 `discuss-phase` 输出架构边界文档。
+### 4.2 系统内置预设（v3.5 范围）
+
+| 预设 | 内容 | 强制开启 |
+|------|------|----------|
+| `loopback` | 127.0.0.0/8、169.254.0.0/16 | 是（不可关闭） |
+| `lan` | + 10/8、172.16/12、192.168/16、100.64/10、ULA | 默认关闭 |
+
+P1 预设（`cn-dev` / `oss-dev` / `ai-api` / `custom`）不在 v3.5 范围。
+
+### 4.3 关键 API（管理员）
+
+```
+GET/POST/PATCH/DELETE /v1/admin/bypass/presets
+GET/POST/PATCH/DELETE /v1/admin/bypass/rules
+POST                  /v1/admin/bypass/rules/validate
+GET                   /v1/admin/hosts/{id}/bypass
+POST                  /v1/admin/hosts/{id}/bypass/bind
+POST                  /v1/admin/hosts/{id}/bypass/unbind
+GET                   /v1/admin/hosts/{id}/bypass/effective
+POST                  /v1/admin/hosts/{id}/bypass/preview
+POST                  /v1/admin/hosts/{id}/bypass/apply
+POST                  /v1/admin/hosts/{id}/bypass/rollback
+```
+
+### 4.4 配置下发流程
+
+```
+管理员保存
+  → validateRule()（护栏校验）
+  → renderSnapshot(host)（合并 preset + rule，渲染 rule-set 文件 + nft set）
+  → previewIfRequested()（用户可中断）
+  → writeSnapshotToDB(applied_status='pending')
+  → dispatchTask(ActionReloadHostBypass)
+  → agent: 写 rule-set 文件 (tmpfile + rename) + nft -f atomic 更新 + 等 1s sing-box watch reload + 健康检查
+  → 成功 → applied_status='applied'
+  → 失败 → 自动 rollback 上一 snapshot + 告警
+```
+
+### 4.5 护栏（硬拦截）
+
+| 护栏 | 触发 |
+|------|------|
+| 全量绕过 | `0.0.0.0/0` / `::/0` |
+| CIDR 过宽 | v4 < /16 且非私有段 |
+| 顶级域名后缀 | `.com` `.net` 等 |
+| 关键字过短 | `domain_keyword` 长度 < 4（警告 + 二次确认） |
+| 自我矛盾 | 规则覆盖代理服务器 IP |
+| 数量上限 | 单 host > 1000 条 |
 
 ---
 
-*Researched: 2026-05-08*
-*Synthesized by: gsd-research-synthesizer*
-*Confidence: HIGH*
-*Ready for: roadmap → REQUIREMENTS → plan-phase*
+## 5. 关键决策点（已与用户对齐）
+
+1. **公网 CIDR 限制**：默认仅允许私有段 + 用户精确 IP / 小段；禁止 `0.0.0.0/0`、v4 < /16 等过宽段
+2. **DNS 路径**：公网白名单域名走代理 DoH（保护查询隐私）；内网域名走 dns-local
+3. **IPv6**：v1 容器内全禁
+4. **用户范围**：v3.5 仅管理员，用户自助进 P2 backlog
+5. **cn-dev / oss-dev 预设**：v3.5 P0 不做；P1 引用开源（MetaCubeX/meta-rules-dat） + 自维护镜像 fallback
+6. **sing-box 启动失败**：fail-closed —— 容器 unhealthy 不放行 SSH
+7. **白名单变更影响**：不影响现有 TCP 连接，新连接才用新规则（UI 明确告知）
+8. **审计日志保留**：默认 90 天，可配置
+
+---
+
+## 6. 实施路径建议（roadmapper 参考）
+
+### Phase 45 主线 A · 基础与数据模型（建议 3-4 个 plan）
+
+- 0019 migration（5 张表 + seed loopback/lan 预设）+ repository 层 CRUD
+- `internal/network/bypass.go` —— 渲染 rule-set 文件 + nftables set 内容
+- 扩展 `gateway_singbox_config.go` 加入 `rule_set` 数组 + `ip_is_private` 内置规则 + `strict_route:true`
+- DNS 拆分：dns-local + dns-proxy(DoH detour proxy-out)
+- 容器 `/etc/resolv.conf` 接管（从 8.8.8.8 改为 172.19.0.1，只读挂载）
+
+### Phase 46 主线 B · 控制面 API + 后台 UI（建议 3-4 个 plan）
+
+- HTTP handler `internal/controlplane/http/admin_bypass.go`（仿 admin_egress_ips.go）
+- 护栏校验 `internal/network/bypass_validate.go`
+- React hook `use-bypass.ts` + 组件 `bypass-manager.tsx`（仿 binding-manager）
+- host 详情页加 Bypass Tab
+- preview 接口（返回 rule-set 文件 + nft set diff + 风险报告，不落库）
+
+### Phase 47 主线 C · 热更新与流量验证（建议 3-4 个 plan）
+
+- 新增 `ActionReloadHostBypass`（runtime/tasks/worker.go）
+- agent 实现：写 rule-set 文件（tmpfile + rename）+ nft atomic set 更新 + 健康检查 + 失败回滚
+- fail-closed 加固：worker_firewall_linux.go 增加 `@whitelist_v4` set 管理 + IPv6 全禁
+- 扩展 `internal/network/verify.go` —— 10 条安全不变量 CI 化
+- E2E 验证脚本（仿 scripts/uat-network-resilience.sh）
+
+---
+
+## 7. 来源
+
+- sing-box 官方文档：https://sing-box.sagernet.org/configuration/ （route/rule、dns/rule、rule-set、inbound/tun）
+- sing-box 1.10 release notes（rule-set 文件 watch 支持）
+- 项目代码探索（gateway_singbox_config.go、worker_firewall_linux.go、container_proxy_provider.go、verify.go）
+- DNS leak 知识：dnsleaktest.com、Tailscale exit node、Mullvad split tunneling 设计参考
+- 类似项目实现：MetaCubeX/meta-rules-dat、Loyalsoldier/clash-rules
+
+---
+
+*生成时间：2026-05-12（v3.5 milestone 启动时）。本文档由前置 4 个并行研究 agent 输出综合，跳过 spawn 新研究 agents 以避免重复。*
