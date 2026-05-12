@@ -233,8 +233,9 @@ func TestTryConfigureWorkerEgress_ScriptFormat(t *testing.T) {
 }
 
 func TestTryConfigureWorkerEgress_ScriptContainsKeyCommands(t *testing.T) {
-	// Build the script string using the same logic as the production code
-	// to verify it contains the expected commands.
+	// Phase 45 Plan 02：脚本不再写 /etc/resolv.conf（已被 ro bind mount 接管），
+	// 只负责 default route 配置；同时必须**不再**含有 `echo nameserver ... > /etc/resolv.conf`
+	// 这行（防 BYPASS-DNS-03 回归）。
 	defaultGW := "10.99.1.2"
 	workerIP := "10.99.1.3"
 
@@ -243,12 +244,21 @@ func TestTryConfigureWorkerEgress_ScriptContainsKeyCommands(t *testing.T) {
 	expectedCommands := []string{
 		"ip route add default via " + defaultGW,
 		"ip route show default | head -1",
-		"echo 'nameserver 8.8.8.8' > /etc/resolv.conf",
 	}
-
 	for _, cmd := range expectedCommands {
 		if !strings.Contains(script, cmd) {
 			t.Errorf("script missing expected command: %q\nscript:\n%s", cmd, script)
+		}
+	}
+
+	// 反向断言：DNS 入口锁后，脚本必须不能再写 /etc/resolv.conf
+	forbidden := []string{
+		"> /etc/resolv.conf",
+		"nameserver 8.8.8.8",
+	}
+	for _, frag := range forbidden {
+		if strings.Contains(script, frag) {
+			t.Errorf("script must NOT contain %q after DNS lock-in (Phase 45 Plan 02)\nscript:\n%s", frag, script)
 		}
 	}
 }
@@ -280,7 +290,6 @@ func buildWorkerEgressScript(workerIP, defaultGW string) string {
 	# 立即 verify
 	default_route=$(ip route show default | head -1)
 	echo "$default_route" | grep -q "via ` + defaultGW + `"
-	echo 'nameserver 8.8.8.8' > /etc/resolv.conf
 	`
 }
 
