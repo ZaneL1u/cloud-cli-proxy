@@ -68,12 +68,23 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 		return fmt.Errorf("gateway: write config: %w", err)
 	}
 
+	// Phase 45：sing-box 1.11+ 通过 route.rule_set[type=local] 引用这两个文件；
+	// 内容为 v3 schema 空规则集占位（ruleSetPlaceholder 常量），Phase 47 由 host-agent 原子替换。
+	cidrsPath := filepath.Join(configDir, "whitelist-cidrs.json")
+	domainsPath := filepath.Join(configDir, "whitelist-domains.json")
+	if err := os.WriteFile(cidrsPath, []byte(ruleSetPlaceholder), 0o644); err != nil {
+		return fmt.Errorf("gateway: write whitelist-cidrs placeholder: %w", err)
+	}
+	if err := os.WriteFile(domainsPath, []byte(ruleSetPlaceholder), 0o644); err != nil {
+		return fmt.Errorf("gateway: write whitelist-domains placeholder: %w", err)
+	}
+
 	if err := dockerNetworkCreate(ctx, netName, subnet, bridgeGW); err != nil {
 		return fmt.Errorf("gateway: create network: %w", err)
 	}
 
 	img := GatewayImage()
-	if err := dockerRunGateway(ctx, gwName, netName, gwIP, serverIP, configPath, img); err != nil {
+	if err := dockerRunGateway(ctx, gwName, netName, gwIP, serverIP, configPath, cidrsPath, domainsPath, img); err != nil {
 		p.teardownGateway(ctx, hostID)
 		return fmt.Errorf("gateway: start gateway container: %w", err)
 	}
@@ -220,7 +231,7 @@ func dockerNetworkCreate(ctx context.Context, name, subnet, gateway string) erro
 	return nil
 }
 
-func dockerRunGateway(ctx context.Context, gwName, netName, gwIP, proxyServerIP, configPath, image string) error {
+func dockerRunGateway(ctx context.Context, gwName, netName, gwIP, proxyServerIP, configPath, cidrsPath, domainsPath, image string) error {
 	args := []string{
 		"run", "-d",
 		"--name", gwName,
@@ -230,6 +241,8 @@ func dockerRunGateway(ctx context.Context, gwName, netName, gwIP, proxyServerIP,
 		"--device", "/dev/net/tun:/dev/net/tun",
 		"--sysctl", "net.ipv4.ip_forward=1",
 		"-v", configPath + ":/etc/sing-box/config.json:ro",
+		"-v", cidrsPath + ":/etc/sing-box/whitelist-cidrs.json:ro",
+		"-v", domainsPath + ":/etc/sing-box/whitelist-domains.json:ro",
 		"--label", "cloud-cli-proxy.role=gateway",
 		"--label", "cloud-cli-proxy.managed=true",
 		"--restart", "no",
