@@ -406,6 +406,7 @@ type BypassSnapshot struct {
 	WhitelistCIDRsJSON   json.RawMessage `json:"whitelist_cidrs_json"`
 	WhitelistDomainsJSON json.RawMessage `json:"whitelist_domains_json"`
 	AppliedStatus        string          `json:"applied_status"` // pending / applied / failed / rolled_back
+	Source               string          `json:"source"`         // apply / rollback (Phase 46 Plan 02 migration 0020)
 	CreatedBy            *string         `json:"created_by,omitempty"`
 	CreatedAt            time.Time       `json:"created_at"`
 }
@@ -416,6 +417,7 @@ type CreateBypassSnapshotParams struct {
 	ConfigHash           string
 	WhitelistCIDRsJSON   json.RawMessage
 	WhitelistDomainsJSON json.RawMessage
+	Source               string // "apply" / "rollback"，空字符串走 SQL DEFAULT 'apply'
 	CreatedBy            *string
 }
 

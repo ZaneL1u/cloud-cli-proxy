@@ -152,7 +152,7 @@ const deleteBypassBindingSQL = `DELETE FROM host_bypass_bindings WHERE id = $1`
 const listBypassSnapshotsByHostSQL = `
 	SELECT id::text, host_id::text, version, config_hash,
 	       whitelist_cidrs_json, whitelist_domains_json,
-	       applied_status, created_by::text, created_at
+	       applied_status, source, created_by::text, created_at
 	FROM host_bypass_snapshots
 	WHERE host_id = $1
 	ORDER BY version DESC
@@ -161,18 +161,18 @@ const listBypassSnapshotsByHostSQL = `
 
 const createBypassSnapshotSQL = `
 	INSERT INTO host_bypass_snapshots
-		(host_id, version, config_hash, whitelist_cidrs_json, whitelist_domains_json, created_by)
-	VALUES ($1, $2, $3, $4, $5, $6)
+		(host_id, version, config_hash, whitelist_cidrs_json, whitelist_domains_json, source, created_by)
+	VALUES ($1, $2, $3, $4, $5, $6, $7)
 	RETURNING id::text, host_id::text, version, config_hash,
 	          whitelist_cidrs_json, whitelist_domains_json,
-	          applied_status, created_by::text, created_at
+	          applied_status, source, created_by::text, created_at
 `
 
 const updateBypassSnapshotStatusSQL = `
 	UPDATE host_bypass_snapshots SET applied_status = $2 WHERE id = $1
 	RETURNING id::text, host_id::text, version, config_hash,
 	          whitelist_cidrs_json, whitelist_domains_json,
-	          applied_status, created_by::text, created_at
+	          applied_status, source, created_by::text, created_at
 `
 
 // getLatestAppliedBypassSnapshotSQL 返回 host 最近一次 applied_status='applied' 的 snapshot；
@@ -180,11 +180,22 @@ const updateBypassSnapshotStatusSQL = `
 const getLatestAppliedBypassSnapshotSQL = `
 	SELECT id::text, host_id::text, version, config_hash,
 	       whitelist_cidrs_json, whitelist_domains_json,
-	       applied_status, created_by::text, created_at
+	       applied_status, source, created_by::text, created_at
 	FROM host_bypass_snapshots
 	WHERE host_id = $1 AND applied_status = 'applied'
 	ORDER BY version DESC
 	LIMIT 1
+`
+
+// getBypassSnapshotByIDSQL: Phase 46 Plan 02 WARN-4 修复。
+// rollback handler 必须先 GetByID(target) 校验 host_id 匹配 + applied_status='applied'，
+// 才能新建一行 source='rollback' 的 pending snapshot。
+const getBypassSnapshotByIDSQL = `
+	SELECT id::text, host_id::text, version, config_hash,
+	       whitelist_cidrs_json, whitelist_domains_json,
+	       applied_status, source, created_by::text, created_at
+	FROM host_bypass_snapshots
+	WHERE id = $1
 `
 
 const insertBypassAuditLogSQL = `
@@ -245,7 +256,7 @@ func scanBypassSnapshot(row pgx.Row, out *BypassSnapshot) error {
 	return row.Scan(
 		&out.ID, &out.HostID, &out.Version, &out.ConfigHash,
 		&out.WhitelistCIDRsJSON, &out.WhitelistDomainsJSON,
-		&out.AppliedStatus, &out.CreatedBy, &out.CreatedAt,
+		&out.AppliedStatus, &out.Source, &out.CreatedBy, &out.CreatedAt,
 	)
 }
 
@@ -546,10 +557,15 @@ func (r *Repository) CreateBypassSnapshot(ctx context.Context, params CreateBypa
 	if len(domains) == 0 {
 		domains = json.RawMessage(`{"version":3,"rules":[]}`)
 	}
+	source := params.Source
+	if source == "" {
+		source = "apply"
+	}
 	var it BypassSnapshot
 	row := r.db.QueryRow(ctx, createBypassSnapshotSQL,
 		params.HostID, params.Version, params.ConfigHash,
 		[]byte(cidrs), []byte(domains),
+		source,
 		nullableUUIDArg(params.CreatedBy),
 	)
 	if err := scanBypassSnapshot(row, &it); err != nil {
@@ -572,6 +588,20 @@ func (r *Repository) GetLatestAppliedBypassSnapshot(ctx context.Context, hostID 
 	row := r.db.QueryRow(ctx, getLatestAppliedBypassSnapshotSQL, hostID)
 	if err := scanBypassSnapshot(row, &it); err != nil {
 		return BypassSnapshot{}, fmt.Errorf("get latest applied bypass snapshot: %w", err)
+	}
+	return it, nil
+}
+
+// GetBypassSnapshotByID 返回单条快照，主要供 Phase 46 Plan 02 rollback 接口校验：
+//   - target.HostID 必须匹配 path param hostID（否则 404 不暴露存在性）
+//   - target.AppliedStatus 必须为 'applied'（否则 409）
+//
+// pgx.ErrNoRows 在调用方做 404 翻译（错误码 BYPASS_SNAPSHOT_NOT_FOUND）。
+func (r *Repository) GetBypassSnapshotByID(ctx context.Context, id string) (BypassSnapshot, error) {
+	var it BypassSnapshot
+	row := r.db.QueryRow(ctx, getBypassSnapshotByIDSQL, id)
+	if err := scanBypassSnapshot(row, &it); err != nil {
+		return BypassSnapshot{}, fmt.Errorf("get bypass snapshot by id: %w", err)
 	}
 	return it, nil
 }
