@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { getToken } from "@/lib/auth";
+import { buildSSEUrl } from "@/lib/sse-manager";
 import { useSSE } from "@/hooks/use-sse";
 
 export interface ImageCacheStatus {
@@ -25,7 +27,7 @@ export function useImageStatus(enabled = true) {
     },
   });
 
-  useSSE(`${window.location.origin}/v1/admin/sse?topics=image-status`, (msg) => {
+  useSSE(buildSSEUrl("/v1/admin/sse", "image-status", getToken()), (msg) => {
     if (msg.topic === "image-status") {
       qc.invalidateQueries({ queryKey: ["image-status"] });
     }

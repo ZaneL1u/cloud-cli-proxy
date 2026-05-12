@@ -7,6 +7,29 @@ export interface SSEMessage {
 
 export type SSEHandler = (msg: SSEMessage) => void;
 
+/**
+ * buildSSEUrl —— 拼接带鉴权 token 的 SSE 订阅地址（CR-07）。
+ *
+ * 后端 /v1/admin/sse 与 /v1/user/sse 都已套 AuthMiddleware；EventSource 不能
+ * 附 Authorization header，所以把 token 作为 query param 传入。无 token 时
+ * 返回空串，让调用方的 useSSE 自动跳过订阅，避免一直 401 重连。
+ *
+ * @param path 形如 `/v1/admin/sse` 或 `/v1/user/sse`
+ * @param topics 形如 `tasks` / `hosts,events` / `image-status`
+ * @param token 当前会话 token；null/undefined/"" 一律返回空串
+ */
+export function buildSSEUrl(
+  path: string,
+  topics: string,
+  token: string | null | undefined,
+): string {
+  if (!token) return "";
+  const params = new URLSearchParams();
+  if (topics) params.set("topics", topics);
+  params.set("token", token);
+  return `${window.location.origin}${path}?${params.toString()}`;
+}
+
 interface ConnectionState {
   es: EventSource | null;
   listeners: Set<SSEHandler>;

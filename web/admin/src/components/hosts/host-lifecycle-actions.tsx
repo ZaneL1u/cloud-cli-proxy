@@ -18,6 +18,8 @@ import { useHostAction, useDeleteHost } from "@/hooks/use-hosts";
 import type { HostImageInfo } from "@/hooks/use-hosts";
 import { useTaskPolling } from "@/hooks/use-tasks";
 import { useSSE } from "@/hooks/use-sse";
+import { getToken } from "@/lib/auth";
+import { buildSSEUrl } from "@/lib/sse-manager";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,7 +65,7 @@ export function HostLifecycleActions({
 
   const { data: task } = useTaskPolling(upgradeTaskId);
 
-  useSSE(`${window.location.origin}/v1/admin/sse?topics=tasks`, (msg) => {
+  useSSE(buildSSEUrl("/v1/admin/sse", "tasks", getToken()), (msg) => {
     if (msg.topic === "tasks" && msg.action === "progress" && msg.id === upgradeTaskId) {
       const payload = msg.payload as {
         percent?: number;

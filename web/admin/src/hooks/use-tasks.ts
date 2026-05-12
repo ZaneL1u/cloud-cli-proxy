@@ -1,5 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { getToken } from "@/lib/auth";
+import { buildSSEUrl } from "@/lib/sse-manager";
 import { useSSE } from "@/hooks/use-sse";
 
 export interface Task {
@@ -26,7 +28,9 @@ export function useTasks() {
     refetchInterval: 10000,
   });
 
-  useSSE(`${window.location.origin}/v1/admin/sse?topics=tasks`, (msg) => {
+  // CR-07：EventSource 不能附 Authorization header，必须通过 ?token=... 鉴权；
+  // 后端 /v1/admin/sse 现已套 adminGuard，无 token 会被 401 拒绝。
+  useSSE(buildSSEUrl("/v1/admin/sse", "tasks", getToken()), (msg) => {
     if (msg.topic === "tasks") {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       if (msg.id) {

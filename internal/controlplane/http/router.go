@@ -331,8 +331,10 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			mux.Handle("GET /v1/admin/events", adminGuard(eventsHandler.List()))
 		}
 
-		// SSE 实时推送端点
-		mux.HandleFunc("GET /v1/admin/sse", broadcast.Subscribe)
+		// SSE 实时推送端点 —— 必须套 adminGuard（CR-07）。
+		// EventSource 不能附 Authorization header，前端用 ?token=... 方式认证；
+		// AuthMiddleware.extractToken 已支持从 query param 提取，无需额外改造。
+		mux.Handle("GET /v1/admin/sse", adminGuard(nethttp.HandlerFunc(broadcast.Subscribe)))
 
 		if deps.SSHKeys != nil {
 			sshKeyHandler := NewSSHKeyHandler(deps.Logger, deps.SSHKeys)
@@ -365,8 +367,8 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			mux.Handle("/v1/user/hosts/{hostID}/vnc/{path...}", userGuard(userVNCProxy))
 		}
 
-		// 用户门户 SSE 实时推送端点
-		mux.HandleFunc("GET /v1/user/sse", broadcast.Subscribe)
+		// 用户门户 SSE 实时推送端点 —— 同样要求 userGuard 鉴权（CR-07）。
+		mux.Handle("GET /v1/user/sse", userGuard(nethttp.HandlerFunc(broadcast.Subscribe)))
 
 		if deps.SSHKeys != nil {
 			userSSHKeyHandler := NewSSHKeyHandler(deps.Logger, deps.SSHKeys)

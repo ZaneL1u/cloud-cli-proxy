@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { getToken } from "@/lib/auth";
+import { buildSSEUrl } from "@/lib/sse-manager";
 import { useSSE } from "@/hooks/use-sse";
 import type { EgressIP } from "./use-egress-ips";
 
@@ -80,7 +81,7 @@ export function useHosts() {
     refetchInterval: 30000,
   });
 
-  useSSE(`${window.location.origin}/v1/admin/sse?topics=hosts`, (msg) => {
+  useSSE(buildSSEUrl("/v1/admin/sse", "hosts", getToken()), (msg) => {
     if (msg.topic === "hosts") {
       qc.invalidateQueries({ queryKey: ["hosts"] });
       if (msg.id) {
@@ -103,7 +104,7 @@ export function useHostDetail(hostId: string) {
   });
 
   useSSE(
-    hostId ? `${window.location.origin}/v1/admin/sse?topics=hosts` : "",
+    hostId ? buildSSEUrl("/v1/admin/sse", "hosts", getToken()) : "",
     (msg) => {
       if (msg.topic === "hosts" && msg.id === hostId) {
         qc.invalidateQueries({ queryKey: ["hosts", hostId] });

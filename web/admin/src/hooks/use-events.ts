@@ -1,5 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { getToken } from "@/lib/auth";
+import { buildSSEUrl } from "@/lib/sse-manager";
 import { useSSE } from "@/hooks/use-sse";
 
 const eventTypeLabelMap: Record<string, string> = {
@@ -65,7 +67,7 @@ export function useEvents(params: EventsParams = {}) {
     refetchInterval: 30000,
   });
 
-  useSSE(`${window.location.origin}/v1/admin/sse?topics=events`, (msg) => {
+  useSSE(buildSSEUrl("/v1/admin/sse", "events", getToken()), (msg) => {
     if (msg.topic === "events") {
       qc.invalidateQueries({ queryKey: ["events"] });
     }

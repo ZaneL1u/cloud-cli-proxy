@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { portalApiFetch } from "@/lib/portal-api";
+import { getToken } from "@/lib/auth";
+import { buildSSEUrl } from "@/lib/sse-manager";
 import { useSSE } from "@/hooks/use-sse";
 
 export interface PortalHost {
@@ -41,7 +43,7 @@ export function useMyHosts() {
     refetchInterval: 30000,
   });
 
-  useSSE(`${window.location.origin}/v1/user/sse?topics=hosts`, (msg) => {
+  useSSE(buildSSEUrl("/v1/user/sse", "hosts", getToken()), (msg) => {
     if (msg.topic === "hosts") {
       qc.invalidateQueries({ queryKey: ["portal", "hosts"] });
     }
@@ -69,9 +71,7 @@ export function useMyHostDetail(
   });
 
   useSSE(
-    hostId
-      ? `${window.location.origin}/v1/user/sse?topics=hosts`
-      : "",
+    hostId ? buildSSEUrl("/v1/user/sse", "hosts", getToken()) : "",
     (msg) => {
       if (msg.topic === "hosts" && msg.id === hostId) {
         qc.invalidateQueries({ queryKey: ["portal", "hosts", hostId] });
