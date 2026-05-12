@@ -17,10 +17,11 @@ export function listBypassPresets() {
   return apiFetch<{ presets: BypassPreset[] }>("/bypass/presets");
 }
 
-// host 维度规则集
+// host 维度规则集：后端路由是 GET /v1/admin/bypass/rules?host_id=...
+// （host 维度通过 query 参数过滤，没有 /hosts/{hostId}/bypass/rules 路由）
 export function listBypassRules(hostId: string) {
   return apiFetch<{ rules: BypassRule[] }>(
-    `/hosts/${hostId}/bypass/rules`,
+    `/bypass/rules?host_id=${encodeURIComponent(hostId)}`,
   );
 }
 
