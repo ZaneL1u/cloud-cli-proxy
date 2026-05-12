@@ -120,3 +120,31 @@ func TestBypassRepository_ErrSystemPresetImmutable(t *testing.T) {
 		}
 	}
 }
+
+// TestNullableUUIDArg_HandlesNilAndEmpty 验证 Phase 45 CR-01 修复：
+//   - nil 指针         → 返回 nil（SQL NULL）
+//   - 非 nil 指向空串   → 返回 nil（SQL NULL）—— 关键场景，旧实现会塞 "" 给 pgx 触发 UUID syntax error
+//   - 非 nil 非空指针   → 返回字符串值
+//
+// 这是所有 Create*/Insert* 方法处理 *string UUID 列的统一入口；
+// 若漂移，audit log / rule / binding / snapshot 在 caller 偶传 `&""` 时会全部失败。
+func TestNullableUUIDArg_HandlesNilAndEmpty(t *testing.T) {
+	if got := nullableUUIDArg(nil); got != nil {
+		t.Errorf("nil 指针应返回 nil, got %v (type %T)", got, got)
+	}
+
+	empty := ""
+	if got := nullableUUIDArg(&empty); got != nil {
+		t.Errorf("指向空串的指针应返回 nil（SQL NULL）, got %v (type %T)", got, got)
+	}
+
+	val := "11111111-2222-3333-4444-555555555555"
+	got := nullableUUIDArg(&val)
+	s, ok := got.(string)
+	if !ok {
+		t.Fatalf("非空指针应返回 string, got %T", got)
+	}
+	if s != val {
+		t.Errorf("nullableUUIDArg(%q) = %q, want %q", val, s, val)
+	}
+}

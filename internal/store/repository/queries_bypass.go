@@ -15,6 +15,22 @@ import (
 // 同时附加 `is_system = FALSE` WHERE 兜底，即使绕过 Go 层校验也不会误删。
 var ErrSystemBypassPresetImmutable = errors.New("bypass preset is system preset and cannot be deleted or modified")
 
+// nullableUUIDArg 把 *string 转换为 SQL 友好的 any：
+//   - nil 指针        → nil（SQL NULL）
+//   - 指向空串的指针   → nil（SQL NULL）
+//   - 否则解引用      → 真实字符串（由 pgx 转 UUID）
+//
+// 这是 Phase 45 CR-01 修复：上层（admin handler / mapstructure / JSON 反序列化）
+// 偶尔会传 `s := ""; ptr := &s` 这种"非 nil 指针但指向空串"的状态，旧实现
+// `if ptr != nil { arg = *ptr }` 会把空串发给 PG，触发
+// `invalid input syntax for type uuid: ""`。统一走本 helper 即可消除该坑。
+func nullableUUIDArg(ptr *string) any {
+	if ptr == nil || *ptr == "" {
+		return nil
+	}
+	return *ptr
+}
+
 // ---------------------------------------------------------------------------
 // SQL 常量（包级 const，供 queries_bypass_test.go 文本断言锁定）
 // 命名规范沿用 queries.go 已有模式（listHostsByUserIDSQL 等）。
@@ -379,13 +395,18 @@ func (r *Repository) ListBypassRules(ctx context.Context, hostID *string) ([]Byp
 }
 
 func (r *Repository) CreateBypassRule(ctx context.Context, params CreateBypassRuleParams) (BypassRule, error) {
-	var hostArg any
-	if params.HostID != nil {
-		hostArg = *params.HostID
+	// Phase 45 CR-01：scope/host_id 一致性必须在 Go 层显式拦截。
+	// schema 的 CHECK (scope='host' → host_id IS NOT NULL) 对"非 nil 指针指向空串"
+	// 无效（PG 看到的是空串而非 NULL），会返回 invalid syntax 而非 check 失败。
+	if params.Scope == "host" && (params.HostID == nil || *params.HostID == "") {
+		return BypassRule{}, fmt.Errorf("create bypass rule: scope=host requires non-empty host_id")
+	}
+	if params.Scope == "global" && params.HostID != nil && *params.HostID != "" {
+		return BypassRule{}, fmt.Errorf("create bypass rule: scope=global must not carry host_id")
 	}
 	var it BypassRule
 	row := r.db.QueryRow(ctx, createBypassRuleSQL,
-		params.Scope, hostArg, params.RuleType, params.Value, nullIfEmpty(params.Note), params.IsRisky,
+		params.Scope, nullableUUIDArg(params.HostID), params.RuleType, params.Value, nullIfEmpty(params.Note), params.IsRisky,
 	)
 	if err := scanBypassRule(row, &it); err != nil {
 		return BypassRule{}, fmt.Errorf("create bypass rule: %w", err)
@@ -445,20 +466,16 @@ func (r *Repository) ListBypassBindingsByHost(ctx context.Context, hostID string
 }
 
 func (r *Repository) CreateBypassBinding(ctx context.Context, params CreateBypassBindingParams) (BypassBinding, error) {
-	var presetArg, ruleArg any
-	if params.PresetID != nil {
-		presetArg = *params.PresetID
-	}
-	if params.RuleID != nil {
-		ruleArg = *params.RuleID
-	}
 	source := params.Source
 	if source == "" {
 		source = "admin"
 	}
 	var it BypassBinding
 	row := r.db.QueryRow(ctx, createBypassBindingSQL,
-		params.HostID, presetArg, ruleArg, params.Enabled, source,
+		params.HostID,
+		nullableUUIDArg(params.PresetID),
+		nullableUUIDArg(params.RuleID),
+		params.Enabled, source,
 	)
 	if err := scanBypassBinding(row, &it); err != nil {
 		return BypassBinding{}, fmt.Errorf("create bypass binding: %w", err)
@@ -510,13 +527,11 @@ func (r *Repository) CreateBypassSnapshot(ctx context.Context, params CreateBypa
 	if len(domains) == 0 {
 		domains = json.RawMessage(`{"version":3,"rules":[]}`)
 	}
-	var createdByArg any
-	if params.CreatedBy != nil {
-		createdByArg = *params.CreatedBy
-	}
 	var it BypassSnapshot
 	row := r.db.QueryRow(ctx, createBypassSnapshotSQL,
-		params.HostID, params.Version, params.ConfigHash, []byte(cidrs), []byte(domains), createdByArg,
+		params.HostID, params.Version, params.ConfigHash,
+		[]byte(cidrs), []byte(domains),
+		nullableUUIDArg(params.CreatedBy),
 	)
 	if err := scanBypassSnapshot(row, &it); err != nil {
 		return BypassSnapshot{}, fmt.Errorf("create bypass snapshot: %w", err)
@@ -543,13 +558,7 @@ func (r *Repository) GetLatestAppliedBypassSnapshot(ctx context.Context, hostID 
 }
 
 func (r *Repository) InsertBypassAuditLog(ctx context.Context, params InsertBypassAuditLogParams) (string, error) {
-	var actorArg, targetArg, beforeArg, afterArg any
-	if params.ActorID != nil {
-		actorArg = *params.ActorID
-	}
-	if params.TargetID != nil {
-		targetArg = *params.TargetID
-	}
+	var beforeArg, afterArg any
 	if len(params.Before) > 0 {
 		beforeArg = []byte(params.Before)
 	}
@@ -559,8 +568,10 @@ func (r *Repository) InsertBypassAuditLog(ctx context.Context, params InsertBypa
 	var id string
 	var createdAt any // 占位接住 RETURNING 的 created_at，调用方不需要它。
 	if err := r.db.QueryRow(ctx, insertBypassAuditLogSQL,
-		actorArg, nullIfEmpty(params.ActorIP), params.Action, params.TargetKind,
-		targetArg, beforeArg, afterArg, nullIfEmpty(params.Note),
+		nullableUUIDArg(params.ActorID), nullIfEmpty(params.ActorIP),
+		params.Action, params.TargetKind,
+		nullableUUIDArg(params.TargetID),
+		beforeArg, afterArg, nullIfEmpty(params.Note),
 	).Scan(&id, &createdAt); err != nil {
 		return "", fmt.Errorf("insert bypass audit log: %w", err)
 	}
