@@ -136,19 +136,45 @@
 
 ## Traceability
 
-| REQ-ID | Phase | Plans |
-|--------|-------|-------|
-| BYPASS-NET-01..04 | TBD | TBD |
-| BYPASS-DNS-01..04 | TBD | TBD |
-| BYPASS-DATA-01..04 | TBD | TBD |
-| BYPASS-API-01..05 | TBD | TBD |
-| BYPASS-UI-01..05 | TBD | TBD |
-| BYPASS-RELOAD-01..04 | TBD | TBD |
-| BYPASS-NFT-01..04 | TBD | TBD |
-| BYPASS-VERIFY-01..04 | TBD | TBD |
+| REQ-ID            | Phase    | Plans |
+|-------------------|----------|-------|
+| BYPASS-NET-01     | Phase 45 | TBD   |
+| BYPASS-NET-02     | Phase 45 | TBD   |
+| BYPASS-NET-03     | Phase 45 | TBD   |
+| BYPASS-NET-04     | Phase 45 | TBD   |
+| BYPASS-DNS-01     | Phase 45 | TBD   |
+| BYPASS-DNS-02     | Phase 45 | TBD   |
+| BYPASS-DNS-03     | Phase 45 | TBD   |
+| BYPASS-DNS-04     | Phase 45 | TBD   |
+| BYPASS-DATA-01    | Phase 45 | TBD   |
+| BYPASS-DATA-02    | Phase 45 | TBD   |
+| BYPASS-DATA-03    | Phase 45 | TBD   |
+| BYPASS-DATA-04    | Phase 45 | TBD   |
+| BYPASS-API-01     | Phase 46 | TBD   |
+| BYPASS-API-02     | Phase 46 | TBD   |
+| BYPASS-API-03     | Phase 46 | TBD   |
+| BYPASS-API-04     | Phase 46 | TBD   |
+| BYPASS-API-05     | Phase 46 | TBD   |
+| BYPASS-UI-01      | Phase 46 | TBD   |
+| BYPASS-UI-02      | Phase 46 | TBD   |
+| BYPASS-UI-03      | Phase 46 | TBD   |
+| BYPASS-UI-04      | Phase 46 | TBD   |
+| BYPASS-UI-05      | Phase 46 | TBD   |
+| BYPASS-RELOAD-01  | Phase 47 | TBD   |
+| BYPASS-RELOAD-02  | Phase 47 | TBD   |
+| BYPASS-RELOAD-03  | Phase 47 | TBD   |
+| BYPASS-RELOAD-04  | Phase 47 | TBD   |
+| BYPASS-NFT-01     | Phase 47 | TBD   |
+| BYPASS-NFT-02     | Phase 47 | TBD   |
+| BYPASS-NFT-03     | Phase 47 | TBD   |
+| BYPASS-NFT-04     | Phase 47 | TBD   |
+| BYPASS-VERIFY-01  | Phase 47 | TBD   |
+| BYPASS-VERIFY-02  | Phase 47 | TBD   |
+| BYPASS-VERIFY-03  | Phase 47 | TBD   |
+| BYPASS-VERIFY-04  | Phase 47 | TBD   |
 
-（roadmapper 将填入对应 phase 号和 plan 号）
+**Coverage:** 34/34 active v3.5 requirements mapped to Phases 45-47 (100%). Plan-level mapping填入由 `/gsd-plan-phase` 完成。
 
 ---
 
-*Last updated: 2026-05-12 — milestone v3.5 requirements defined. 30 active requirements across 8 categories.*
+*Last updated: 2026-05-12 — milestone v3.5 requirements defined, 34 active requirements across 8 categories mapped to Phases 45-47.*
