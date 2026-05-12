@@ -201,7 +201,7 @@ func TestApplyWorkerFirewallRules_InvalidNetNS(t *testing.T) {
 	// 传入无效的 netns handle
 	invalidNS := netns.NsHandle(0)
 
-	err := ApplyWorkerFirewallRules(invalidNS, gwIP, bridgeGW, 22, nil)
+	err := ApplyWorkerFirewallRules(invalidNS, gwIP, bridgeGW, 22)
 	if err == nil {
 		t.Fatal("expected error for invalid netns, got nil")
 	}
@@ -368,7 +368,7 @@ func TestApplyWorkerFirewallRules_CustomSSHPort(t *testing.T) {
 	bridgeGW := net.ParseIP("172.18.0.1")
 	customSSHPort := uint16(2222)
 
-	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, customSSHPort, nil)
+	err := ApplyWorkerFirewallRules(ns, gwIP, bridgeGW, customSSHPort)
 	if err != nil {
 		t.Fatalf("ApplyWorkerFirewallRules failed: %v", err)
 	}
