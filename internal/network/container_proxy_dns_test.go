@@ -47,11 +47,19 @@ func TestContainerProxy_WriteContainerDNSConfig_WritesFiles(t *testing.T) {
 	if string(nsswitchData) != nsswitchConfContent {
 		t.Errorf("nsswitch.conf content mismatch:\n got=%q\nwant=%q", string(nsswitchData), nsswitchConfContent)
 	}
-	// hosts 行必须严格限定 files dns，禁用 mdns / myhostname / wins / nis_plus
+	// hosts 行必须严格限定 files dns，禁用所有可能引入旁路 DNS 的 NSS 模块。
 	if !strings.Contains(string(nsswitchData), "\nhosts:          files dns\n") {
 		t.Errorf("nsswitch.conf must contain exact `hosts: files dns` line, got:\n%s", nsswitchData)
 	}
-	for _, forbidden := range []string{"mdns", "myhostname", "wins", "nis_plus"} {
+	// Phase 45 WR-06：扩充禁用列表参考 RHEL/Debian 官方 NSS 模块名清单。
+	// 任何一个出现都意味着该模块会被 glibc 在 `hosts:` 行实际加载，绕过 tun0
+	// DNS 入口锁导致 BYPASS-DNS-03/04。
+	for _, forbidden := range []string{
+		"mdns", "myhostname", "wins", "nis_plus",
+		"resolve", // systemd-resolved 的 libnss-resolve 入口
+		"dns_sd",  // Avahi DNS-SD 入口
+		"lwres",   // BIND lwresd 入口
+	} {
 		if strings.Contains(string(nsswitchData), forbidden) {
 			t.Errorf("nsswitch.conf must NOT contain %q (BYPASS-DNS-04 mitigation)", forbidden)
 		}
