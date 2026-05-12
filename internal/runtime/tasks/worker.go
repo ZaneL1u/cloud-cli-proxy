@@ -98,6 +98,17 @@ func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest
 		err = w.validateAndPrepare(ctx, request.HostID)
 	case agentapi.ActionVolumeRemove:
 		err = w.removeVolumes(ctx, request)
+	case agentapi.ActionReloadHostBypass:
+		// Phase 46 占位实现：仅写日志返回 nil。Phase 47 实现真实 reload：
+		//   1. 从 host_bypass_snapshots 拉 pending 行（task payload 携带 snapshot id）
+		//   2. 把 whitelist_cidrs_json / whitelist_domains_json 落盘到 gateway config dir
+		//   3. 触发 sing-box rule-set 热加载 + nft set 原子更新
+		//   4. 健康检查通过则 UpdateBypassSnapshotStatus -> applied；失败 -> rolled_back
+		// 注意：日志字面量必须含 "Phase 46 placeholder; no-op until Phase 47" 字符串
+		// （Plan 46-02 must_haves truth #6 + success_criteria #2 字面对齐）。
+		slog.Info("reload_host_bypass dispatched (Phase 46 placeholder; no-op until Phase 47)",
+			"task_id", request.TaskID, "host_id", request.HostID)
+		err = nil
 	default:
 		err = fmt.Errorf("unsupported host action: %s", request.Action)
 	}

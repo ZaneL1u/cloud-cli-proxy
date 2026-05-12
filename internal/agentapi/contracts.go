@@ -9,6 +9,9 @@ const (
 	ActionRebuildHost  HostAction = "rebuild_host"
 	ActionPrepareHost  HostAction = "prepare_host"
 	ActionVolumeRemove HostAction = "volume_remove" // Phase 33 D-13
+	// ActionReloadHostBypass Phase 46/47 — Phase 46 仅占位（worker 写日志返回 nil），
+	// Phase 47 真实下发：从 host_bypass_snapshots pending 行读 rule-set，落盘并触发 nft set 原子更新。
+	ActionReloadHostBypass HostAction = "reload_host_bypass"
 )
 
 type SSHKeyEntry struct {
