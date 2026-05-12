@@ -171,7 +171,12 @@
   4. host 详情页存在「代理白名单」Tab：预设卡片中 `loopback` 强制锁定不可取消，`lan` 可勾选；自定义规则支持 IP/CIDR/域名/域名后缀/端口五种类型 CRUD，高风险规则显示黄色徽章并弹出二次确认；「预览生效配置」面板可切换 sing-box JSON 视图和 nft set diff 视图
   5. 应用按钮按 `生成快照 → 下发到 agent → reload → 健康检查 → 完成` 分阶段反馈进度，成功后 toast 显示「白名单变更不影响现有 TCP 连接，新连接才用新规则」；失败时显示具体错误码并标注自动回滚状态；所有写操作（create/update/delete/bind/unbind/apply/rollback）在 `host_bypass_audit_log` 留下 actor_id / actor_ip / action / before / after 行
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+- [ ] 46-01-PLAN.md — 后端 Bypass preset/rule/binding CRUD + 护栏校验 + 审计日志 helper + 路由注册（Wave 1）
+- [ ] 46-02-PLAN.md — 后端 preview/apply/rollback/effective + audit-log 端点 + ActionReloadHostBypass 占位 + 渲染层（Wave 2）
+- [ ] 46-03-PLAN.md — 前端 BypassTab + 预设网格 + 自定义规则表 + Drawer + RiskyKeywordConfirm + i18n 错误码（Wave 2）
+- [ ] 46-04-PLAN.md — 前端 PreviewSheet（JSON/nft diff 双 Tab）+ ApplyProgressDialog 5 阶段 + RollbackConfirmDialog（Wave 3）
 
 **UI hint**: yes
 
