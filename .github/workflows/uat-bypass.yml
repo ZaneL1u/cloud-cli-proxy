@@ -1,0 +1,129 @@
+name: uat-bypass
+
+# Phase 47 Plan 03 BYPASS-VERIFY-02/03/04：v3.5 白名单 fail-closed CI 守护。
+#
+# 工作流分两层：
+#
+#   1. lint  — 永远跑：bash -n、--help、--dry-run 6 场景全过。
+#              这一步在 ubuntu runner 不需要 nft/docker/sudo，只验证脚本本身。
+#
+#   2. uat   — 暂时禁用（if: false），见下方说明。
+#              未来配套 scripts/uat-bypass-fixture-up.sh（带控制面 + 测试 host +
+#              admin token 颁发）落地后，把 if: false 翻回 true 即生效。
+#
+# 通过这种分层，PR 阶段能立刻 catch 脚本回归（如 bash 语法、--dry-run 退出码），
+# 同时不阻塞 Phase 47 合并：真实 CI 守护放到 v3.5 P1 follow-up。
+
+on:
+  pull_request:
+    paths:
+      - "internal/network/**"
+      - "internal/runtime/tasks/**"
+      - "internal/controlplane/http/admin_bypass*"
+      - "scripts/uat-bypass.sh"
+      - ".github/workflows/uat-bypass.yml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uat-bypass-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint + dry-run 6 scenarios
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install minimal tools (jq / curl)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq curl
+
+      - name: bash -n (syntax)
+        run: bash -n scripts/uat-bypass.sh
+
+      - name: --help contains 6 scenarios + I1..I10
+        run: |
+          set -euo pipefail
+          OUT=$(bash scripts/uat-bypass.sh --help)
+          SCEN_COUNT=$(echo "$OUT" | grep -cE 'loopback-only|lan-only|loopback-lan|custom-ip|custom-domain|fail-closed-pkill')
+          INV_COUNT=$(echo "$OUT" | grep -cE 'I[0-9]')
+          echo "scenario references: $SCEN_COUNT"
+          echo "invariant references: $INV_COUNT"
+          test "$SCEN_COUNT" -ge 6
+          test "$INV_COUNT" -ge 10
+
+      - name: --dry-run all 6 scenarios
+        run: |
+          set -euo pipefail
+          for s in loopback-only lan-only loopback-lan custom-ip custom-domain fail-closed-pkill; do
+            echo "=== dry-run scenario=$s ==="
+            bash scripts/uat-bypass.sh \
+              --scenario="$s" \
+              --target-host-id=ci-dryrun \
+              --admin-token=ci-dryrun \
+              --dry-run
+          done
+
+  uat:
+    # Phase 47 Plan 03 hedge：真实 fixture 脚本（控制面 + bypass host + admin token
+    # 颁发）尚未落地，先把 workflow 结构搭好，等 v3.5 P1 follow-up 引入
+    # scripts/uat-bypass-fixture-up.sh 之后再把 if 翻为 true。
+    if: ${{ false }}
+    name: uat scenario=${{ matrix.scenario }}
+    runs-on: ubuntu-24.04
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - loopback-only
+          - lan-only
+          - loopback-lan
+          - custom-ip
+          - custom-domain
+          - fail-closed-pkill
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y nftables tcpdump jq dnsutils curl
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build control plane
+        run: go build -o /tmp/cloud-cli-proxy ./cmd/...
+
+      - name: Bring up bypass fixture
+        run: |
+          # follow-up: 这里要换成 scripts/uat-bypass-fixture-up.sh，
+          # 该脚本需输出 /tmp/uat-fixture.json 含 host_id + admin_token。
+          bash scripts/test-fixture-up.sh
+          echo "HOST_ID=$(jq -r '.host_id' /tmp/uat-fixture.json)" >> "$GITHUB_ENV"
+          echo "ADMIN_TOKEN=$(jq -r '.admin_token' /tmp/uat-fixture.json)" >> "$GITHUB_ENV"
+
+      - name: Run uat-bypass scenario=${{ matrix.scenario }}
+        env:
+          CLOUD_CLI_PROXY_ADMIN_TOKEN: ${{ env.ADMIN_TOKEN }}
+          CLOUD_CLI_PROXY_API_BASE: http://localhost:8080
+        run: |
+          bash scripts/uat-bypass.sh \
+            --scenario=${{ matrix.scenario }} \
+            --target-host-id="$HOST_ID"
+
+      - name: Teardown fixture
+        if: always()
+        run: bash scripts/test-fixture-down.sh
