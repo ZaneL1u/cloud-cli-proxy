@@ -224,7 +224,7 @@ func (h *UserHostsHandler) Rebuild() nethttp.Handler {
 			return
 		}
 
-		task, err := h.queue.QueueHostAction(r.Context(), hostID, agentapi.ActionRebuildHost, userID)
+		task, err := h.queue.QueueHostAction(r.Context(), hostID, agentapi.ActionRebuildHost, userID, "")
 		if err != nil {
 			h.logger.Error("queue rebuild failed", "host_id", hostID, "error", err)
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "queue rebuild failed"})

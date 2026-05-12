@@ -17,7 +17,7 @@ type ExpiryStore interface {
 }
 
 type HostActionQueuer interface {
-	QueueHostAction(context.Context, string, agentapi.HostAction, string) (repository.Task, error)
+	QueueHostAction(ctx context.Context, hostID string, action agentapi.HostAction, requestedBy string, bypassSnapshotID string) (repository.Task, error)
 }
 
 type ExpiryScanner struct {
@@ -77,7 +77,7 @@ func (s *ExpiryScanner) expireUser(ctx context.Context, user repository.User) er
 	}
 
 	for _, host := range hosts {
-		if _, err := s.queue.QueueHostAction(ctx, host.ID, agentapi.ActionStopHost, "system:expiry"); err != nil {
+		if _, err := s.queue.QueueHostAction(ctx, host.ID, agentapi.ActionStopHost, "system:expiry", ""); err != nil {
 			s.logger.Error("stop expired user host failed", "host_id", host.ID, "user_id", user.ID, "error", err)
 			continue
 		}

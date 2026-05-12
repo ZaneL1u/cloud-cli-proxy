@@ -86,7 +86,7 @@ func (r *Reconciler) reconcileHosts(ctx context.Context) error {
 		}
 
 		if r.queuer != nil {
-			if _, err := r.queuer.QueueHostAction(ctx, host.ID, agentapi.ActionStartHost, "system"); err != nil {
+			if _, err := r.queuer.QueueHostAction(ctx, host.ID, agentapi.ActionStartHost, "system", ""); err != nil {
 				r.logger.Error("auto-recover host failed, falling back to drift",
 					"host_id", host.ID, "error", err)
 				// 自动恢复失败时回退到原有 drift 行为
@@ -156,7 +156,7 @@ func (r *Reconciler) reconcileFailedHosts(ctx context.Context) error {
 			continue
 		}
 
-		if _, err := r.queuer.QueueHostAction(ctx, host.ID, agentapi.ActionStartHost, "system"); err != nil {
+		if _, err := r.queuer.QueueHostAction(ctx, host.ID, agentapi.ActionStartHost, "system", ""); err != nil {
 			r.logger.Warn("auto-recover failed host skipped",
 				"host_id", host.ID, "error", err)
 			continue

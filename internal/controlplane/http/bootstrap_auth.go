@@ -113,7 +113,7 @@ func (h *bootstrapAuthHandler) ServeHTTP(w nethttp.ResponseWriter, r *nethttp.Re
 	}
 
 	requestedBy := fmt.Sprintf("bootstrap:%s", user.Username)
-	task, err := h.queue.QueueHostAction(r.Context(), host.ID, agentapi.ActionStartHost, requestedBy)
+	task, err := h.queue.QueueHostAction(r.Context(), host.ID, agentapi.ActionStartHost, requestedBy, "")
 	if err != nil {
 		h.logger.Error("bootstrap queue start_host failed", "host_id", host.ID, "error", err)
 		writeBootstrapError(w, nethttp.StatusInternalServerError, "start_failed", "启动任务创建失败，请稍后重试")

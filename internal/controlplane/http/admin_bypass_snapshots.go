@@ -59,6 +59,17 @@ func NewAdminBypassSnapshotsHandler(
 	return &AdminBypassSnapshotsHandler{logger: logger, store: store, actions: actions, events: events}
 }
 
+// actorIDOrAdmin 把 r.Context() 里的 actor user-id 取出来作为 task.requested_by 写入。
+// 没有 actor（例如纯内部触发或测试） → fallback "admin"。Phase 47 Plan 01 引入：
+// 把 Phase 46 旧 hack「把 snapshot ID 借用 requestedBy 形参传」拆开 —— 现在
+// QueueHostAction 的第 4 参是真实 actor，第 5 参才是 snapshot ID。
+func actorIDOrAdmin(ctx context.Context) string {
+	if id := actorIDPtr(ctx); id != nil && *id != "" {
+		return *id
+	}
+	return "admin"
+}
+
 // collectRenderInput 把 host 的所有有效 binding 展开为 RenderBypassConfig 所需的输入。
 //
 // 启用规则：
@@ -327,7 +338,7 @@ func (h *AdminBypassSnapshotsHandler) Apply() nethttp.Handler {
 				if existing, found, ferr := h.findSnapshotByConfigHash(r.Context(), hostID, out.ConfigHash); ferr == nil && found {
 					var taskID string
 					if h.actions != nil {
-						task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, existing.ID)
+						task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, actorIDOrAdmin(r.Context()), existing.ID)
 						if qErr != nil {
 							h.logger.Error("apply (idempotent): queue host action failed", "host_id", hostID, "snapshot_id", existing.ID, "error", qErr)
 						} else {
@@ -357,7 +368,7 @@ func (h *AdminBypassSnapshotsHandler) Apply() nethttp.Handler {
 		var taskID string
 		var dispatchErr error
 		if h.actions != nil {
-			task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, snap.ID)
+			task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, actorIDOrAdmin(r.Context()), snap.ID)
 			if qErr != nil {
 				h.logger.Error("apply: queue host action failed", "host_id", hostID, "snapshot_id", snap.ID, "error", qErr)
 				dispatchErr = qErr
@@ -526,7 +537,7 @@ func (h *AdminBypassSnapshotsHandler) Rollback() nethttp.Handler {
 		// 6. dispatch ActionReloadHostBypass —— payload 是 new snapshot.ID，不是 target.ID
 		var taskID string
 		if h.actions != nil {
-			task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, newSnap.ID)
+			task, qErr := h.actions.QueueHostAction(r.Context(), hostID, agentapi.ActionReloadHostBypass, actorIDOrAdmin(r.Context()), newSnap.ID)
 			if qErr != nil {
 				h.logger.Error("rollback: queue host action failed", "host_id", hostID, "snapshot_id", newSnap.ID, "error", qErr)
 			} else {

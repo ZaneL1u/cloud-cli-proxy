@@ -141,6 +141,8 @@ func (s *stubBypassSnapshotStore) InsertBypassAuditLog(_ context.Context, p repo
 }
 
 // stubHostActionQueuer 实现 HostActionQueuer，计数 QueueHostAction 调用并捕获 payload。
+// Phase 47 Plan 01 起，第 4 参是真实 requestedBy（admin / actor user-id），第 5 参 Payload
+// 才是 reload_host_bypass 的 snapshot ID。Phase 46 的「借用 requestedBy 传 snapshot ID」hack 已修复。
 type stubHostActionQueuer struct {
 	mu        sync.Mutex
 	calls     []stubHostActionCall
@@ -149,15 +151,16 @@ type stubHostActionQueuer struct {
 }
 
 type stubHostActionCall struct {
-	HostID  string
-	Action  agentapi.HostAction
-	Payload string
+	HostID      string
+	Action      agentapi.HostAction
+	RequestedBy string
+	Payload     string
 }
 
-func (q *stubHostActionQueuer) QueueHostAction(_ context.Context, hostID string, action agentapi.HostAction, payload string) (repository.Task, error) {
+func (q *stubHostActionQueuer) QueueHostAction(_ context.Context, hostID string, action agentapi.HostAction, requestedBy string, payload string) (repository.Task, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.calls = append(q.calls, stubHostActionCall{HostID: hostID, Action: action, Payload: payload})
+	q.calls = append(q.calls, stubHostActionCall{HostID: hostID, Action: action, RequestedBy: requestedBy, Payload: payload})
 	if q.queueErr != nil {
 		return repository.Task{}, q.queueErr
 	}
