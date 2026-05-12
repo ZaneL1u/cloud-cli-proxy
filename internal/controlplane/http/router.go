@@ -49,6 +49,9 @@ type Dependencies struct {
 	AdminBypassRules    AdminBypassRuleStore
 	AdminBypassBindings AdminBypassBindingStore
 	AdminBypassProxy    AdminBypassProxyIPProvider // 通常复用 AdminEgressIPs
+	// Phase 46 Plan 02：snapshot / audit-log 写读分离。
+	AdminBypassSnapshots AdminBypassSnapshotStore
+	AdminBypassAuditLog  AdminBypassAuditLogStore
 	AdminHosts          AdminHostStore
 	AdminClaudeAccounts AdminClaudeAccountStore // Phase 33 D-17
 	AgentClient         HostActionRunner        // Phase 33 D-17 — interface 兼容 embedded + 远端两种模式
@@ -269,6 +272,19 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			mux.Handle("GET /v1/admin/hosts/{hostID}/bypass", adminGuard(bypassBindingHandler.ListByHost()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/bypass", adminGuard(bypassBindingHandler.Bind()))
 			mux.Handle("DELETE /v1/admin/bypass/bindings/{bindingID}", adminGuard(bypassBindingHandler.Unbind()))
+		}
+
+		// Phase 46 Plan 02：snapshot 写动作 + audit log 读端点。
+		if deps.AdminBypassSnapshots != nil {
+			sh := NewAdminBypassSnapshotsHandler(deps.Logger, deps.AdminBypassSnapshots, deps.HostActions, deps.EventRecorder)
+			mux.Handle("POST /v1/admin/hosts/{hostID}/bypass/preview", adminGuard(sh.Preview()))
+			mux.Handle("POST /v1/admin/hosts/{hostID}/bypass/apply", adminGuard(sh.Apply()))
+			mux.Handle("POST /v1/admin/hosts/{hostID}/bypass/rollback", adminGuard(sh.Rollback()))
+			mux.Handle("GET /v1/admin/hosts/{hostID}/bypass/effective", adminGuard(sh.Effective()))
+		}
+		if deps.AdminBypassAuditLog != nil {
+			ah := NewAdminBypassAuditLogHandler(deps.Logger, deps.AdminBypassAuditLog)
+			mux.Handle("GET /v1/admin/hosts/{hostID}/bypass/audit-log", adminGuard(ah.ListByHost()))
 		}
 
 		if deps.AdminHosts != nil {
