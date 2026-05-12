@@ -59,6 +59,7 @@ import { ChangeRootPasswordDialog } from "@/components/hosts/change-root-passwor
 import { ClaudeSettingsDialog } from "@/components/hosts/claude-settings-dialog";
 import { ClaudeStatusCard } from "@/components/hosts/claude-status-card";
 import { RebuildDialog } from "@/components/hosts/rebuild-dialog";
+import { BypassTab } from "@/components/bypass/bypass-tab";
 import {
   Dialog,
   DialogContent,
@@ -415,6 +416,14 @@ function HostDetailPage() {
 
       {/* ===== Claude 状态 ===== */}
       <ClaudeStatusCard hostId={hostId} hostStatus={host.status} />
+
+      {/* ===== 代理白名单（BYPASS-UI-01） ===== */}
+      <div
+        id="bypass"
+        className="rounded-xl border border-border/60 bg-card p-6 shadow-sm"
+      >
+        <BypassTab hostId={hostId} />
+      </div>
 
       {/* ===== Dialogs ===== */}
       <RotatePasswordDialog userId={user.id} open={rotateLoginOpen} onOpenChange={setRotateLoginOpen} />
