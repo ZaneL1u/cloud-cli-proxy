@@ -149,7 +149,11 @@
   4. 数据库迁移 `0019_host_bypass_rules.sql` 应用后，`\d host_bypass_presets` / `host_bypass_rules` / `host_bypass_bindings` / `host_bypass_snapshots` / `host_bypass_audit_log` 五张表全部存在；`SELECT slug, is_system, is_force_on FROM host_bypass_presets` 至少返回 `loopback`（is_system=true、is_force_on=true）和 `lan`（is_system=true、is_force_on=false）两行
   5. Repository 层 `BypassPreset` / `BypassRule` / `BypassBinding` / `BypassSnapshot` 的 CRUD 单元测试全部通过，且 `host_bypass_snapshots.applied_status` 默认值为 `pending`，可被写入 `applied` / `failed` / `rolled_back` 四态
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+- [ ] 45-01-PLAN.md — sing-box 配置渲染层扩展（两段式 + 拆分 DNS + tun 加固）+ rule-set placeholder 写盘与挂载
+- [ ] 45-02-PLAN.md — 容器 DNS 入口锁（resolv.conf / nsswitch.conf ro bind mount + verify 期望常量化）
+- [ ] 45-03-PLAN.md — migration 0019 五张表 + 两条系统预设 seed + Repository 18 个 CRUD 方法
 
 ### Phase 46: 控制面 API 与后台 UI
 
