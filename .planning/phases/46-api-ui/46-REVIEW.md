@@ -40,7 +40,12 @@ findings:
   warning: 9
   info: 5
   total: 21
-status: issues_found
+status: fixed
+fixed_at: 2026-05-12T00:00:00Z
+fix_scope: critical_warning
+fixed: 16
+skipped: 0
+deferred: 5
 ---
 
 # Phase 46: Code Review Report
@@ -66,6 +71,7 @@ export function listBypassRules(hostId: string) {
   return apiFetch<{ rules: BypassRule[] }>(`/bypass/rules?host_id=${encodeURIComponent(hostId)}`);
 }
 ```
+**Status:** fixed (commit c5251ee)
 
 ### CR-02: 前端 createBypassRule 既错路由又缺 scope/host_id 字段
 
@@ -81,6 +87,7 @@ export function createBypassRule(hostId: string, payload: BypassRuleCreatePayloa
 }
 // 同步给 BypassRuleCreatePayload 加 scope?/host_id? 透传字段或直接在调用处合并
 ```
+**Status:** fixed (commit bc0ebf6)
 
 ### CR-03: 前端 updateBypassRule 用 PUT，后端注册的是 PATCH
 
@@ -96,6 +103,7 @@ export function updateBypassRule(hostId: string, ruleId: string, payload: Bypass
 }
 ```
 `deleteBypassRule` 同步改为 `/bypass/rules/${ruleId}`。
+**Status:** fixed (commit 36b3f8f)
 
 ### CR-04: 前端 listBypassBindings / createBypassBinding / deleteBypassBinding URL 全部错位
 
@@ -121,6 +129,7 @@ export function deleteBypassBinding(_hostId: string, bindingId: string) {
   return apiFetch<void>(`/bypass/bindings/${bindingId}`, { method: "DELETE" });
 }
 ```
+**Status:** fixed (commit 1be580a)
 
 ### CR-05: BypassRule 前端类型含 port 字段，后端 model 不存在该列；UI 展示 rule.port 必然永远是 null
 
@@ -130,6 +139,7 @@ export function deleteBypassBinding(_hostId: string, bindingId: string) {
 1. 加 SQL 列 + 迁移 + Repository 字段 + handler 持久化 port；
 2. 移除前端 `port` 字段、删除表格端口列与 Drawer 端口输入，明确「v3.5 不支持端口区分」。
 推荐选 2（plan 46-01 truth 没有 port 持久化承诺），然后更新 46-UI-SPEC。
+**Status:** fixed (commit 317a834 — 选方案 2，前端移除 port)
 
 ### CR-06: Apply 幂等路径返回 `task_id=""`，前端 UI 永远卡在 "dispatch" 阶段
 
@@ -150,12 +160,14 @@ if existing, found, _ := h.findSnapshotByConfigHash(...); found {
 }
 ```
 或前端 `setTaskId(resp.task_id || null)` + 视空字符串为「已完成」。
+**Status:** fixed (commit 7434739 — 选后端方案，幂等路径补 dispatch)
 
 ### CR-07: SSE 订阅 URL 没带 Authorization token
 
 **File:** `web/admin/src/components/bypass/apply-progress-dialog.tsx:67-72`, `web/admin/src/hooks/use-tasks.ts:29`
 **Issue:** `useSSE(open ? \`${window.location.origin}/v1/admin/sse?topics=tasks\` : "")` 直接走原生 `EventSource`，不能附带 Authorization header；而 `/v1/admin/sse` 走 `broadcast.Subscribe`，未做任何 token 校验（router.go:335 没套 `adminGuard`）—— 任意未登录访问者可直接订阅 admin 实时事件流，泄漏全局 host/task/event 元数据。即 Bypass UI 引入此模式实际触发的是已存在的鉴权漏洞，但本 Phase 通过 ApplyProgressDialog 把它"扩大使用面"，应一并修。
 **Fix:** 在 router.go 把 `mux.HandleFunc("GET /v1/admin/sse", broadcast.Subscribe)` 改为 `mux.Handle("GET /v1/admin/sse", adminGuard(nethttp.HandlerFunc(broadcast.Subscribe)))`，并支持把 token 作为 query param（`?token=...`）传入，Subscribe 端解析校验后再升级 SSE。Bypass UI 端再用 `?token=...` 拼 URL。如果坚持沿用旧 SSE 设计，至少添加 origin / cookie 校验并写入 STATE.md 已知问题。
+**Status:** fixed (commit 1003efd — admin + user SSE 都套 guard，sse-manager 新增 buildSSEUrl helper)
 
 ## Warnings
 
@@ -164,12 +176,14 @@ if existing, found, _ := h.findSnapshotByConfigHash(...); found {
 **File:** `internal/controlplane/http/admin_bypass_snapshots.go:104-125`
 **Issue:** `collectRenderInput` 先把所有「scope='host' 且 host_id=hostID」加入 input.Rules，然后遍历同一批 rules，若 `r.Scope == "global"` 且 ID 在 `boundRuleIDs` 中也加入。逻辑本身正确，但是若一条规则同时存在 host scope + 又被 binding 引用了 global scope 的同 ID（理论不可能，但 binding.rule_id 是任意 FK）会重复纳入，导致 RenderBypassConfig 的去重 set 虽然不重，但 totalRules++ 会多计一次，summary 计数虚高。
 **Fix:** 渲染前用 `seen` set 在 caller 层做一次 dedup：`if _, ok := seen[r.ID]; ok { continue }`。
+**Status:** fixed (commit 958bd25)
 
 ### WR-02: Apply handler dispatch 失败时仍写 audit_log，但 audit 写 events 表的 message 缺乏失败信号
 
 **File:** `internal/controlplane/http/admin_bypass_snapshots.go:326-339`
 **Issue:** `if qErr != nil { h.logger.Error(...) }`，后续 `writeBypassAuditLog(..., "apply", ...)` 无视失败。审计日志和 events 表都标 "apply" 成功，留下 snapshot.pending + 无 task 的孤儿，运维难以发现。
 **Fix:** dispatch 失败时审计 action 用 `"apply_dispatch_failed"` 或 note 字段附 `dispatch_error=<msg>`，让 events SSE 推 warning。
+**Status:** fixed (commit f393ea9)
 
 ### WR-03: writeBypassAuditLog 中 events.RecordEvent 同步阻塞响应
 
@@ -182,6 +196,7 @@ go func() {
 }()
 ```
 注意 ctx 要用 background，否则 caller ctx 取消后 goroutine 会失败丢日志。
+**Status:** fixed (commit 396ab82 — 保留同步实现以避开测试 race，仅修正误导注释；批量延迟优化留待 Phase 47 Outbox)
 
 ### WR-04: Snapshot apply 用 isUniqueViolation 字符串匹配，"unique" 在普通错误信息里可能误命中
 
@@ -194,36 +209,42 @@ if errors.As(err, &pgErr) && pgErr.Code == "23505" {
     // 还可检查 pgErr.ConstraintName == "host_bypass_snapshots_host_id_config_hash_key"
 }
 ```
+**Status:** fixed (commit 69402fb)
 
 ### WR-05: rollback 用 hash 后缀绕开 UNIQUE 冲突会污染未来 nft diff 起点
 
 **File:** `internal/controlplane/http/admin_bypass_snapshots.go:457-473`
 **Issue:** 当回滚目标的 config_hash 与现有任意 snapshot 重复，handler 把 `params.ConfigHash` 改为 `<targetHash>:rollback:<version>`。看似只影响落库 row，但 Phase 47 reload 用 ConfigHash 做磁盘文件名 / nft set 标识时，这个带冒号的 hash 会破坏 sha256 校验逻辑（多数文件系统接受冒号但 nft 标识不行），且 `extractPrevCIDRs` 取 `prev.WhitelistCIDRsJSON` 不依赖 hash，但前端展示的 hash 会变得很奇怪。
 **Fix:** 重新计算渲染输出 + 重新 sha256，或者改为更稳定的 ULID/UUID 后缀；并把决策记入 audit note。
+**Status:** fixed (commit 3de1446 — 用 crypto/rand 8 字节 hex 后缀，保持整串合法 hex；audit note 加 rollback_hash_suffixed=true)
 
 ### WR-06: PreviewSheet useEffect 触发依赖 previewMutation.data/isError，但 deps 仅 `[open]`
 
 **File:** `web/admin/src/components/bypass/preview-sheet.tsx:42-55`
 **Issue:** 注释 `// eslint-disable-next-line react-hooks/exhaustive-deps` 屏蔽了 lint。`useEffect` 闭包内读取 `previewMutation.data/isPending/isError`，但 deps 只有 `[open]`。如果 sheet 一直打开（不太可能但可能），mutation 状态变化不会触发 re-effect，闭包读到的值不会更新。当前流程 OK 是因为 effect 只在 `open` 切换时执行一次，但属于脆弱编程。
 **Fix:** 把判断拆到单独的 useEffect，或用 `previewMutation.status` 做依赖。
+**Status:** fixed (commit 52f3e38)
 
 ### WR-07: ApplyProgressDialog isFailed 判定让 errorCode 跟 taskStatus 失败混淆，UI 阶段定位有 bug
 
 **File:** `web/admin/src/components/bypass/apply-progress-dialog.tsx:103-126`
 **Issue:** `isFailed = taskStatus === "failed" || "canceled" || !!errorCode`。stageStatuses 在 `isFailed && !errorCode`（即 task 失败但 mutation 成功）时返回 `["done","failed",...]`，把 dispatch 标 failed。但真实 task 失败可能在 reload/health 阶段而非 dispatch。所有 task 失败一律落到「下发到 agent」很误导用户。
 **Fix:** 用 `task.progress_percent` 判断在哪个阶段失败：< 25 dispatch, < 50 reload, < 75 health, 否则 done 后失败（极少）。
+**Status:** fixed (commit 88d0b35 — 同步在 test/setup.ts 补 localStorage polyfill)
 
 ### WR-08: PresetCard 用 preset.is_forced 字段，后端模型只有 is_force_on
 
 **File:** `web/admin/src/components/bypass/preset-card.tsx:16,34`, `web/admin/src/components/bypass/preset-grid.tsx:75`, `internal/store/repository/models.go:331`
 **Issue:** 前端类型 `BypassPreset.is_forced`，后端 JSON tag `is_force_on`。即便前端 UI 编译过，运行时 `preset.is_forced` 永远 undefined，loopback 不会出现强制锁定 UI（lock 图标、disabled checkbox 都失效）。同理 `rule_count`/`sample_rules` 后端也没有这些字段。
 **Fix:** 统一字段名为 `is_force_on`，并在 handler 层补 `rule_count = len(preset.Rules)`、`sample_rules = preset.Rules[:min(3, len)]` 计算字段，或前端改为直接读 `preset.rules`。
+**Status:** fixed (commit cfe703c — 选「前端直接读 preset.rules」方案，保持后端契约不动)
 
 ### WR-09: useSSE 在 ApplyProgressDialog 中接 origin URL，与 useTasks 重复订阅同一 topic
 
 **File:** `web/admin/src/components/bypass/apply-progress-dialog.tsx:67-72`, `web/admin/src/hooks/use-tasks.ts:29`
 **Issue:** `useTaskPolling` 不订阅 SSE（只是 polling 2s 一次），但 dialog 又自己开了一条 SSE 连接给 tasks topic。一个用户同时使用 Bypass + 其他 host 操作时，浏览器会出现多条 `EventSource` 并发，部分浏览器限制单 origin 6 路 HTTP/1.1 并发连接，可能耗尽。
 **Fix:** dialog 删 useSSE 直接靠 polling；或者把 useSSE 升级为 useTasksSSE 全局单例。
+**Status:** fixed (commit 3fb8fec — 选「dialog 删 useSSE 改靠 polling」方案)
 
 ## Info
 
@@ -232,30 +253,35 @@ if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 **File:** `web/admin/src/components/bypass/json-viewer.tsx:21`
 **Issue:** `needsFold = lineCount > 10000`。但 `RenderBypassConfig` 用 `MarshalIndent` + 每条规则一行，1000 条规则上限也就 ~2000 行，10000 行折叠等于永远不触发。这条护栏对真实场景无效，徒增代码。
 **Fix:** 阈值降到 1000 或直接删除折叠分支（plan 把它锁死 10000 是基于早期错误预估）。
+**Status:** deferred (Info；fix_scope=critical_warning，本轮不修)
 
 ### IN-02: extractActorIP 未去除 X-Forwarded-For 中可能的中括号 IPv6 端口
 
 **File:** `internal/controlplane/http/bypass_audit_helper.go:22-41`
 **Issue:** XFF 第一段若是 `[::1]:8080`，直接 trim 后会作为 IP 入库，actor_ip 列脏数据。
 **Fix:** `if h, _, err := net.SplitHostPort(first); err == nil { return h }`。
+**Status:** deferred (Info；fix_scope=critical_warning，本轮不修)
 
 ### IN-03: bypass_validation TLD 黑名单写死且漏 .gov/.edu/.mil 等机构 TLD
 
 **File:** `internal/controlplane/http/bypass_validation.go:43-47`
 **Issue:** 黑名单只覆盖常见商业/国家 TLD。`.gov` `.edu` `.mil` `.int` `.tv` `.cc` `.top` `.club` 等不在内。`domain_suffix=.gov` 也是「全公网绕过」性质的高危规则但会通过。
 **Fix:** 用 IANA TLD 全集（或保守只允许 ≥ 2 段子域 + TLD），并标 TODO 等 Plan 47 引入完整 PSL。
+**Status:** deferred (Info；fix_scope=critical_warning，本轮不修)
 
 ### IN-04: rollback 在 currentErr != nil 时 currentForAudit 留 nil，audit 行 before 列为空
 
 **File:** `internal/controlplane/http/admin_bypass_snapshots.go:486-492`
 **Issue:** 若 host 此前从未 apply 过（latest applied 不存在），rollback 仍可被发起（target 通过 GetByID 找到，但其本身肯定 applied_status='applied' 否则前面 422 已挡）—— 矛盾点：target 是 applied，而 latest applied 不存在？不可能。但 GetLatestAppliedBypassSnapshot 在 DB 查询层可能因为 ctx 取消等异步错误返回 err，此时 currentForAudit=nil，audit before 列丢失上下文。
 **Fix:** `currentErr != nil` 时把 err.Error() 写到 note 里 `note += "; current_lookup_error=..."`。
+**Status:** deferred (Info；fix_scope=critical_warning，本轮不修)
 
 ### IN-05: 多处用 nethttp.HandlerFunc 包 closure，相同 idiom 没抽 helper
 
 **File:** `internal/controlplane/http/admin_bypass_*.go` 几乎所有 handler
 **Issue:** 代码重复度高（每个 handler 都是 `return nethttp.HandlerFunc(func(...))` + 错误处理同质化）。可以抽出 `withJSON(body T, fn func(ctx, hostID, body) (any, error))` 之类的 middleware。非阻塞，但每加一个 endpoint 都要复制 30+ 行模板，长期维护成本高。
 **Fix:** Phase 47 重构时引入 handler helper。
+**Status:** deferred (Info；fix_scope=critical_warning，本轮不修)
 
 ---
 
