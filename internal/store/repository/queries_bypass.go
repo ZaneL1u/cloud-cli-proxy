@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // ErrSystemBypassPresetImmutable 表示尝试删除或修改 is_system=true 的预设。
@@ -11,13 +14,6 @@ import (
 // BYPASS_PRESET_IMMUTABLE。SQL 层在 updateBypassPresetSQL / deleteBypassPresetSQL
 // 同时附加 `is_system = FALSE` WHERE 兜底，即使绕过 Go 层校验也不会误删。
 var ErrSystemBypassPresetImmutable = errors.New("bypass preset is system preset and cannot be deleted or modified")
-
-// _ 让 stub 阶段的 import 不被编译器抱怨（Task 2b 会替换 stub 体并真正使用 ctx / json）。
-// stub 文件无 db 调用，但保留 import 让 Task 2b 不需要重新整理依赖。
-var (
-	_ context.Context
-	_ json.RawMessage
-)
 
 // ---------------------------------------------------------------------------
 // SQL 常量（包级 const，供 queries_bypass_test.go 文本断言锁定）
@@ -182,83 +178,415 @@ const listBypassAuditLogByTargetSQL = `
 `
 
 // ---------------------------------------------------------------------------
-// 18 个 Repository 方法 — Task 2a 阶段全部为 panic stub。
-// 真实 pgx v5 方法体由 Task 2b 替换；签名与本文件 SQL 常量在 Task 3
-// 已经通过反射 + 文本断言 lock 死，Task 2b 不允许改签名也不允许改 SQL 常量。
+// 19 个 Repository 方法 — Task 2b 真实 pgx v5 实现。
+// 签名与 SQL 常量在 Task 3 已通过反射 + 文本断言 lock 死，本步骤只填方法体。
 // ---------------------------------------------------------------------------
 
+// scanBypassPreset 将一行 host_bypass_presets SELECT 结果扫到 BypassPreset。
+// 列顺序与所有 preset SQL 常量的 SELECT/RETURNING 段保持一致。
+func scanBypassPreset(row pgx.Row, out *BypassPreset) error {
+	var rawRules json.RawMessage
+	if err := row.Scan(
+		&out.ID, &out.Slug, &out.Name, &out.Description,
+		&out.IsSystem, &out.IsForceOn, &out.IsActive, &rawRules,
+		&out.CreatedAt, &out.UpdatedAt,
+	); err != nil {
+		return err
+	}
+	if len(rawRules) > 0 {
+		_ = json.Unmarshal(rawRules, &out.Rules)
+	}
+	return nil
+}
+
+// scanBypassRule 同上，host_bypass_rules 列顺序对齐。
+func scanBypassRule(row pgx.Row, out *BypassRule) error {
+	return row.Scan(
+		&out.ID, &out.Scope, &out.HostID, &out.RuleType, &out.Value, &out.Note,
+		&out.IsRisky, &out.CreatedAt, &out.UpdatedAt,
+	)
+}
+
+// scanBypassBinding 同上，host_bypass_bindings 列顺序对齐。
+func scanBypassBinding(row pgx.Row, out *BypassBinding) error {
+	return row.Scan(
+		&out.ID, &out.HostID, &out.PresetID, &out.RuleID,
+		&out.Enabled, &out.Source, &out.CreatedAt,
+	)
+}
+
+// scanBypassSnapshot 同上，host_bypass_snapshots 列顺序对齐。
+func scanBypassSnapshot(row pgx.Row, out *BypassSnapshot) error {
+	return row.Scan(
+		&out.ID, &out.HostID, &out.Version, &out.ConfigHash,
+		&out.WhitelistCIDRsJSON, &out.WhitelistDomainsJSON,
+		&out.AppliedStatus, &out.CreatedBy, &out.CreatedAt,
+	)
+}
+
 func (r *Repository) ListBypassPresets(ctx context.Context) ([]BypassPreset, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	rows, err := r.db.Query(ctx, listBypassPresetsSQL)
+	if err != nil {
+		return nil, fmt.Errorf("query bypass presets: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]BypassPreset, 0)
+	for rows.Next() {
+		var it BypassPreset
+		if err := scanBypassPreset(rows, &it); err != nil {
+			return nil, fmt.Errorf("scan bypass preset: %w", err)
+		}
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate bypass presets: %w", err)
+	}
+	return out, nil
 }
 
 func (r *Repository) GetBypassPresetBySlug(ctx context.Context, slug string) (BypassPreset, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	var it BypassPreset
+	if err := scanBypassPreset(r.db.QueryRow(ctx, getBypassPresetBySlugSQL, slug), &it); err != nil {
+		return BypassPreset{}, fmt.Errorf("get bypass preset by slug: %w", err)
+	}
+	return it, nil
 }
 
 func (r *Repository) GetBypassPresetByID(ctx context.Context, id string) (BypassPreset, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	var it BypassPreset
+	if err := scanBypassPreset(r.db.QueryRow(ctx, getBypassPresetByIDSQL, id), &it); err != nil {
+		return BypassPreset{}, fmt.Errorf("get bypass preset by id: %w", err)
+	}
+	return it, nil
 }
 
 func (r *Repository) CreateBypassPreset(ctx context.Context, params CreateBypassPresetParams) (BypassPreset, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	rulesJSON, err := json.Marshal(params.Rules)
+	if err != nil {
+		return BypassPreset{}, fmt.Errorf("marshal bypass preset rules: %w", err)
+	}
+	if len(params.Rules) == 0 {
+		rulesJSON = []byte("[]")
+	}
+	var it BypassPreset
+	row := r.db.QueryRow(ctx, createBypassPresetSQL,
+		params.Slug, params.Name, nullIfEmpty(params.Description),
+		params.IsForceOn, params.IsActive, rulesJSON,
+	)
+	if err := scanBypassPreset(row, &it); err != nil {
+		return BypassPreset{}, fmt.Errorf("create bypass preset: %w", err)
+	}
+	return it, nil
 }
 
 func (r *Repository) UpdateBypassPreset(ctx context.Context, id string, params UpdateBypassPresetParams) (BypassPreset, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	// 把 *T 转 any（nil → nil；COALESCE 命中 fallback 不改原列）。
+	var nameArg, descArg, forceOnArg, activeArg, rulesArg any
+	if params.Name != nil {
+		nameArg = *params.Name
+	}
+	if params.Description != nil {
+		descArg = *params.Description
+	}
+	if params.IsForceOn != nil {
+		forceOnArg = *params.IsForceOn
+	}
+	if params.IsActive != nil {
+		activeArg = *params.IsActive
+	}
+	if params.Rules != nil {
+		raw, err := json.Marshal(*params.Rules)
+		if err != nil {
+			return BypassPreset{}, fmt.Errorf("marshal bypass preset rules: %w", err)
+		}
+		rulesArg = raw
+	}
+
+	var it BypassPreset
+	row := r.db.QueryRow(ctx, updateBypassPresetSQL, id, nameArg, descArg, forceOnArg, activeArg, rulesArg)
+	if err := scanBypassPreset(row, &it); err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return BypassPreset{}, fmt.Errorf("update bypass preset: %w", err)
+		}
+		// 影响 0 行：区分「命中 is_system 兜底」与「行不存在」。
+		var isSystem bool
+		if e := r.db.QueryRow(ctx, checkBypassPresetIsSystemSQL, id).Scan(&isSystem); e != nil {
+			if errors.Is(e, pgx.ErrNoRows) {
+				return BypassPreset{}, fmt.Errorf("update bypass preset: %w", pgx.ErrNoRows)
+			}
+			return BypassPreset{}, fmt.Errorf("check bypass preset is_system: %w", e)
+		}
+		if isSystem {
+			return BypassPreset{}, ErrSystemBypassPresetImmutable
+		}
+		return BypassPreset{}, fmt.Errorf("update bypass preset: %w", pgx.ErrNoRows)
+	}
+	return it, nil
 }
 
 func (r *Repository) DeleteBypassPreset(ctx context.Context, id string) error {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	// 先查 is_system；命中 → sentinel。即使 Go 层漏检，SQL `AND is_system = FALSE`
+	// 也兜底保证不会真的 DELETE。
+	var isSystem bool
+	if err := r.db.QueryRow(ctx, checkBypassPresetIsSystemSQL, id).Scan(&isSystem); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("delete bypass preset: %w", pgx.ErrNoRows)
+		}
+		return fmt.Errorf("check bypass preset is_system: %w", err)
+	}
+	if isSystem {
+		return ErrSystemBypassPresetImmutable
+	}
+	tag, err := r.db.Exec(ctx, deleteBypassPresetSQL, id)
+	if err != nil {
+		return fmt.Errorf("delete bypass preset: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		// 极小概率：is_system 查询与 DELETE 之间被改为 system。
+		return fmt.Errorf("delete bypass preset: %w", pgx.ErrNoRows)
+	}
+	return nil
 }
 
 func (r *Repository) ListBypassRules(ctx context.Context, hostID *string) ([]BypassRule, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	var (
+		rows pgx.Rows
+		err  error
+	)
+	if hostID == nil {
+		rows, err = r.db.Query(ctx, listBypassRulesGlobalOnlySQL)
+	} else {
+		rows, err = r.db.Query(ctx, listBypassRulesGlobalOrHostSQL, *hostID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query bypass rules: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]BypassRule, 0)
+	for rows.Next() {
+		var it BypassRule
+		if err := scanBypassRule(rows, &it); err != nil {
+			return nil, fmt.Errorf("scan bypass rule: %w", err)
+		}
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate bypass rules: %w", err)
+	}
+	return out, nil
 }
 
 func (r *Repository) CreateBypassRule(ctx context.Context, params CreateBypassRuleParams) (BypassRule, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	var hostArg any
+	if params.HostID != nil {
+		hostArg = *params.HostID
+	}
+	var it BypassRule
+	row := r.db.QueryRow(ctx, createBypassRuleSQL,
+		params.Scope, hostArg, params.RuleType, params.Value, nullIfEmpty(params.Note), params.IsRisky,
+	)
+	if err := scanBypassRule(row, &it); err != nil {
+		return BypassRule{}, fmt.Errorf("create bypass rule: %w", err)
+	}
+	return it, nil
 }
 
 func (r *Repository) UpdateBypassRule(ctx context.Context, id string, params UpdateBypassRuleParams) (BypassRule, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	var valueArg, noteArg, riskyArg any
+	if params.Value != nil {
+		valueArg = *params.Value
+	}
+	if params.Note != nil {
+		noteArg = *params.Note
+	}
+	if params.IsRisky != nil {
+		riskyArg = *params.IsRisky
+	}
+	var it BypassRule
+	row := r.db.QueryRow(ctx, updateBypassRuleSQL, id, valueArg, noteArg, riskyArg)
+	if err := scanBypassRule(row, &it); err != nil {
+		return BypassRule{}, fmt.Errorf("update bypass rule: %w", err)
+	}
+	return it, nil
 }
 
 func (r *Repository) DeleteBypassRule(ctx context.Context, id string) error {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	tag, err := r.db.Exec(ctx, deleteBypassRuleSQL, id)
+	if err != nil {
+		return fmt.Errorf("delete bypass rule: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("delete bypass rule: %w", pgx.ErrNoRows)
+	}
+	return nil
 }
 
 func (r *Repository) ListBypassBindingsByHost(ctx context.Context, hostID string) ([]BypassBinding, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	rows, err := r.db.Query(ctx, listBypassBindingsByHostSQL, hostID)
+	if err != nil {
+		return nil, fmt.Errorf("query bypass bindings: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]BypassBinding, 0)
+	for rows.Next() {
+		var it BypassBinding
+		if err := scanBypassBinding(rows, &it); err != nil {
+			return nil, fmt.Errorf("scan bypass binding: %w", err)
+		}
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate bypass bindings: %w", err)
+	}
+	return out, nil
 }
 
 func (r *Repository) CreateBypassBinding(ctx context.Context, params CreateBypassBindingParams) (BypassBinding, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	var presetArg, ruleArg any
+	if params.PresetID != nil {
+		presetArg = *params.PresetID
+	}
+	if params.RuleID != nil {
+		ruleArg = *params.RuleID
+	}
+	source := params.Source
+	if source == "" {
+		source = "admin"
+	}
+	var it BypassBinding
+	row := r.db.QueryRow(ctx, createBypassBindingSQL,
+		params.HostID, presetArg, ruleArg, params.Enabled, source,
+	)
+	if err := scanBypassBinding(row, &it); err != nil {
+		return BypassBinding{}, fmt.Errorf("create bypass binding: %w", err)
+	}
+	return it, nil
 }
 
 func (r *Repository) DeleteBypassBinding(ctx context.Context, id string) error {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	tag, err := r.db.Exec(ctx, deleteBypassBindingSQL, id)
+	if err != nil {
+		return fmt.Errorf("delete bypass binding: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("delete bypass binding: %w", pgx.ErrNoRows)
+	}
+	return nil
 }
 
 func (r *Repository) ListBypassSnapshotsByHost(ctx context.Context, hostID string, limit int) ([]BypassSnapshot, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := r.db.Query(ctx, listBypassSnapshotsByHostSQL, hostID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query bypass snapshots: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]BypassSnapshot, 0)
+	for rows.Next() {
+		var it BypassSnapshot
+		if err := scanBypassSnapshot(rows, &it); err != nil {
+			return nil, fmt.Errorf("scan bypass snapshot: %w", err)
+		}
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate bypass snapshots: %w", err)
+	}
+	return out, nil
 }
 
 func (r *Repository) CreateBypassSnapshot(ctx context.Context, params CreateBypassSnapshotParams) (BypassSnapshot, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	cidrs := params.WhitelistCIDRsJSON
+	if len(cidrs) == 0 {
+		cidrs = json.RawMessage(`{"version":3,"rules":[]}`)
+	}
+	domains := params.WhitelistDomainsJSON
+	if len(domains) == 0 {
+		domains = json.RawMessage(`{"version":3,"rules":[]}`)
+	}
+	var createdByArg any
+	if params.CreatedBy != nil {
+		createdByArg = *params.CreatedBy
+	}
+	var it BypassSnapshot
+	row := r.db.QueryRow(ctx, createBypassSnapshotSQL,
+		params.HostID, params.Version, params.ConfigHash, []byte(cidrs), []byte(domains), createdByArg,
+	)
+	if err := scanBypassSnapshot(row, &it); err != nil {
+		return BypassSnapshot{}, fmt.Errorf("create bypass snapshot: %w", err)
+	}
+	return it, nil
 }
 
 func (r *Repository) UpdateBypassSnapshotStatus(ctx context.Context, id string, status string) (BypassSnapshot, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	var it BypassSnapshot
+	row := r.db.QueryRow(ctx, updateBypassSnapshotStatusSQL, id, status)
+	if err := scanBypassSnapshot(row, &it); err != nil {
+		return BypassSnapshot{}, fmt.Errorf("update bypass snapshot status: %w", err)
+	}
+	return it, nil
 }
 
 func (r *Repository) GetLatestAppliedBypassSnapshot(ctx context.Context, hostID string) (BypassSnapshot, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	var it BypassSnapshot
+	row := r.db.QueryRow(ctx, getLatestAppliedBypassSnapshotSQL, hostID)
+	if err := scanBypassSnapshot(row, &it); err != nil {
+		return BypassSnapshot{}, fmt.Errorf("get latest applied bypass snapshot: %w", err)
+	}
+	return it, nil
 }
 
 func (r *Repository) InsertBypassAuditLog(ctx context.Context, params InsertBypassAuditLogParams) (string, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	var actorArg, targetArg, beforeArg, afterArg any
+	if params.ActorID != nil {
+		actorArg = *params.ActorID
+	}
+	if params.TargetID != nil {
+		targetArg = *params.TargetID
+	}
+	if len(params.Before) > 0 {
+		beforeArg = []byte(params.Before)
+	}
+	if len(params.After) > 0 {
+		afterArg = []byte(params.After)
+	}
+	var id string
+	var createdAt any // 占位接住 RETURNING 的 created_at，调用方不需要它。
+	if err := r.db.QueryRow(ctx, insertBypassAuditLogSQL,
+		actorArg, nullIfEmpty(params.ActorIP), params.Action, params.TargetKind,
+		targetArg, beforeArg, afterArg, nullIfEmpty(params.Note),
+	).Scan(&id, &createdAt); err != nil {
+		return "", fmt.Errorf("insert bypass audit log: %w", err)
+	}
+	return id, nil
 }
 
 func (r *Repository) ListBypassAuditLogByTarget(ctx context.Context, targetKind, targetID string) ([]BypassAuditLog, error) {
-	panic("not implemented in 45-03 Task 2a; see Task 2b")
+	rows, err := r.db.Query(ctx, listBypassAuditLogByTargetSQL, targetKind, targetID)
+	if err != nil {
+		return nil, fmt.Errorf("query bypass audit log: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]BypassAuditLog, 0)
+	for rows.Next() {
+		var it BypassAuditLog
+		if err := rows.Scan(
+			&it.ID, &it.ActorID, &it.ActorIP, &it.Action, &it.TargetKind,
+			&it.TargetID, &it.Before, &it.After, &it.Note, &it.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan bypass audit log: %w", err)
+		}
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate bypass audit log: %w", err)
+	}
+	return out, nil
 }
