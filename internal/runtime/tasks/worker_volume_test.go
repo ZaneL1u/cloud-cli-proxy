@@ -153,7 +153,7 @@ func TestBuildCreateArgs_VolumesMount(t *testing.T) {
 		{Name: "claude-state-abc", Target: "/var/lib/claude-persist"},
 		{Name: "ro-cache", Target: "/mnt/ro", ReadOnly: true},
 	}
-	args, err := w.buildCreateArgs(req, "c1", "c1")
+	args, err := w.buildCreateArgs(req, "c1", "c1", nil)
 	if err != nil {
 		t.Fatalf("buildCreateArgs: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestBuildCreateArgs_VolumesMount(t *testing.T) {
 func TestBuildCreateArgs_EmptyVolumes_NoExtraArgs(t *testing.T) {
 	w := &Worker{}
 	reqNil := minimalCreateHostRequest("e1")
-	argsNil, err := w.buildCreateArgs(reqNil, "cloudproxy-e1", "cloudproxy-e1")
+	argsNil, err := w.buildCreateArgs(reqNil, "cloudproxy-e1", "cloudproxy-e1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestBuildCreateArgs_EmptyVolumes_NoExtraArgs(t *testing.T) {
 
 	reqEmpty := minimalCreateHostRequest("e2")
 	reqEmpty.Volumes = []agentapi.VolumeMount{}
-	argsEmpty, err := w.buildCreateArgs(reqEmpty, "cloudproxy-e2", "cloudproxy-e2")
+	argsEmpty, err := w.buildCreateArgs(reqEmpty, "cloudproxy-e2", "cloudproxy-e2", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestBuildCreateArgs_InvalidVolumeMount(t *testing.T) {
 	w := &Worker{}
 	req := minimalCreateHostRequest("bad")
 	req.Volumes = []agentapi.VolumeMount{{Name: "", Target: "/mnt"}}
-	if _, err := w.buildCreateArgs(req, "c1", "c1"); err == nil {
+	if _, err := w.buildCreateArgs(req, "c1", "c1", nil); err == nil {
 		t.Fatal("expected error for empty volume name")
 	}
 }

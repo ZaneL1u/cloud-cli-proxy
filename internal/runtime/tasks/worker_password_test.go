@@ -13,7 +13,7 @@ func TestBuildCreateArgs_EmptyEntryPassword_ReturnsError(t *testing.T) {
 	req := minimalCreateHostRequest("h-empty-pw")
 	req.EntryPassword = ""
 
-	args, err := w.buildCreateArgs(req, "c1", "c1")
+	args, err := w.buildCreateArgs(req, "c1", "c1", nil)
 	if err == nil {
 		t.Fatal("expected error for empty EntryPassword, got nil")
 	}

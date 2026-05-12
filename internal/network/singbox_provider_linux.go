@@ -30,6 +30,24 @@ func NewSingBoxProvider(logger *slog.Logger) *SingBoxProvider {
 	return &SingBoxProvider{logger: logger}
 }
 
+// PrepareGateway 在 SingBoxProvider 下为 no-op：
+// SingBoxProvider 的整个流程（namespace + veth + sing-box 进程注入）依赖 worker
+// 容器已经存在并提供 netns / PID，无法在 worker 容器 docker create 之前先起
+// gateway。Phase 45 Plan 02 的容器 DNS 入口锁仅适用于 ContainerProxyProvider
+// （sidecar gateway 容器模型）；SingBoxProvider 是历史遗留的进程注入模型，
+// 这里保留接口对齐，PrepareHost 仍承担完整流程。
+func (sp *SingBoxProvider) PrepareGateway(_ context.Context, spec HostNetworkSpec) error {
+	if spec.Egress == nil {
+		return &NetworkError{
+			Type:    ErrBindingMissing,
+			Message: "PrepareGateway called without egress config",
+			HostID:  spec.HostID,
+		}
+	}
+	sp.logger.Info("sing-box provider: PrepareGateway is no-op (process-injection model)", "host_id", spec.HostID)
+	return nil
+}
+
 // PrepareHost executes the full network wiring pipeline for a proxy-mode
 // container that was started with --network=none.
 func (sp *SingBoxProvider) PrepareHost(ctx context.Context, spec HostNetworkSpec) error {

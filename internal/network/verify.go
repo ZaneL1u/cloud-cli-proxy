@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+// containerExpectedDNS 是 worker 容器 /etc/resolv.conf 第一行必须出现的
+// nameserver 地址。Phase 45 Plan 02 起 DNS 入口被 ro bind mount 固化为
+// sing-box gateway 的 tun0 (172.19.0.1)，与 EgressConfig.Proxy.DNSServer
+// 字段（描述 sing-box → 上游 DNS）是两个不同概念，所以这里用常量而非
+// EgressConfig 字段。Phase 47 之前修改该常量必须同步调整 resolvConfContent
+// 与 BypassRouterTun0IPv4。
+const containerExpectedDNS = "172.19.0.1"
+
 // VerifyResult captures the outcome of each verification check performed
 // inside a container's network namespace after tunnel wiring completes.
 type VerifyResult struct {
@@ -43,11 +51,10 @@ func VerifyNetworkIntegrity(ctx context.Context, containerPID uint32, expected E
 	verifyEgressIP(ctx, prefix, expected.ExpectedIP, &result)
 
 	// Check 2: DNS resolver points to tunnel DNS
-	var expectedDNS string
-	if expected.Proxy != nil {
-		expectedDNS = expected.Proxy.DNSServer
-	}
-	verifyDNS(ctx, prefix, expectedDNS, &result)
+	// Phase 45 Plan 02：容器 /etc/resolv.conf 被 ro bind mount 锁死为 tun0
+	// (172.19.0.1)，与 EgressConfig.Proxy.DNSServer（gateway → 上游 DNS）
+	// 解耦，用包级常量 containerExpectedDNS 作为预期值。
+	verifyDNS(ctx, prefix, containerExpectedDNS, &result)
 
 	// Check 3: direct outbound is blocked by firewall
 	verifyLeakBlocked(ctx, prefix, &result)
@@ -142,16 +149,12 @@ func firstNetworkError(expected EgressConfig, r VerifyResult) *NetworkError {
 	}
 
 	if !r.DNSCorrect {
-		var expectedDNS string
-		if expected.Proxy != nil {
-			expectedDNS = expected.Proxy.DNSServer
-		}
 		return &NetworkError{
 			Type:    ErrDNSLeak,
-			Message: fmt.Sprintf("DNS resolver mismatch: expected %s, got %s", expectedDNS, r.ActualDNS),
+			Message: fmt.Sprintf("DNS resolver mismatch: expected %s, got %s", containerExpectedDNS, r.ActualDNS),
 			HostID:  hostID,
 			Metadata: map[string]any{
-				"expected_dns": expectedDNS,
+				"expected_dns": containerExpectedDNS,
 				"actual_dns":   r.ActualDNS,
 			},
 		}

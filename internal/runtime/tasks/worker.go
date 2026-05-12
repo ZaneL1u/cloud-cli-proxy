@@ -189,7 +189,7 @@ func actionToHostStatus(action agentapi.HostAction) string {
 	}
 }
 
-func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerName, hostname string) ([]string, error) {
+func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerName, hostname string, egressCfg *network.EgressConfig) ([]string, error) {
 	homeDir := firstNonEmpty(request.HomeDir, hostHomeDir(request.HostID))
 
 	args := []string{
@@ -266,6 +266,21 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 
 	for key, value := range request.Labels {
 		args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
+	}
+
+	// Phase 45 Plan 02：容器 DNS 入口锁。当存在 sing-box gateway 出口配置时，
+	// 把 host 上由 PrepareGateway 写好的 resolv.conf / nsswitch.conf 以 ro
+	// bind mount 接管到容器内对应位置：
+	//   - /etc/resolv.conf  → nameserver 172.19.0.1（gateway tun0）
+	//   - /etc/nsswitch.conf → hosts: files dns
+	// ro 意味着容器内任何对这两个文件的写入都会被拒绝，闭合 BYPASS-DNS-03/04。
+	// 必须在 PrepareGateway 之后、docker create 之前注入（call-order 测试守护）。
+	if egressCfg != nil && egressCfg.Proxy != nil {
+		gwDir := network.GatewayConfigDir(request.HostID)
+		args = append(args,
+			"-v", gwDir+"/resolv.conf:/etc/resolv.conf:ro",
+			"-v", gwDir+"/nsswitch.conf:/etc/nsswitch.conf:ro",
+		)
 	}
 
 	args = append(args, request.ImageName)
@@ -348,7 +363,26 @@ func (w *Worker) createHost(ctx context.Context, request agentapi.HostActionRequ
 		hostname = containerName
 	}
 
-	args, err := w.buildCreateArgs(request, containerName, hostname)
+	// Phase 45 Plan 02：在 docker create 之前先起 sing-box gateway 并写好 DNS
+	// 源文件，保证 worker 容器一旦 docker start，ro bind mount 接管的
+	// /etc/resolv.conf 已指向监听的 tun0 (172.19.0.1)。调用顺序硬约束：
+	//   PrepareGateway → buildCreateArgs → docker create → docker start → PrepareHost
+	egressCfg, err := w.buildEgressConfig(ctx, request.HostID)
+	if err != nil {
+		return err
+	}
+	if egressCfg != nil {
+		spec := network.HostNetworkSpec{
+			HostID: request.HostID,
+			Egress: egressCfg,
+		}
+		if err := w.provider.PrepareGateway(ctx, spec); err != nil {
+			w.recordNetworkError(ctx, request.HostID, err)
+			return fmt.Errorf("prepare gateway before create: %w", err)
+		}
+	}
+
+	args, err := w.buildCreateArgs(request, containerName, hostname, egressCfg)
 	if err != nil {
 		return err
 	}
@@ -361,14 +395,10 @@ func (w *Worker) createHost(ctx context.Context, request agentapi.HostActionRequ
 		return fmt.Errorf("start container after create: %w", err)
 	}
 
-	egressCfg, err := w.buildEgressConfig(ctx, request.HostID)
-	if err != nil {
-		return err
-	}
 	if egressCfg != nil {
 		spec := network.HostNetworkSpec{
-			HostID:       request.HostID,
-			Egress:       egressCfg,
+			HostID: request.HostID,
+			Egress: egressCfg,
 		}
 		if err := w.provider.PrepareHost(ctx, spec); err != nil {
 			w.recordNetworkError(ctx, request.HostID, err)
@@ -397,10 +427,10 @@ func (w *Worker) startHost(ctx context.Context, request agentapi.HostActionReque
 		}
 	}
 
-	if err := w.runDocker(ctx, "start", containerName); err != nil {
-		return err
-	}
-
+	// Phase 45 Plan 02：在 docker start 之前先起 gateway + 写 DNS 源文件，
+	// 保证 worker 容器一旦运行，ro bind mount 引用的 /etc/resolv.conf 指向已
+	// 监听的 tun0 (172.19.0.1)。PrepareGateway 内部含 teardownGateway → 幂等
+	// 重起，重复调用安全。
 	egressCfg, err := w.buildEgressConfig(ctx, request.HostID)
 	if err != nil {
 		return err
@@ -408,8 +438,23 @@ func (w *Worker) startHost(ctx context.Context, request agentapi.HostActionReque
 
 	if egressCfg != nil {
 		spec := network.HostNetworkSpec{
-			HostID:       request.HostID,
-			Egress:       egressCfg,
+			HostID: request.HostID,
+			Egress: egressCfg,
+		}
+		if err := w.provider.PrepareGateway(ctx, spec); err != nil {
+			w.recordNetworkError(ctx, request.HostID, err)
+			return fmt.Errorf("prepare gateway before start: %w", err)
+		}
+	}
+
+	if err := w.runDocker(ctx, "start", containerName); err != nil {
+		return err
+	}
+
+	if egressCfg != nil {
+		spec := network.HostNetworkSpec{
+			HostID: request.HostID,
+			Egress: egressCfg,
 		}
 		if err := w.provider.PrepareHost(ctx, spec); err != nil {
 			w.recordNetworkError(ctx, request.HostID, err)

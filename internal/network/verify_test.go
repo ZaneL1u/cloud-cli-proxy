@@ -87,6 +87,10 @@ func TestFirstNetworkError_EgressMismatch(t *testing.T) {
 }
 
 func TestFirstNetworkError_DNSLeak(t *testing.T) {
+	// Phase 45 Plan 02：firstNetworkError 的 expected_dns 已经与
+	// EgressConfig.Proxy.DNSServer 解耦，永远是常量 containerExpectedDNS
+	// (172.19.0.1)。这里 Proxy.DNSServer 字段仍保留语义（gateway → 上游
+	// DNS），但不再用于断言。
 	cfg := EgressConfig{
 		ExpectedIP: "1.2.3.4",
 		Proxy:      &ProxySpec{DNSServer: "10.0.0.1"},
@@ -97,13 +101,14 @@ func TestFirstNetworkError_DNSLeak(t *testing.T) {
 	if err.Type != ErrDNSLeak {
 		t.Errorf("expected ErrDNSLeak, got %s", err.Type)
 	}
-	if err.Metadata["expected_dns"] != "10.0.0.1" || err.Metadata["actual_dns"] != "8.8.8.8" {
+	if err.Metadata["expected_dns"] != "172.19.0.1" || err.Metadata["actual_dns"] != "8.8.8.8" {
 		t.Errorf("unexpected metadata: %v", err.Metadata)
 	}
 }
 
 func TestFirstNetworkError_DNSLeak_NilProxy(t *testing.T) {
-	// DNS error with nil Proxy should not panic
+	// Phase 45 Plan 02：expected_dns 已与 EgressConfig.Proxy 字段解耦，
+	// 即使 Proxy 为 nil，预期值仍是常量 containerExpectedDNS (172.19.0.1)。
 	cfg := EgressConfig{ExpectedIP: "1.2.3.4", Proxy: nil}
 	result := VerifyResult{EgressIPMatch: true, DNSCorrect: false, ActualDNS: "8.8.8.8", LeakBlocked: true}
 
@@ -111,10 +116,9 @@ func TestFirstNetworkError_DNSLeak_NilProxy(t *testing.T) {
 	if err.Type != ErrDNSLeak {
 		t.Errorf("expected ErrDNSLeak, got %s", err.Type)
 	}
-	// expectedDNS should be empty since Proxy is nil
 	expectedDNS, _ := err.Metadata["expected_dns"].(string)
-	if expectedDNS != "" {
-		t.Errorf("expected_dns should be empty when Proxy is nil, got %q", expectedDNS)
+	if expectedDNS != "172.19.0.1" {
+		t.Errorf("expected_dns should be containerExpectedDNS 172.19.0.1 even when Proxy is nil, got %q", expectedDNS)
 	}
 }
 
