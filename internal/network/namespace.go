@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -40,15 +41,39 @@ func GetContainerNetNS(containerName string) (netns.NsHandle, uint32, error) {
 		}
 	}
 
-	ns, err := netns.GetFromPid(int(pid))
-	if err != nil {
-		return 0, 0, &NetworkError{
-			Type:    ErrTunnelSetupFailed,
-			Message: fmt.Sprintf("get netns from pid %d: %v", pid, err),
+	const maxRetry = 5
+	var lastErr error
+	for attempt := 1; attempt <= maxRetry; attempt++ {
+		// 每次重试前验证容器是否仍在运行
+		runningOut, runErr := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", containerName).Output()
+		if runErr != nil || strings.TrimSpace(string(runningOut)) != "true" {
+			if attempt < maxRetry {
+				time.Sleep(300 * time.Millisecond)
+				continue
+			}
+		}
+
+		ns, nsErr := netns.GetFromPid(int(pid))
+		if nsErr == nil {
+			return ns, uint32(pid), nil
+		}
+		lastErr = nsErr
+		if attempt < maxRetry {
+			time.Sleep(300 * time.Millisecond)
 		}
 	}
 
-	return ns, uint32(pid), nil
+	// 最后一次失败时，获取容器状态信息嵌入错误
+	statusOut, _ := exec.Command("docker", "inspect", "-f", "{{.State.Status}}|{{.State.ExitCode}}", containerName).Output()
+	statusInfo := strings.TrimSpace(string(statusOut))
+	if statusInfo == "" {
+		statusInfo = "unknown"
+	}
+
+	return 0, 0, &NetworkError{
+		Type:    ErrTunnelSetupFailed,
+		Message: fmt.Sprintf("get netns from pid %d after %d attempts (container status=%s): %v", pid, maxRetry, statusInfo, lastErr),
+	}
 }
 
 // InjectManagementVeth creates a veth pair between the host and container

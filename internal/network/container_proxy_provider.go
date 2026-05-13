@@ -105,6 +105,8 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 		return fmt.Errorf("gateway: configure worker routes/DNS: %w", err)
 	}
 
+	time.Sleep(500 * time.Millisecond)
+
 	if err := applyWorkerFirewall(ctx, workerName, gwIP, bridgeGW); err != nil {
 		p.teardownGateway(ctx, hostID)
 		return fmt.Errorf("gateway: apply worker firewall: %w", err)
