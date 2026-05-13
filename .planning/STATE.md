@@ -4,8 +4,8 @@ milestone: v3.4
 milestone_name: 多形态容器接入
 status: shipped
 stopped_at: Milestone v3.4 shipped (tag v3.4.0)
-last_updated: "2026-05-08T17:00:00Z"
-last_activity: 2026-05-08
+last_updated: "2026-05-13T02:48:00Z"
+last_activity: 2026-05-13 - Completed quick task 260513-ezu: 修复 worker firewall 测试 ApplyWorkerFirewallRules 参数错误
 progress:
   total_phases: 7
   completed_phases: 7
@@ -44,6 +44,12 @@ Full decision log in PROJECT.md Key Decisions table.
 ### Blockers/Concerns
 
 无。
+
+### Quick Tasks Completed
+
+| #          | Description                                                | Date       | Commit  | Directory                                                                                                    |
+| ---------- | ---------------------------------------------------------- | ---------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| 260513-ezu | 修复 worker firewall 测试 ApplyWorkerFirewallRules 参数错误 | 2026-05-13 | 73deb3c | [260513-ezu-worker-firewall-applyworkerfirewallrules](./quick/260513-ezu-worker-firewall-applyworkerfirewallrules/) |
 
 ### Roadmap Evolution
 
