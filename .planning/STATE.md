@@ -2,32 +2,32 @@
 gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: 网络白名单与 DNS 拆分解析
-status: milestone_complete
-stopped_at: v3.5 ROADMAP.md / REQUIREMENTS.md (traceability) / STATE.md 三件套全部写盘
-last_updated: "2026-05-12T09:04:34.088Z"
-last_activity: 2026-05-12 -- Phase 46 planning complete
+status: milestone_shipped
+stopped_at: v3.5 archived to .planning/milestones/ + tag v3.5
+last_updated: "2026-05-13T12:30:00.000Z"
+last_activity: 2026-05-13 -- v3.5 milestone complete and archived
 progress:
-  total_phases: 2
+  total_phases: 3
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 3
-  percent: 150
+  total_plans: 10
+  completed_plans: 10
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-12)
+See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** 给每个用户提供一台开箱即用的 SSH 云主机，并且严格保证其所有出网流量都走受控的指定出口 IP
-**Current focus:** Phase 45 — 网络配置基础与数据模型
+**Current focus:** v3.5 ✅ shipped — 等待 `/gsd-new-milestone` 进入下一里程碑
 
 ## Current Position
 
-Phase: 47
-Plan: Not started
-Status: Milestone complete
+Phase: —（v3.5 已 ship，待下一里程碑）
+Plan: —
+Status: Milestone shipped
 Last activity: 2026-05-13
 
 ## Accumulated Context
@@ -36,20 +36,29 @@ Last activity: 2026-05-13
 
 Full decision log in PROJECT.md Key Decisions table.
 
-v3.5 关键技术决策（已研究确定，不再讨论）：
+v3.5 关键技术决策（已落地，可作为后续里程碑参考）：
 
-- 两段式 sing-box 配置：静态 config.json（变更需重启）+ 动态 local rule-set 文件（sing-box 1.10+ 文件 watch 自动 reload）
-- 拆分 DNS：内网 `.lan/.local/.internal` 走 `dns-local`，公网白名单走代理 DoH（保护查询隐私）
-- 容器 `/etc/resolv.conf` 改为只读挂载指向 sing-box tun IP（172.19.0.1），替代旧 8.8.8.8 占位
-- IPv6：v3.5 容器内全禁（`--sysctl disable_ipv6=1` + ip6tables drop）
-- fail-closed：sing-box 起不来则容器 unhealthy 不开 SSH；nft `output policy drop` + uid 锁定 sing-box 直连代理 IP:443
-- v3.5 仅管理员可配置，不做用户自助
-- 系统预设仅 `loopback`（强制开启）+ `lan`（默认关闭），`cn-dev` / `oss-dev` / `ai-api` 推到 P1
+- 两段式 sing-box 配置：静态 config.json（每 host 模板渲染）+ 动态 local rule-set 文件（sing-box 1.10+ 文件 watch 自动 reload，不重启进程）
+- 拆分 DNS：内网 `.lan/.local/.internal` 走 `dns-local`，公网白名单走代理 DoH 1.1.1.1（保护查询隐私）
+- 容器 `/etc/resolv.conf` 与 `/etc/nsswitch.conf` `:ro` bind mount（唯一 nameserver 172.19.0.1 + `hosts: files dns`）
+- `ContainerProxyProvider` 拆分为 `PrepareGateway` + `PrepareHost`，消除 entrypoint 启动时 tun0 未监听的竞争
+- `is_system` 预设双层防御（Go sentinel + SQL `WHERE is_system = FALSE`）
+- 双轨审计（DB `host_bypass_audit_log` + `EventRecorder.RecordEvent`）
+- `QueueHostAction` 第 5 参用专属 `bypassSnapshotID` 形参，闭死「借 requestedBy 传 ID」hack
+- `ApplyBypassRuleSet` 严格顺序「先 nft 事务 → 后 atomic write」
+- 健康检查用 `/dev/tcp/192.168.0.1/53` TCP 半握手，不发真实 DNS 报文
+- nft 表族 = `ip cloudproxy`，`nftRunner` 自带 `nsenter -t <pid> -n --` 包装（单点事实源）
+- uat-bypass.yml fixture 自适应 preflight（非 `if:false`）
 
 ### Pending Todos
 
-- 运行 `/gsd-plan-phase 45` 分解 Phase 45（网络配置基础与数据模型）
-- Plan 化前对 `gateway_singbox_config.go` / `worker_firewall_linux.go` / `container_proxy_provider.go` 三个核心扩展点做现状勘察
+- `/gsd-new-milestone` 进入下一里程碑的需求收敛与路线图规划
+
+候选方向（参见 PROJECT.md Backlog）：
+
+- v3.5 P1：cn-dev / oss-dev / ai-api 预设 + 远程 rule-set 拉取 + 灰度按钮 + 用户自助配置 + 命中统计 + 流量 dashboard
+- v3.5 P2 tech-debt：TD-02 I9 严格化 / TD-03 detectHostEth0IPFallback 真实化 / TD-04 I3 切 nft counter / TD-05 verify.go Linux runner 集成测试
+- ENH-NEXT 系列：容器预热与空闲回收 / 性能 metrics 可视化 / mount 模式可观测 / 跨会话持久缓存 / 热同步 inotify 改造
 
 ### Blockers/Concerns
 
@@ -57,25 +66,24 @@ v3.5 关键技术决策（已研究确定，不再讨论）：
 
 ### Roadmap Evolution
 
-v3.5 roadmap 草案（基于 `.planning/research/SUMMARY.md` §6 建议路径，按需求依赖关系切分为 3 个 phase）：
+v3.5 已 ship（2026-05-13），Phases 45-47 / 10 plans / 34 REQ satisfied 全部归档到 `milestones/v3.5-ROADMAP.md` 和 `milestones/v3.5-REQUIREMENTS.md`。MILESTONE-AUDIT 在 `milestones/v3.5-MILESTONE-AUDIT.md`。
 
-- Phase 45: 网络配置基础与数据模型 — BYPASS-NET-01..04 / BYPASS-DNS-01..04 / BYPASS-DATA-01..04（12 需求）
-- Phase 46: 控制面 API 与后台 UI — BYPASS-API-01..05 / BYPASS-UI-01..05（10 需求）
-- Phase 47: 热更新链路与流量验证 — BYPASS-RELOAD-01..04 / BYPASS-NFT-01..04 / BYPASS-VERIFY-01..04（12 需求）
-
-覆盖率：34/34 active v3.5 requirements mapped (100%)。
-
-历史归档：v1.0 / v1.1 / v1.2(partial) / v1.3(archived) / v2.0 / v3.0 / v3.1 / v3.4 均已 ship，详情见 `.planning/MILESTONES.md` 和 `.planning/milestones/`。
+历史归档：v1.0 / v1.1 / v1.2(partial) / v1.3(archived) / v2.0 / v3.0 / v3.1 / v3.4 / v3.5 均已 ship，详情见 `.planning/MILESTONES.md` 和 `.planning/milestones/`。
 
 ## Session Continuity
 
-Last session: 2026-05-12
-Stopped at: v3.5 ROADMAP.md / REQUIREMENTS.md (traceability) / STATE.md 三件套全部写盘
-Resume: `/gsd-plan-phase 45` 进入 Phase 45 规划
+Last session: 2026-05-13
+Stopped at: v3.5 archived to .planning/milestones/ + tag v3.5
+Resume: `/clear` 后 `/gsd-new-milestone` 进入下一里程碑
 
 ## Deferred Items
 
-v3.5 暂无 deferred 项目（milestone 刚启动）
+v3.5 deferred-to-follow-up（不阻塞 ship，已记录在 `milestones/v3.5-MILESTONE-AUDIT.md` Tech Debt 表）：
+
+- TD-02 I9 严格化（mDNS/LLMNR/NetBIOS 注入 + counter 断言）
+- TD-03 `detectHostEth0IPFallback` 真实化（EgressConfig.LANBypassProbeIP 扩展）
+- TD-04 I3 切到 nft counter 持续观测窗口
+- TD-05 `verify.go` Linux runner 真实容器 + nsenter 集成测试
 
 历史 deferred：
 
@@ -84,4 +92,4 @@ v3.5 暂无 deferred 项目（milestone 刚启动）
 
 ---
 
-<!-- State updated: 2026-05-12 — v3.5 milestone roadmap drafted (Phases 45-47, 34 requirements mapped) -->
+<!-- State updated: 2026-05-13 — v3.5 milestone shipped & archived (Phases 45-47, 10/10 plans, 34/34 REQ, tag v3.5) -->

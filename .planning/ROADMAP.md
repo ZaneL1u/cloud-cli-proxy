@@ -10,7 +10,7 @@
 - ✅ **v3.0 远端开发体验升级** — Phases 29-35 (shipped 2026-04-23) — [Archive](milestones/v3.0-ROADMAP.md)
 - ✅ **v3.1 映射语义补齐与懒加载** — Phases 36-37 (shipped 2026-04-24) — [Archive](milestones/v3.1-ROADMAP.md)
 - ✅ **v3.4 多形态容器接入** — Phases 38-44 (shipped 2026-05-08) — [Archive](milestones/v3.4-ROADMAP.md)
-- 🚧 **v3.5 网络白名单与 DNS 拆分解析** — Phases 45-47 (planning, started 2026-05-12)
+- ✅ **v3.5 网络白名单与 DNS 拆分解析** — Phases 45-47 (shipped 2026-05-13) — [Archive](milestones/v3.5-ROADMAP.md)
 
 ## Phases
 
@@ -122,90 +122,20 @@
 
 </details>
 
-<details open>
-<summary>🚧 v3.5 网络白名单与 DNS 拆分解析 (Phases 45-47) — PLANNING, started 2026-05-12</summary>
+<details>
+<summary>✅ v3.5 网络白名单与 DNS 拆分解析 (Phases 45-47) — SHIPPED 2026-05-13</summary>
 
-- [ ] **Phase 45: 网络配置基础与数据模型** — sing-box 两段式配置 + 拆分 DNS + resolv.conf 接管 + 五张白名单表 + loopback/lan seed
-- [ ] **Phase 46: 控制面 API 与后台 UI** — admin Bypass CRUD/preview/apply/rollback + 护栏校验 + React Bypass Tab + diff 预览
-- [ ] **Phase 47: 热更新链路与流量验证** — ActionReloadHostBypass + 原子 rule-set / nft set 更新 + fail-closed 加固 + 10 条安全不变量 CI
+- [x] Phase 45: 网络配置基础与数据模型 (3/3 plans) — completed 2026-05-12
+- [x] Phase 46: 控制面 API 与后台 UI (4/4 plans) — completed 2026-05-12
+- [x] Phase 47: 热更新链路与流量验证 (3/3 plans) — completed 2026-05-13
+
+34/34 v3.5 REQ-ID SATISFIED；5 项 tech-debt follow-up（TD-01 fixed commit 58c0a5f；TD-02..05 P2 不阻塞 ship）；10 项 Info-level deferred 见 `milestones/v3.5-MILESTONE-AUDIT.md`。
 
 </details>
 
-## Phase Details
-
-### Phase 45: 网络配置基础与数据模型
-
-**Goal**: 让 sing-box 静态配置改造为两段式 + 拆分 DNS 模型 + 容器 resolv.conf 接管 + 白名单数据模型与系统预设全部就绪，为后续 API 和热更新打下可渲染、可入库、可挂载的基础。
-
-**Depends on**: Phase 44 (v3.4 多形态容器接入 已交付的 sing-box gateway 基线)
-
-**Requirements**: BYPASS-NET-01, BYPASS-NET-02, BYPASS-NET-03, BYPASS-NET-04, BYPASS-DNS-01, BYPASS-DNS-02, BYPASS-DNS-03, BYPASS-DNS-04, BYPASS-DATA-01, BYPASS-DATA-02, BYPASS-DATA-03, BYPASS-DATA-04
-
-**Success Criteria** (what must be TRUE):
-
-  1. 新建 host 渲染出的 `config.json` 包含 `route.rule_set` 数组（`whitelist-cidrs` / `whitelist-domains`，type=local，format=source），`route.rules` 第一条为 `sniff`（sniffer 至少含 `tls/http/quic/dns`），含 `protocol:"dns"` → `hijack-dns` 与 `ip_is_private:true` → `direct-out` 兜底；`route.final = "proxy-out"`、`route.default_interface = "eth0"`，`tun` inbound 同时启用 `strict_route` / `auto_route` / `endpoint_independent_nat`
-  2. sing-box `dns` 段同时存在 `dns-local`（type=local）和 `dns-proxy`（type=https，server=1.1.1.1，detour=proxy-out，domain_resolver=dns-local），`dns.final = "dns-proxy"`、`strategy = "ipv4_only"`；`.lan` / `.local` / `.internal` 后缀走 `dns-local`，命中 `whitelist-domains` rule_set 的域名走 `dns-proxy`
-  3. worker 容器启动后，`nsenter -t <PID> -m cat /etc/resolv.conf` 唯一 nameserver 为 `172.19.0.1`（含 `options ndots:0 single-request-reopen`），并且文件以只读 bind mount 挂载（容器内 `mount | grep resolv.conf` 标记 `ro`）；`/etc/nsswitch.conf` 的 `hosts:` 行为 `files dns`，无 mdns/myhostname/wins
-  4. 数据库迁移 `0019_host_bypass_rules.sql` 应用后，`\d host_bypass_presets` / `host_bypass_rules` / `host_bypass_bindings` / `host_bypass_snapshots` / `host_bypass_audit_log` 五张表全部存在；`SELECT slug, is_system, is_force_on FROM host_bypass_presets` 至少返回 `loopback`（is_system=true、is_force_on=true）和 `lan`（is_system=true、is_force_on=false）两行
-  5. Repository 层 `BypassPreset` / `BypassRule` / `BypassBinding` / `BypassSnapshot` 的 CRUD 单元测试全部通过，且 `host_bypass_snapshots.applied_status` 默认值为 `pending`，可被写入 `applied` / `failed` / `rolled_back` 四态
-
-**Plans**: 3 plans
-
-- [x] 45-01-PLAN.md — sing-box 配置渲染层扩展（两段式 + 拆分 DNS + tun 加固）+ rule-set placeholder 写盘与挂载
-- [x] 45-02-PLAN.md — 容器 DNS 入口锁（resolv.conf / nsswitch.conf ro bind mount + verify 期望常量化）
-- [x] 45-03-PLAN.md — migration 0019 五张表 + 两条系统预设 seed + Repository 18 个 CRUD 方法
-
-### Phase 46: 控制面 API 与后台 UI
-
-**Goal**: 让管理员能在后台对每个 host 完成「勾预设 → 加规则 → 预览 diff → 一键 apply / rollback」的闭环，所有写操作经过护栏校验和审计日志，前端体验清晰且高风险动作有二次确认。
-
-**Depends on**: Phase 45
-
-**Requirements**: BYPASS-API-01, BYPASS-API-02, BYPASS-API-03, BYPASS-API-04, BYPASS-API-05, BYPASS-UI-01, BYPASS-UI-02, BYPASS-UI-03, BYPASS-UI-04, BYPASS-UI-05
-
-**Success Criteria** (what must be TRUE):
-
-  1. 管理员使用 JWT 访问 `GET/POST/PATCH/DELETE /v1/admin/bypass/presets` 和 `/v1/admin/bypass/rules`、`POST /v1/admin/bypass/rules/validate`、`GET/POST /v1/admin/hosts/{hostID}/bypass` 全套 CRUD/绑定接口可用，且 `is_system=true` 的预设 PATCH/DELETE 返回 403
-  2. `POST /v1/admin/hosts/{hostID}/bypass/preview` 返回渲染后的 `whitelist-cidrs.json` / `whitelist-domains.json`、nft set diff 和风险报告且不落库；`POST .../apply` 写入 `host_bypass_snapshots`（含 `config_hash` 幂等键）；`POST .../rollback` 能回到上一个 `applied` snapshot；`GET .../effective` 返回当前生效规则全集
-  3. 护栏触发样本（`0.0.0.0/0` / v4 < /16 公网段 / `.com` 等顶级 TLD / 覆盖代理服务器 IP / 单 host > 1000 条）全部返回 HTTP 422，错误码分别为 `BYPASS_RULE_TOO_BROAD` / `BYPASS_RULE_CONFLICT_PROXY` / `BYPASS_LIMIT_EXCEEDED`；`domain_keyword` < 4 字符返回 400 并要求 `confirm_risky:true` 才能保存
-  4. host 详情页存在「代理白名单」Tab：预设卡片中 `loopback` 强制锁定不可取消，`lan` 可勾选；自定义规则支持 IP/CIDR/域名/域名后缀/端口五种类型 CRUD，高风险规则显示黄色徽章并弹出二次确认；「预览生效配置」面板可切换 sing-box JSON 视图和 nft set diff 视图
-  5. 应用按钮按 `生成快照 → 下发到 agent → reload → 健康检查 → 完成` 分阶段反馈进度，成功后 toast 显示「白名单变更不影响现有 TCP 连接，新连接才用新规则」；失败时显示具体错误码并标注自动回滚状态；所有写操作（create/update/delete/bind/unbind/apply/rollback）在 `host_bypass_audit_log` 留下 actor_id / actor_ip / action / before / after 行
-
-**Plans**: 4 plans
-
-- [x] 46-01-PLAN.md — 后端 Bypass preset/rule/binding CRUD + 护栏校验 + 审计日志 helper + 路由注册（Wave 1）
-- [x] 46-02-PLAN.md — 后端 preview/apply/rollback/effective + audit-log 端点 + ActionReloadHostBypass 占位 + 渲染层（Wave 2）
-- [x] 46-03-PLAN.md — 前端 BypassTab + 预设网格 + 自定义规则表 + Drawer + RiskyKeywordConfirm + i18n 错误码（Wave 2）
-- [x] 46-04-PLAN.md — 前端 PreviewSheet（JSON/nft diff 双 Tab）+ ApplyProgressDialog 5 阶段 + RollbackConfirmDialog（Wave 3）
-
-**UI hint**: yes
-
-### Phase 47: 热更新链路与流量验证
-
-**Goal**: 让管理员的 apply 动作通过 host-agent 真正落到 sing-box rule-set 文件和容器 netns nftables set 上，配置变更不重启进程、不断 SSH，且 10 条安全不变量在 CI 中持续可验证。
-
-**Depends on**: Phase 45, Phase 46
-
-**Requirements**: BYPASS-RELOAD-01, BYPASS-RELOAD-02, BYPASS-RELOAD-03, BYPASS-RELOAD-04, BYPASS-NFT-01, BYPASS-NFT-02, BYPASS-NFT-03, BYPASS-NFT-04, BYPASS-VERIFY-01, BYPASS-VERIFY-02, BYPASS-VERIFY-03, BYPASS-VERIFY-04
-
-**Success Criteria** (what must be TRUE):
-
-  1. `internal/agentapi/contracts.go` 暴露 `ActionReloadHostBypass = "reload_host_bypass"`，worker dispatch 命中后 host-agent 完成「`tmpfile + rename` 原子写 rule-set 文件 → `nft -f` 事务更新 `@whitelist_v4` set → 等 1s sing-box 文件 watch reload → 健康检查」全流程；reload 期间长跑 `ssh ... 'while true; do echo .; sleep 1; done'` 不中断（I10）
-  2. 健康检查 3 次失败后自动用上一个 `applied` snapshot 重新下发，当前 snapshot 在数据库标记为 `rolled_back` 并产生事件日志告警；`GET /v1/admin/hosts/{hostID}/bypass/consistency` 返回 nft set 与 rule-set 文件 SHA-256 hash 一致性的对账结果（I7）
-  3. 容器 netns `output` 链 policy = `drop` 且仅放行 `oifname sb-tun0` + uid=singbox 直连代理 IP:443 + `oifname eth0 ip daddr @whitelist_v4`，默认末尾 `counter log prefix "sbfw-drop " drop`；mDNS(5353) / LLMNR(5355) / NetBIOS(137) UDP 出向被显式 drop 且计数器可读（I2/I3/I9）
-  4. 容器启动参数携带 `--sysctl net.ipv6.conf.all.disable_ipv6=1` 和 `default.disable_ipv6=1`，容器内 `ip -6 addr` 仅看到 `::1`，ip6tables 默认 drop（I6）；gateway 容器健康检查不通过时 `provider.PrepareHost` verify 流程不放行 worker 容器开放 SSH 端口（BYPASS-NFT-04 fail-closed）
-  5. 扩展后的 `internal/network/verify.go` 增加白名单 IP 走 eth0、非白名单走代理出口、`dig @8.8.8.8` 必超时 3 项检查；`scripts/uat-bypass.sh` 覆盖 6 个场景（仅 loopback / 仅 lan / loopback+lan / 自定义 IP / 自定义域名 / pkill sing-box fail-closed），10 条安全不变量（I1–I10）全部接入 CI；`host_bypass_snapshots.applied_status` 与 `host_bypass_audit_log` 在 e2e 测试中可拉到 `applied` / `rolled_back` 两种状态行
-
-**Plans**: 3 plans
-
-Plans:
-- [x] 47-01-PLAN.md — worker dispatcher 真实实现 + agentapi BypassSnapshotID + ApplyBypassRuleSet（原子写 + nft -f）+ 自动 rollback + consistency endpoint（Wave 1）
-- [x] 47-02-PLAN.md — worker netns nft 加固：@whitelist_v4 set + uid 锁 + mDNS/LLMNR/NetBIOS drop + 链末 log drop + I6 IPv6 双保险（Wave 1）
-- [x] 47-03-PLAN.md — verify.go 扩展 3 项检查 + scripts/uat-bypass.sh 6 场景 × 10 不变量 + CI matrix（Wave 2）
-
 ## Progress
 
-**Current milestone:** v3.5 网络白名单与 DNS 拆分解析（planning，3 phases / 3 plans）
+**Current milestone:** （TBD — 待 `/gsd-new-milestone` 启动下一个里程碑）
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -217,10 +147,8 @@ Plans:
 | 29-35. v3.0 远端开发体验升级 | v3.0 | 30/30 | Complete | 2026-04-23 |
 | 36-37. v3.1 映射语义补齐与懒加载 | v3.1 | 11/11 | Complete | 2026-04-24 |
 | 38-44. v3.4 多形态容器接入 | v3.4 | 14/14 | Complete | 2026-05-08 |
-| 45. v3.5 网络配置基础与数据模型 | v3.5 | 3/3 | Complete    | 2026-05-12 |
-| 46. v3.5 控制面 API 与后台 UI | v3.5 | 4/4 | Complete    | 2026-05-12 |
-| 47. v3.5 热更新链路与流量验证 | v3.5 | 3/3 | Complete    | 2026-05-13 |
+| 45-47. v3.5 网络白名单与 DNS 拆分解析 | v3.5 | 10/10 | Complete | 2026-05-13 |
 
 ---
 
-*Last updated: 2026-05-12 — v3.5 roadmap drafted (Phases 45-47), 34/34 requirements mapped.*
+*Last updated: 2026-05-13 — v3.5 网络白名单与 DNS 拆分解析 shipped (Phases 45-47, 34/34 requirements satisfied, tag v3.5).*
