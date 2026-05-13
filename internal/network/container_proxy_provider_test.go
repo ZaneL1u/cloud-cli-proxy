@@ -103,9 +103,9 @@ func TestSubnetThirdOctet_CollisionResistance(t *testing.T) {
 			collisions += c - 1
 		}
 	}
-	// 100 samples into 200 possible values: expect very few collisions
-	// Allow up to 10 collisions as a generous threshold
-	if collisions > 10 {
+	// 100 samples into 200 buckets: birthday paradox expects E[collisions] = 100*99/(2*200) ≈ 25
+	// Allow up to 40 to accommodate birthday paradox variance (deterministic FNV-1a inputs produce 22)
+	if collisions > 40 {
 		t.Errorf("too many collisions: %d out of %d samples", collisions, count)
 	}
 	t.Logf("collision count: %d/%d (unique octets: %d)", collisions, count, len(octets))
