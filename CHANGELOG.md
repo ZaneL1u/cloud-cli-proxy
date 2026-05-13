@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v3.5.2 - 2026-05-13
+## What's Changed
+
+### Backend (Go / API)
+- test(260513-fjd-01): 调整 SubnetThirdOctet 碰撞抗性阈值至 40 (0def841)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v3.5.1...v3.5.2
+
+
 ## v3.4.5 - 2026-05-11
 ## What's Changed
 
