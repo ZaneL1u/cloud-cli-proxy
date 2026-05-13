@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v3.5.4 - 2026-05-13
+## What's Changed
+
+### Backend (Go / API)
+- fix(260513-kru): 增强 GetContainerNetNS 健壮性，修复 worker netns 获取失败 (d99d0b6)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v3.5.3...v3.5.4
+
+
 ## v3.5.3 - 2026-05-13
 ## What's Changed
 
