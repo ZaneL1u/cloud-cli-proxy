@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v3.5.3 - 2026-05-13
+## What's Changed
+
+### Backend (Go / API)
+- fix(260513-gii): align UpsertHost VALUES placeholder count with column list (3bdc4f0)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v3.5.2...v3.5.3
+
+
 ## v3.5.2 - 2026-05-13
 ## What's Changed
 
