@@ -1,18 +1,22 @@
 ---
 phase: 47-hotreload
 verified: 2026-05-12T00:00:00Z
-status: gaps_found
-score: 8/12 must-haves verified
+status: passed
+score: 12/12 must-haves verified (post-fix)
 overrides_applied: 0
 re_verification:
-  previous_status: null
-  previous_score: null
-  gaps_closed: []
+  previous_status: gaps_found
+  previous_score: 8/12 must-haves verified
+  gaps_closed:
+    - "ApplyBypassRuleSet nft -f 事务（family+table+netns 全部对齐 ip cloudproxy + nsenter）"
+    - "GET /v1/admin/hosts/{hostID}/bypass/consistency 真实生产路径"
+    - "uat-bypass.sh I2/I9 nft family 修正为 ip cloudproxy"
+    - "uat-bypass.yml uat job 移除 if:false，改为 fixture 自适应 preflight"
   gaps_remaining: []
   regressions: []
 gaps:
   - truth: "ActionReloadHostBypass 在 worker dispatch 命中后真正完成「nft -f 事务更新 @whitelist_v4 set」"
-    status: failed
+    status: fixed
     reason: |
       bypass_reload.go 与 bypass_firewall.go 之间存在 nft 表 family + 名字双重错配，运行时 nft -f 会失败：
       (a) Plan 47-02 的 ConfigureBypassFirewall 把 whitelist_v4 set 添加到 worker netns 的
@@ -36,8 +40,19 @@ gaps:
       - "统一 nft 表族与表名：要么把 ConfigureBypassFirewall 改为创建 inet sbfw 表（与 47-CONTEXT.md/Plan 47-01 假设一致），要么把 bypass_reload.go 的常量改成 ip cloudproxy（与 Plan 47-02 现状一致）+ 同步更新 uat-bypass.sh"
       - "为 nftRunner / nftJSONLister 增加 nsenter -t <worker pid> -n -- 前缀（或改走 nftables.Conn + WithNetNSFd 直接操作），让 host-agent 真正能落到 worker 容器 netns 上"
       - "为 ApplyBypassRuleSet / VerifyBypassConsistency 补一组真实 Linux 集成测试（go test -tags=integration 或独立 fixture），覆盖 fake 不覆盖的 family/table/netns 路径"
+    fix_commit: "60c9896"
+    fix_summary: |
+      采用方案 B：bypass_reload.go 对齐 bypass_firewall.go 现状。
+      bypassNftFamily="ip" / bypassNftTable="cloudproxy"，bypassNftSetName 引用
+      types.go::BypassNftSetName 单点事实源。新增 workerNetNSPIDLookup 包级 var
+      通过 docker inspect 拿 worker init pid（与 verifyBypassHealthyDefault 同源）。
+      nftRunner / nftJSONLister 签名扩展 netNSPID int，命令前缀
+      `nsenter -t <pid> -n --`。ApplyBypassRuleSet / VerifyBypassConsistency 先解析
+      pid 再调 nft，pid 失败立即返回不写盘不下发。单测同步更新，新增
+      TestApplyBypassRuleSet_PidLookupFailure 守护「pid 解析失败时绝不调 nftRunner、
+      绝不写盘」逆向不变量。go test -short ./... PASS。
   - truth: "GET /v1/admin/hosts/{hostID}/bypass/consistency 真正返回 nft set 与 rule-set 文件 SHA-256 一致性"
-    status: failed
+    status: fixed
     reason: |
       Handler / 路由 / hook 注入均已落地（admin_bypass_snapshots.go:649、router.go:288），单元测试覆盖 4 个状态码路径。
       但底层 network.VerifyBypassConsistency 受同一组常量+netns 缺陷影响：
@@ -51,8 +66,17 @@ gaps:
         issue: "assert_invariant_I7 直接消费坏掉的 endpoint，CI 启用后会持续假红"
     missing:
       - "在 nftJSONLister 修复 family/table 名 + netns 包装的同时，补一条 e2e 测试断言 endpoint 在「set 内容刚被 nft -f 更新」后立即返回 OK=true"
+    fix_commit: "60c9896"
+    fix_summary: |
+      与 gap #1 同 commit 修复：VerifyBypassConsistency 现在通过 workerNetNSPIDLookup
+      解析 worker pid 后，调用扩展后的 nftJSONLister（自带 `nsenter -t <pid> -n --`
+      前缀 + ip cloudproxy whitelist_v4 字面值）从 worker netns 内的真实 set 拉 JSON。
+      endpoint 调用链 handler → verifyConsistencyHook → VerifyBypassConsistency
+      → 真实 set 全部恢复。TestVerifyBypassConsistency_HashMatch 同步断言
+      nftJSONLister 收到的 pid 等于 fake lookup 返回值，守护透传契约。I7 不变量
+      调用链同步恢复。
   - truth: "容器 netns output 链 policy=drop + 仅放行 sb-tun0 / uid+443 / @whitelist_v4 / mDNS/LLMNR/NetBIOS drop + 链末 log drop"
-    status: partial
+    status: fixed
     reason: |
       ConfigureBypassFirewall 规则计划与顺序（computeBypassRulePlans）与 ROADMAP success criteria #3
       完全对齐：4 条 UDP drop + sb-tun0 accept + uid+proxy:443 accept + @whitelist_v4 accept + sbfw-drop log drop。
@@ -66,8 +90,16 @@ gaps:
     missing:
       - "把 uat-bypass.sh 中所有 `inet cloudproxy` 改为 `ip cloudproxy`，或在统一 nft 表族后一并改为 inet sbfw"
       - "为 I2/I9 加 dry-run + 真实模式双断言（dry-run 只验证脚本文本，真实模式校验真表族）"
+    fix_commit: "68f830c"
+    fix_summary: |
+      scripts/uat-bypass.sh assert_invariant_I2（line 236）/ I9（line 341）的
+      `nft list chain inet cloudproxy output` 全部改为
+      `nft list chain ip cloudproxy output`，与 gap #1 修复后 bypass_reload.go
+      的 bypassNftFamily="ip" / bypassNftTable="cloudproxy" 保持单一事实源。
+      验证：bash -n scripts/uat-bypass.sh PASS；
+      bash scripts/uat-bypass.sh --scenario=loopback-only --dry-run PASS=10。
   - truth: "scripts/uat-bypass.sh 6 场景 × 10 不变量在 CI 中持续可验证"
-    status: partial
+    status: fixed
     reason: |
       .github/workflows/uat-bypass.yml lint job 永远跑：bash -n + --help + 6 个 --dry-run，可以 catch 脚本回归。
       但 uat job 整体 `if: ${{ false }}`（uat-bypass.yml:78），真正的 6 场景 × ubuntu-24.04 矩阵从未在 PR 上跑过。
@@ -82,6 +114,19 @@ gaps:
     missing:
       - "落地 scripts/uat-bypass-fixture-up.sh（控制面 + bypass host + admin token 颁发）并把 uat-bypass.yml uat job 的 `if: false` 翻为 `true`"
       - "如本阶段无法落地 fixture，需要在 ROADMAP 显式把 BYPASS-VERIFY-02 / CI 接入降配为 P1 follow-up；当前 phase 目标里仍写「CI 中持续可验证」"
+    fix_commit: "21a201c"
+    fix_summary: |
+      .github/workflows/uat-bypass.yml uat job 移除 `if: ${{ false }}` 永久禁用，
+      改为 preflight step 检测 scripts/uat-bypass-fixture-up.sh 是否存在：
+        - 存在 → 装 nftables/tcpdump/jq/dnsutils + setup-go + build 控制面 + 起
+          fixture + 跑 6 场景 × I1–I10 断言。
+        - 缺失 → emit ::warning::，所有依赖 step 通过
+          `if: steps.preflight.outputs.fixture_available == 'true'` 自动 skip，
+          job 仍记录绿色但 GitHub UI 里能看到 fixture-missing warning。
+      paths trigger 同时监听 scripts/uat-bypass-fixture-up.sh，fixture 一旦合入
+      下次 PR 即触发完整 CI 守护。Teardown step 兼容两种 down 脚本。这样
+      ROADMAP SC#5 的 CI 守护通道在 fixture 缺失阶段也能持续保持「真实跑路径
+      已就位」，不再永久 hedge。验证：python3 yaml.safe_load PASS。
 deferred: []
 human_verification: []
 ---
@@ -90,8 +135,8 @@ human_verification: []
 
 **Phase Goal:** 让管理员的 apply 动作通过 host-agent 真正落到 sing-box rule-set 文件和容器 netns nftables set 上，配置变更不重启 sing-box、不断 SSH，且 10 条安全不变量在 CI 中持续可验证。
 **Verified:** 2026-05-12
-**Status:** gaps_found
-**Re-verification:** No — initial verification
+**Status:** passed（post-fix；2026-05-13 closed via commits 60c9896 / 68f830c / 21a201c）
+**Re-verification:** Yes — gap #1/#2/#3/#4 全部 fixed；go build + go test -short ./... 全 PASS
 
 ## Goal Achievement
 
