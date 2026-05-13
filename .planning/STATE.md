@@ -1,35 +1,36 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.4
-milestone_name: 多形态容器接入
-status: shipped
-stopped_at: Milestone v3.4 shipped (tag v3.4.0)
-last_updated: "2026-05-13T07:00:00Z"
-last_activity: 2026-05-13 - Completed quick task 260513-kru: 修复 worker netns 获取失败
+milestone: v3.6
+milestone_name: 端到端测试体系与网络隔离验证
+status: planning
+stopped_at: null
+last_updated: "2026-05-14T00:00:00Z"
+last_activity: 2026-05-14 - Started milestone v3.6 via /gsd:new-milestone
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 14
-  completed_plans: 14
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-08)
+See: .planning/PROJECT.md (updated 2026-05-14)
 
 **Core value:** 给每个用户提供一台开箱即用的 SSH 云主机，并且严格保证其所有出网流量都走受控的指定出口 IP
-**Current focus:** v3.4 已发布，待规划下一里程碑
+**Current focus:** v3.6 端到端测试体系与网络隔离验证 — 定义需求中
 
 ## Current Position
 
-Milestone: v3.4 多形态容器接入 — SHIPPED (tag v3.4.0)
-Phases: 38-44 (7 phases, 14 plans) — ALL COMPLETE
-Next: `/gsd:new-milestone` to plan next milestone
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-14 — Milestone v3.5 started
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Accumulated Context
 

@@ -121,9 +121,68 @@
 
 </details>
 
+<details>
+<summary>◆ v3.6 端到端测试体系与网络隔离验证 (Phases 45-52) — IN PROGRESS</summary>
+
+- [ ] Phase 45: 测试基础设施与 CI 骨架 (5/5 plans)
+  - E2E-01: `tests/e2e/` 目录 + testcontainers-go + testify/suite
+  - E2E-02: headscale-style Scenario 抽象
+  - E2E-03: CI 双层架构（hosted + self-hosted Linux runner）
+  - E2E-04: 失败自动归档 artifact
+  - E2E-05: waitFor 条件等待（禁止裸 sleep）
+
+- [ ] Phase 46: MVS 黄金路径与出口 IP 验证 (5/5 plans)
+  - MVS-01: bootstrap 黄金路径 e2e
+  - MVS-02: 出口 IP 匹配验证（三源轮询）
+  - MVS-03: DNS 强制走 tun
+  - MVS-04: 默认拒绝生效（多 IP × 多端口）
+  - MVS-05: CLI 错误码契约
+
+- [ ] Phase 47: MVS 治理与心跳验证 (3/3 plans)
+  - MVS-06: 到期容器自动停止 + 审计事件
+  - MVS-07: 出口 IP 双绑互斥
+  - MVS-08: host-agent 心跳与恢复
+
+- [ ] Phase 48: Kill-switch 核心验证 (2/2 plans)
+  - MVS-09: sing-box 崩溃后容器断网
+  - MVS-10: 用户态 resolv.conf 篡改免疫
+
+- [ ] Phase 49: 防泄漏对抗测试 (8/8 plans)
+  - LEAK-01: DNS 明文 UDP/53 旁路
+  - LEAK-02: DoT (853) 旁路
+  - LEAK-03: ICMP 阻断
+  - LEAK-04: IPv6 阻断
+  - LEAK-05: IMDS 阻断
+  - LEAK-06: raw socket 拒绝
+  - LEAK-07: link-local 显式 drop
+  - LEAK-08: capability 审计
+
+- [ ] Phase 50: Kill-switch 压力测试 (4/4 plans)
+  - KILL-01: SIGKILL gateway → 断网
+  - KILL-02: tun0 down → 断网
+  - KILL-03: Pumba netem 故障注入
+  - KILL-04: network disconnect 不回落
+
+- [ ] Phase 51: 代码层质量加固 (8/8 plans)
+  - QUAL-01: verify.go 多源轮询
+  - QUAL-02: verify.go 多目标泄漏检测
+  - QUAL-03: verify.go 全 nameserver 校验
+  - QUAL-04: namespace.go 探测窗口参数化
+  - QUAL-05: nftables 规则加 counter
+  - QUAL-06: worker cap-drop NET_RAW/NET_ADMIN
+  - QUAL-07: go test -race -shuffle=on
+  - QUAL-08: goleak.VerifyTestMain
+
+- [ ] Phase 52: 可观测性与诊断 (3/3 plans)
+  - OBS-01: collect-artifacts.sh 脚本
+  - OBS-02: artifact 目录结构
+  - OBS-03: CI upload-artifact 集成
+
+</details>
+
 ## Progress
 
-**Next milestone:** TBD — 运行 `/gsd:new-milestone` 规划下一里程碑
+**Next milestone:** v3.6 — 端到端测试体系与网络隔离验证
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -135,7 +194,8 @@
 | 29-35. v3.0 远端开发体验升级 | v3.0 | 30/30 | Complete | 2026-04-23 |
 | 36-37. v3.1 映射语义补齐与懒加载 | v3.1 | 11/11 | Complete | 2026-04-24 |
 | 38-44. v3.4 多形态容器接入 | v3.4 | 14/14 | Complete | 2026-05-08 |
+| 45-52. v3.6 端到端测试体系 | v3.6 | 0/38 | In Progress | — |
 
 ---
 
-*Last updated: 2026-05-08 — v3.4 milestone shipped (tag v3.4.0). All 14 plans complete.*
+*Last updated: 2026-05-14 — v3.6 milestone initialized. 38 requirements, 8 phases planned.*
