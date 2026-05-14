@@ -4,14 +4,14 @@ milestone: v3.6
 milestone_name: 端到端测试体系与网络隔离验证
 status: in_progress
 stopped_at: null
-last_updated: "2026-05-14T13:30:00Z"
-last_activity: 2026-05-14 - Phase 50 完成（Kill-switch 压力 4 KILL + 29 新单测 + Pumba 0.10.0 固定 tag）
+last_updated: "2026-05-14T14:30:00Z"
+last_activity: 2026-05-14 - Phase 51 完成（代码层加固 9 plan + 闭环 Phase 47/49 三 GAP + 新依赖仅 goleak）
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 38
-  completed_plans: 27
-  percent: 71
+  completed_plans: 36
+  percent: 95
 ---
 
 # Project State

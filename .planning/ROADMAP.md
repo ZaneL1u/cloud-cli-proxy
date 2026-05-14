@@ -277,14 +277,18 @@
 
 **Plans**: 8 plans
 
-- [ ] 51-01-PLAN.md — verify.go `verifyEgressIP` 多源轮询（≥3 个独立回显服务）
-- [ ] 51-02-PLAN.md — verify.go `verifyLeakBlocked` 多目标参数化（多 IP × 多端口）
-- [ ] 51-03-PLAN.md — verify.go `verifyDNS` 遍历全部 nameserver 行
-- [ ] 51-04-PLAN.md — namespace.go `GetContainerNetNS` 探测窗口与重试上限暴露给 e2e 配置
-- [ ] 51-05-PLAN.md — worker_firewall_linux.go 全部规则加 `counter` 表达式
-- [ ] 51-06-PLAN.md — worker 容器启动参数加 `--cap-drop=NET_RAW --cap-drop=NET_ADMIN`
-- [ ] 51-07-PLAN.md — `go test ./... -race -shuffle=on -count=1` 成为默认测试命令
-- [ ] 51-08-PLAN.md — goleak.VerifyTestMain 接入（排除 sing-box / pgx 已知泄漏）
+- [x] 51-01-PLAN.md — verify.go `verifyEgressIPMulti` 三源 + `voteEgressIP`（复用 Phase 46 Vote 语义）— completed 2026-05-14
+- [x] 51-02-PLAN.md — verify.go `verifyLeakBlockedMulti` 多 target 默认值对齐 `DefaultDenyMatrix` — completed 2026-05-14
+- [x] 51-03-PLAN.md — verify.go `parseAllNameservers` 遍历全 nameserver 行 — completed 2026-05-14
+- [x] 51-04-PLAN.md — namespace.go `WithProbeWindow / WithMaxRetries` functional option — completed 2026-05-14
+- [x] 51-05-PLAN.md — worker_firewall_linux 全规则 `expr.Counter` + 新增 `169.254.0.0/16 drop`（闭 Phase 49 GAP-2）— completed 2026-05-14
+- [x] 51-06-PLAN.md — worker 显式 `--cap-drop NET_RAW` + 删 `SYS_ADMIN`，NET_ADMIN 按 sing-box tun 依赖保留（部分闭 Phase 49 GAP-1）— completed 2026-05-14
+- [x] 51-07-PLAN.md — Makefile + ci.yml `-race -shuffle=on -count=1` 默认 — completed 2026-05-14
+- [x] 51-08-PLAN.md — `cmd/cloud-claude/testmain_test.go` goleak.VerifyTestMain 接入 — completed 2026-05-14
+
+> 51-09（新增收口）：`internal/controlplane/http/admin_bindings.go` 双绑 pre-check + `ErrCodeEgressIPAlreadyBound` + 409 + 双语 message（**闭 Phase 47 D-47-3**）— completed 2026-05-14。
+
+> 注：QUAL-06 实际落地保留 `--cap-add NET_ADMIN`（CONTEXT §Area 4 允许的折中），原因是 sing-box 需在 worker netns 创建 tun0 设备。Phase 49 LEAK-08 fixture `proc_status_clean.txt` NET_ADMIN 期望需在 e2e 后续校准。
 
 **Details:**
 
@@ -328,7 +332,7 @@
 | 29-35. v3.0 远端开发体验升级 | v3.0 | 30/30 | Complete | 2026-04-23 |
 | 36-37. v3.1 映射语义补齐与懒加载 | v3.1 | 11/11 | Complete | 2026-04-24 |
 | 38-44. v3.4 多形态容器接入 | v3.4 | 14/14 | Complete | 2026-05-08 |
-| 45-52. v3.6 端到端测试体系 | v3.6 | 27/38 | In Progress | — |
+| 45-52. v3.6 端到端测试体系 | v3.6 | 36/38 | In Progress | — |
 
 ---
 
