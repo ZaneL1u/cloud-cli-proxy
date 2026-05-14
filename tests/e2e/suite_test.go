@@ -22,23 +22,26 @@ import (
 // 它故意不依赖 Scenario builder（Plan 02）/ waitFor helper（Plan 03）/
 // artifact dump（Plan 04），保持成为后续 plan 的反向独立基线 —— 即使后续
 // helper 全坏了，本套件仍能用作"e2e 链路自检"的最小烟雾。
+//
+// 嵌入策略：嵌入 *值类型* harness.BaseSuite（不是 *harness.BaseSuite 指针）。
+// 原因：testify suite.Run 在 new(SmokeSuite) 时通过反射调嵌入链上的
+// (*Suite).SetT(t)，若嵌入指针类型则 BaseSuite 字段是 nil → SetT panic。
+// 嵌入值类型时 BaseSuite.Suite 自动初始化为零值，方法 promote 安全。
 type SmokeSuite struct {
-	*harness.BaseSuite
-}
-
-func (s *SmokeSuite) SetupSuite() {
-	s.BaseSuite = &harness.BaseSuite{}
-	s.BaseSuite.SetT(s.T())
-	s.BaseSuite.SetupSuite()
-}
-
-func (s *SmokeSuite) TearDownSuite() {
-	s.BaseSuite.TearDownSuite()
+	harness.BaseSuite
 }
 
 // TestPostgresReady 起一个 postgres:18 容器，等待其就绪日志（出现 2 次以
 // 排除中间的 init 重启假阳性），然后在容器内执行 pg_isready，断言退出码 0。
+//
+// docker daemon 不可用时（如本机没启动 OrbStack）自动 t.Skip，避免在开发机
+// 上跑 `go test -tags=e2e` 因环境缺失而 FAIL；CI 在 hosted ubuntu-24.04
+// 上 docker 永远可用，会真实跑通。
 func (s *SmokeSuite) TestPostgresReady() {
+	if _, err := testcontainers.NewDockerProvider(); err != nil {
+		s.T().Skipf("docker provider unavailable, skipping: %v", err)
+	}
+
 	ctx, cancel := context.WithTimeout(s.Ctx, 120*time.Second)
 	defer cancel()
 
