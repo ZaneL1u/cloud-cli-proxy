@@ -627,6 +627,380 @@ func ClassifyResolvConfDNSOutcome(tamper ResolvConfTamperResult, dnsResult DNSPr
 	}
 }
 
+// ─── Phase 49 / LEAK-01..08 共享类型与纯函数 ────────────────────────────
+
+// LeakProbeResult 是各 LEAK-* 用例容器内探测命令（dig / ping / curl / python -c
+// SOCK_RAW 等）的统一结果结构（CONTEXT §Specifics 锁定）。
+//
+// 字段语义：
+//   - Blocked：是否被防御层阻断（true = 防泄漏成功，可能是 timeout / refused /
+//     drop / permission_denied）。
+//   - Reason：阻断原因的简短归类，便于 t.Logf / artifact dump 检索（如
+//     "dig_timeout", "raw_socket_denied", "imds_http_error"）。
+//   - RawStdout / RawStderr：原始输出，留给失败排障；本结构本身不解释。
+//   - ExitCode：子进程退出码；docker exec 失败 / 句柄不存在 → -1。
+//   - Duration：从发起 docker exec 到拿到结果的端到端耗时。
+type LeakProbeResult struct {
+	Blocked   bool
+	Reason    string
+	RawStdout string
+	RawStderr string
+	ExitCode  int
+	Duration  time.Duration
+}
+
+// LeakVerdict 是 ClassifyLeakProbe 的三值返回。
+//
+//   - LeakVerdictPass：实际行为与预期一致（防泄漏生效或预期未阻断）。
+//   - LeakVerdictFail：实际行为与预期相反（最坏情况：预期阻断但实际通了）。
+//   - LeakVerdictInconclusive：探测本身报错或结果模糊，调用方应 t.Skip 或
+//     补充证据后重判。
+type LeakVerdict int
+
+const (
+	LeakVerdictUnknown LeakVerdict = iota
+	LeakVerdictPass
+	LeakVerdictFail
+	LeakVerdictInconclusive
+)
+
+// String 让 LeakVerdict 在 t.Log / artifact dump 中可读。
+func (v LeakVerdict) String() string {
+	switch v {
+	case LeakVerdictPass:
+		return "Pass"
+	case LeakVerdictFail:
+		return "Fail"
+	case LeakVerdictInconclusive:
+		return "Inconclusive"
+	default:
+		return "Unknown"
+	}
+}
+
+// ClassifyLeakProbe 把 LeakProbeResult 与「预期是否被阻断」合成裁决。
+//
+// 行为表：
+//
+//	result == nil                                    → Inconclusive
+//	result.ExitCode == -1 && result.Reason == ""     → Inconclusive（docker exec 报错）
+//	result.Blocked == expectBlocked                  → Pass
+//	result.Blocked != expectBlocked                  → Fail
+//
+// CONTEXT §Area 4：失败时 Reason 字面量与 RawStderr 末尾必须打到 t.Logf，便于
+// LeakDumpHook 自动归档时携带上下文。
+func ClassifyLeakProbe(result *LeakProbeResult, expectBlocked bool) LeakVerdict {
+	if result == nil {
+		return LeakVerdictInconclusive
+	}
+	if result.ExitCode == -1 && result.Reason == "" {
+		return LeakVerdictInconclusive
+	}
+	if result.Blocked == expectBlocked {
+		return LeakVerdictPass
+	}
+	return LeakVerdictFail
+}
+
+// ─── Phase 49 LEAK-07 / nft 规则与 counter 解析 ─────────────────────────
+
+// NftRule 是 ParseNftRules 抽出的规则规范化视图（CONTEXT §Specifics）。
+//
+// 不强求覆盖 nft 全语法；只关心 LEAK-* 用例需要的字段：destination CIDR /
+// 协议 / 端口 / verdict（drop / accept / reject）。
+type NftRule struct {
+	Table   string
+	Chain   string
+	Action  string // drop / accept / reject / counter / log
+	Dst     string // ip daddr 字面量；如 169.254.0.0/16 / 1.1.1.1/32 / "" = 任意
+	Proto   string // tcp / udp / icmp / ""
+	Port    int    // dport 数值；0 = 任意
+	Comment string // nft `comment "..."` 抽取
+	RawLine string // 原始行，便于 fixture 调试
+}
+
+// nftTableRe 匹配 `table inet|ip|ip6 <name> {`。
+var nftTableRe = regexp.MustCompile(`^\s*table\s+(\w+)\s+(\w+)\s+\{`)
+
+// nftChainRe 匹配 `chain <name> {`。
+var nftChainRe = regexp.MustCompile(`^\s*chain\s+(\w+)\s+\{`)
+
+// nftIPDaddrRe 匹配 `ip daddr <字面量>`（CIDR 或单 IP）。
+var nftIPDaddrRe = regexp.MustCompile(`ip\s+daddr\s+([0-9a-fA-F:.]+(?:/\d+)?)`)
+
+// nftDportRe 匹配 `(tcp|udp) dport <num>`。
+var nftDportRe = regexp.MustCompile(`(tcp|udp)\s+dport\s+(\d+)`)
+
+// nftCommentRe 匹配 `comment "<text>"`。
+var nftCommentRe = regexp.MustCompile(`comment\s+"([^"]*)"`)
+
+// nftCounterRe 匹配 `counter packets <N> bytes <M>`。
+var nftCounterRe = regexp.MustCompile(`counter\s+packets\s+(\d+)\s+bytes\s+(\d+)`)
+
+// ParseNftRules 把 `nft list ruleset` 文本展平为 []NftRule。
+//
+// 解析策略：
+//   - 维护 (table, chain) 上下文，遇 `}` 出栈。
+//   - 每行尝试抽 daddr / dport / verdict / comment；命中 verdict 之一才算
+//     一条 NftRule（避免把 `type filter hook output ...` 之类元行也算进来）。
+//   - verdict 优先级：drop > reject > accept；行内 `counter` 视为附属，不单独
+//     算一条 verdict。
+//   - LEAK-07 用例只关心 drop 规则的 Dst/Proto/Port，因此覆盖率以这三项为准；
+//     accept 规则的解析仅用于完整性，不强保证字段完整。
+func ParseNftRules(raw string) []NftRule {
+	var out []NftRule
+	var curTable, curChain string
+	depth := 0
+
+	for _, line := range strings.Split(raw, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		if m := nftTableRe.FindStringSubmatch(line); len(m) == 3 {
+			curTable = m[1] + " " + m[2]
+			depth++
+			continue
+		}
+		if m := nftChainRe.FindStringSubmatch(line); len(m) == 2 {
+			curChain = m[1]
+			depth++
+			continue
+		}
+		if trimmed == "}" {
+			depth--
+			if depth == 1 {
+				curChain = ""
+			} else if depth == 0 {
+				curTable = ""
+			}
+			continue
+		}
+
+		var action string
+		switch {
+		case strings.Contains(trimmed, " drop") || strings.HasSuffix(trimmed, "drop"):
+			action = "drop"
+		case strings.Contains(trimmed, " reject"):
+			action = "reject"
+		case strings.HasSuffix(trimmed, " accept") || strings.HasSuffix(trimmed, "accept"):
+			action = "accept"
+		default:
+			continue
+		}
+
+		rule := NftRule{
+			Table:   curTable,
+			Chain:   curChain,
+			Action:  action,
+			RawLine: trimmed,
+		}
+		if m := nftIPDaddrRe.FindStringSubmatch(trimmed); len(m) == 2 {
+			rule.Dst = m[1]
+		}
+		if m := nftDportRe.FindStringSubmatch(trimmed); len(m) == 3 {
+			rule.Proto = m[1]
+			if p, perr := strconv.Atoi(m[2]); perr == nil {
+				rule.Port = p
+			}
+		}
+		if m := nftCommentRe.FindStringSubmatch(trimmed); len(m) == 2 {
+			rule.Comment = m[1]
+		}
+		out = append(out, rule)
+	}
+	return out
+}
+
+// ParseNftCounters 提取规则集中所有 `counter packets N bytes M` 计数。
+//
+// key 优先用 `comment "<x>"`；缺失 comment 时退回 `<chain>:<index>` 复合键
+// （index 是 chain 内 counter 出现序号，从 0 起）。
+//
+// 返回 map[key]packets。bytes 信息丢弃（LEAK 用例只关心是否命中，不做带宽
+// 测算）。空输入 / 无 counter → 返回空 map（非 nil），便于调用方安全
+// `for k, v := range`。
+func ParseNftCounters(raw string) map[string]uint64 {
+	out := map[string]uint64{}
+	var curChain string
+	chainIdx := map[string]int{}
+
+	for _, line := range strings.Split(raw, "\n") {
+		if m := nftChainRe.FindStringSubmatch(line); len(m) == 2 {
+			curChain = m[1]
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		m := nftCounterRe.FindStringSubmatch(trimmed)
+		if len(m) < 3 {
+			continue
+		}
+		packets, err := strconv.ParseUint(m[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		var key string
+		if cm := nftCommentRe.FindStringSubmatch(trimmed); len(cm) == 2 {
+			key = cm[1]
+		} else {
+			idx := chainIdx[curChain]
+			key = fmt.Sprintf("%s:%d", curChain, idx)
+			chainIdx[curChain] = idx + 1
+		}
+		out[key] = packets
+	}
+	return out
+}
+
+// HasLinkLocalDropRule 扫一组 NftRule，判断是否至少存在一条 destination 为
+// `169.254.x.x` 前缀的 drop 规则（LEAK-07 主断言）。
+//
+// 行为：精确字面量前缀匹配 `169.254`，避免被 `169.2540.x` 之类反例误命中。
+// CIDR 子集（`169.254.169.254/32`）与超集（`169.254.0.0/16`）都视为命中。
+func HasLinkLocalDropRule(rules []NftRule) bool {
+	for _, r := range rules {
+		if r.Action != "drop" {
+			continue
+		}
+		if strings.HasPrefix(r.Dst, "169.254") {
+			return true
+		}
+	}
+	return false
+}
+
+// ─── Phase 49 LEAK-08 / capability 解析 ────────────────────────────────
+
+// Capability 是 worker 容器进程 1 的 capability 字符串常量（CONTEXT §Specifics）。
+//
+// 锁定 ≥10 个常用 cap 名字 + 位序号，覆盖 LEAK-08 关心的 NET_RAW / NET_ADMIN
+// / SYS_ADMIN，以及若干常见 cap（便于 SUMMARY 调试时打全名而非位掩码）。
+//
+// 位序号严格遵照 Linux <uapi/linux/capability.h>，任一漂移立即在 darwin 单测
+// 失败（防止 backend 切到非标准 capability 名字）。
+const (
+	CapNetRaw          = "CAP_NET_RAW"
+	CapNetAdmin        = "CAP_NET_ADMIN"
+	CapSysAdmin        = "CAP_SYS_ADMIN"
+	CapSysPtrace       = "CAP_SYS_PTRACE"
+	CapDacReadSearch   = "CAP_DAC_READ_SEARCH"
+	CapNetBindService  = "CAP_NET_BIND_SERVICE"
+	CapChown           = "CAP_CHOWN"
+	CapSetuid          = "CAP_SETUID"
+	CapSetgid          = "CAP_SETGID"
+	CapKill            = "CAP_KILL"
+	CapSysChroot       = "CAP_SYS_CHROOT"
+	CapMknod           = "CAP_MKNOD"
+	CapAuditWrite      = "CAP_AUDIT_WRITE"
+	CapSetfcap         = "CAP_SETFCAP"
+)
+
+// KnownCapabilityBits 锁定 bit index → cap name 映射。Phase 49 只锁 LEAK-08
+// 关心的 ≥10 个 cap，不追求覆盖完整 Linux cap 集（v2 范围）。
+var KnownCapabilityBits = map[int]string{
+	0:  CapChown,
+	2:  CapDacReadSearch,
+	5:  CapKill,
+	6:  CapSetgid,
+	7:  CapSetuid,
+	10: CapNetBindService,
+	12: CapNetAdmin,
+	13: CapNetRaw,
+	18: CapSysChroot,
+	19: CapSysPtrace,
+	21: CapSysAdmin,
+	27: CapMknod,
+	29: CapAuditWrite,
+	31: CapSetfcap,
+}
+
+// ProcCapabilities 是 ParseProcCapabilities 的返回结构。
+//
+// 4 个字段对应 /proc/<pid>/status 中的 4 行 capability bitmask；map[capName]bool
+// 形式便于用例直接 `if caps.Eff[CapNetRaw] { ... }` 断言。
+type ProcCapabilities struct {
+	Inh map[string]bool
+	Prm map[string]bool
+	Eff map[string]bool
+	Bnd map[string]bool
+}
+
+// procCapLineRe 匹配 `Cap{Inh,Prm,Eff,Bnd}:\s+<16 hex chars>`。
+var procCapLineRe = regexp.MustCompile(`(?m)^Cap(Inh|Prm|Eff|Bnd):\s+([0-9a-fA-F]+)\s*$`)
+
+// ParseProcCapabilities 解析 `/proc/<pid>/status` 中 4 行 capability 掩码。
+//
+// 行为：
+//   - 4 行（CapInh / CapPrm / CapEff / CapBnd）必须全部命中；缺任一 → 返回 err。
+//   - hex 长度 ≤ 16 字符（最大 0xffff_ffff_ffff_ffff）；超长或非 hex → err。
+//   - 结果 map 仅包含 KnownCapabilityBits 表中已知的 cap；未知位被忽略
+//     （v3 范围只锁 LEAK-08 关心 cap）。
+//
+// 不依赖 setpcaps / getpcaps 可执行；纯字符串解析，darwin 上可直接跑单测。
+func ParseProcCapabilities(raw string) (ProcCapabilities, error) {
+	caps := ProcCapabilities{
+		Inh: map[string]bool{},
+		Prm: map[string]bool{},
+		Eff: map[string]bool{},
+		Bnd: map[string]bool{},
+	}
+	matches := procCapLineRe.FindAllStringSubmatch(raw, -1)
+	if len(matches) < 4 {
+		return caps, fmt.Errorf("parse proc caps: expected 4 Cap lines, got %d", len(matches))
+	}
+	seen := map[string]bool{}
+	for _, m := range matches {
+		field, hexVal := m[1], m[2]
+		if seen[field] {
+			continue
+		}
+		if len(hexVal) > 16 {
+			return caps, fmt.Errorf("parse proc caps: %s hex too long: %q", field, hexVal)
+		}
+		bits, err := strconv.ParseUint(hexVal, 16, 64)
+		if err != nil {
+			return caps, fmt.Errorf("parse proc caps: %s: %w", field, err)
+		}
+		expanded := expandCapBits(bits)
+		switch field {
+		case "Inh":
+			caps.Inh = expanded
+		case "Prm":
+			caps.Prm = expanded
+		case "Eff":
+			caps.Eff = expanded
+		case "Bnd":
+			caps.Bnd = expanded
+		}
+		seen[field] = true
+	}
+	for _, want := range []string{"Inh", "Prm", "Eff", "Bnd"} {
+		if !seen[want] {
+			return caps, fmt.Errorf("parse proc caps: missing Cap%s line", want)
+		}
+	}
+	return caps, nil
+}
+
+// expandCapBits 把 64 位掩码按 KnownCapabilityBits 展开成已知 cap 名集合。
+func expandCapBits(bits uint64) map[string]bool {
+	out := map[string]bool{}
+	for bit, name := range KnownCapabilityBits {
+		if bits&(1<<uint(bit)) != 0 {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// LeakDangerousCaps 是 LEAK-08 严格禁止出现在 worker 进程 CapEff/CapBnd 的
+// capability 集合。任一命中 → 用例 fail。
+var LeakDangerousCaps = []string{CapNetRaw, CapNetAdmin, CapSysAdmin}
+
 // ─── 既有锁定表（保留） ────────────────────────────────────────────────
 
 // CLIErrorCases 是 MVS-05 的 4 个 table-driven 用例预设（用例代码可直接 range）。

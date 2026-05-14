@@ -1,0 +1,5 @@
+; <<>> DiG 9.18.18-0ubuntu0.22.04.2-Ubuntu <<>> +short +time=3 +tries=1 @8.8.8.8 example.com
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: SERVFAIL, id: 12345
+;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 0

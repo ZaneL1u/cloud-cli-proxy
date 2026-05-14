@@ -1,0 +1,2 @@
+;; WARNING: TLS, handshake failed (Connection timed out)
+;; ERROR: failed to query server 1.1.1.1@853(TCP)

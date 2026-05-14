@@ -760,6 +760,395 @@ func (p *GoldenPath) ProbeDNSFromUser(ctx context.Context, domain string, timeou
 	return DNSResultUnknown, fmt.Errorf("probe dns: docker exec %s: %w", name, runErr)
 }
 
+// ─── Phase 49 / LEAK-01..08 容器内探测 helpers ─────────────────────────
+//
+// 通用约定：
+//   - 所有 LEAK 探测方法返回 *LeakProbeResult + error；err 仅在容器句柄缺失
+//     或 docker exec 本身报错（容器不在 / docker daemon 不通）时非 nil。
+//   - 子进程退出码非 0 不视为本函数错误；通过 LeakProbeResult.ExitCode +
+//     Reason 表达 Blocked / 未阻断分支。
+//   - 调用方拿 *LeakProbeResult 后再调 ClassifyLeakProbe 与「期望」合成 verdict。
+
+// execWorkerCapture 是 LEAK-* 探测方法的统一入口：
+// `docker exec <worker> <argv...>`，捕获 stdout/stderr/exit code/duration，
+// 包装成 LeakProbeResult 雏形。Blocked / Reason 由调用方根据自己的语义填。
+func (p *GoldenPath) execWorkerCapture(ctx context.Context, argv []string) (*LeakProbeResult, error) {
+	name, err := p.workerDockerName()
+	if err != nil {
+		return nil, err
+	}
+	full := append([]string{"exec", name}, argv...)
+	cmd := exec.CommandContext(ctx, "docker", full...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	start := time.Now()
+	runErr := cmd.Run()
+	duration := time.Since(start)
+
+	res := &LeakProbeResult{
+		RawStdout: stdout.String(),
+		RawStderr: stderr.String(),
+		Duration:  duration,
+	}
+	if runErr == nil {
+		res.ExitCode = 0
+		return res, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) {
+		res.ExitCode = exitErr.ExitCode()
+		return res, nil
+	}
+	res.ExitCode = -1
+	return res, fmt.Errorf("docker exec %s: %w", name, runErr)
+}
+
+// digIPv4Re 抓 dig +short 输出中的 IPv4 字面量；命中即 dig 拿到了 A 记录。
+var digIPv4Re = regexp.MustCompile(`(?m)^\s*(\d{1,3}\.){3}\d{1,3}\s*$`)
+
+// DigPlainDNS 在 worker 容器内跑 `dig +short +time=3 +tries=1 @<server> <name>`，
+// 解析为 LeakProbeResult（LEAK-01）。
+//
+// 语义：
+//   - exit 0 + stdout 含 IPv4 → Blocked=false（dig 拿到了 A 记录，疑似泄漏）。
+//   - exit 0 + stdout 空 / 仅 ; 注释 → Blocked=true, Reason="dig_empty"。
+//   - exit 9 (SERVFAIL) / exit 10 (timeout) / stderr 含 timeout 关键字 → Blocked=true。
+//   - 其它 → Blocked=true, Reason="dig_other_error"（保守归 Blocked，避免误判 Fail）。
+func (p *GoldenPath) DigPlainDNS(ctx context.Context, server, name string) (*LeakProbeResult, error) {
+	argv := []string{"dig", "+short", "+time=3", "+tries=1", "@" + server, name}
+	res, err := p.execWorkerCapture(ctx, argv)
+	if err != nil || res == nil {
+		return res, err
+	}
+	if res.ExitCode == 0 && digIPv4Re.MatchString(res.RawStdout) {
+		res.Blocked = false
+		res.Reason = "dig_resolved"
+		return res, nil
+	}
+	lower := strings.ToLower(res.RawStderr + res.RawStdout)
+	switch {
+	case strings.Contains(lower, "timed out"), strings.Contains(lower, "timeout"):
+		res.Blocked = true
+		res.Reason = "dig_timeout"
+	case strings.Contains(lower, "servfail"):
+		res.Blocked = true
+		res.Reason = "dig_servfail"
+	case strings.Contains(lower, "connection refused"):
+		res.Blocked = true
+		res.Reason = "dig_refused"
+	case strings.Contains(lower, "no servers could be reached"):
+		res.Blocked = true
+		res.Reason = "dig_no_servers"
+	default:
+		res.Blocked = true
+		res.Reason = "dig_other_error"
+	}
+	return res, nil
+}
+
+// DigDoT 在 worker 容器内尝试 DoT (TCP/853) 直连（LEAK-02）。
+//
+// 实现：
+//
+//	bash -c 'command -v kdig >/dev/null && kdig +tls +time=3 @<server> <name>
+//	         || (timeout 5 openssl s_client -connect <server>:853 -brief </dev/null)'
+//
+// 解析：
+//   - exit 0 + stdout 含 `Verify return code: 0` 或 IPv4 字面量 → Blocked=false。
+//   - 其它 → Blocked=true，Reason 按 stderr 关键字分类。
+func (p *GoldenPath) DigDoT(ctx context.Context, server, name string) (*LeakProbeResult, error) {
+	script := fmt.Sprintf(
+		"command -v kdig >/dev/null && kdig +tls +time=3 @%s %s "+
+			"|| (timeout 5 openssl s_client -connect %s:853 -brief </dev/null 2>&1)",
+		server, name, server,
+	)
+	argv := []string{"bash", "-c", script}
+	res, err := p.execWorkerCapture(ctx, argv)
+	if err != nil || res == nil {
+		return res, err
+	}
+	combined := res.RawStdout + res.RawStderr
+	lower := strings.ToLower(combined)
+	if res.ExitCode == 0 && (strings.Contains(combined, "Verify return code: 0") ||
+		digIPv4Re.MatchString(res.RawStdout)) {
+		res.Blocked = false
+		res.Reason = "dot_handshake_ok"
+		return res, nil
+	}
+	switch {
+	case strings.Contains(lower, "connection refused"):
+		res.Blocked = true
+		res.Reason = "dot_refused"
+	case strings.Contains(lower, "timed out"), strings.Contains(lower, "timeout"):
+		res.Blocked = true
+		res.Reason = "dot_timeout"
+	case strings.Contains(lower, "handshake failed"), strings.Contains(lower, "verify error"):
+		res.Blocked = true
+		res.Reason = "dot_tls_failed"
+	default:
+		res.Blocked = true
+		res.Reason = "dot_other_error"
+	}
+	return res, nil
+}
+
+// PingICMP 在 worker 容器内跑 `ping -c 1 -W 3 <target>`（LEAK-03）。
+//
+// 解析：
+//   - exit 0 + stdout 含 `1 received` → Blocked=false（ICMP 通了）。
+//   - exit 2 + stderr 含 `Operation not permitted` / `Permission denied`
+//     → Blocked=true, Reason="raw_socket_denied"（同时映射 LEAK-06 行为）。
+//   - exit 1 + stdout 含 `0 received` / stderr 含 `Network is unreachable`
+//     / `Destination Host Unreachable` → Blocked=true, Reason="ping_no_reply"
+//     或 "route_unreachable"。
+func (p *GoldenPath) PingICMP(ctx context.Context, target string) (*LeakProbeResult, error) {
+	argv := []string{"ping", "-c", "1", "-W", "3", target}
+	res, err := p.execWorkerCapture(ctx, argv)
+	if err != nil || res == nil {
+		return res, err
+	}
+	combined := res.RawStdout + res.RawStderr
+	lower := strings.ToLower(combined)
+	if res.ExitCode == 0 && strings.Contains(combined, "1 received") {
+		res.Blocked = false
+		res.Reason = "ping_replied"
+		return res, nil
+	}
+	switch {
+	case strings.Contains(lower, "operation not permitted"),
+		strings.Contains(lower, "permission denied"):
+		res.Blocked = true
+		res.Reason = "raw_socket_denied"
+	case strings.Contains(lower, "network is unreachable"),
+		strings.Contains(lower, "destination host unreachable"),
+		strings.Contains(lower, "no route to host"):
+		res.Blocked = true
+		res.Reason = "route_unreachable"
+	case strings.Contains(lower, "0 received"):
+		res.Blocked = true
+		res.Reason = "ping_no_reply"
+	default:
+		res.Blocked = true
+		res.Reason = "ping_other_error"
+	}
+	return res, nil
+}
+
+// CurlIPv6 在 worker 容器内跑 `curl -6 -sS --max-time 3 <url>`（LEAK-04）。
+//
+// 解析：
+//   - exit 0 + stdout 非空 → Blocked=false（IPv6 出网成功）。
+//   - exit 6 / 7 / 28 / stderr 含 unreachable / disabled → Blocked=true。
+func (p *GoldenPath) CurlIPv6(ctx context.Context, url string) (*LeakProbeResult, error) {
+	argv := []string{"curl", "-6", "-sS", "--max-time", "3", url}
+	res, err := p.execWorkerCapture(ctx, argv)
+	if err != nil || res == nil {
+		return res, err
+	}
+	if res.ExitCode == 0 && strings.TrimSpace(res.RawStdout) != "" {
+		res.Blocked = false
+		res.Reason = "ipv6_curl_ok"
+		return res, nil
+	}
+	lower := strings.ToLower(res.RawStderr)
+	switch {
+	case strings.Contains(lower, "could not resolve host"):
+		res.Blocked = true
+		res.Reason = "ipv6_dns_failed"
+	case strings.Contains(lower, "couldn't connect"),
+		strings.Contains(lower, "network unreachable"),
+		strings.Contains(lower, "network is unreachable"):
+		res.Blocked = true
+		res.Reason = "ipv6_unreachable"
+	case strings.Contains(lower, "timed out"), strings.Contains(lower, "timeout"):
+		res.Blocked = true
+		res.Reason = "ipv6_timeout"
+	default:
+		res.Blocked = true
+		res.Reason = "ipv6_other_error"
+	}
+	return res, nil
+}
+
+// ReadProcFile 在 worker 容器内 `cat <path>` 读 /proc 文件（LEAK-04 双保险用）。
+func (p *GoldenPath) ReadProcFile(ctx context.Context, path string) (string, error) {
+	argv := []string{"cat", path}
+	res, err := p.execWorkerCapture(ctx, argv)
+	if err != nil {
+		return "", err
+	}
+	if res.ExitCode != 0 {
+		return strings.TrimSpace(res.RawStdout),
+			fmt.Errorf("read proc file %s: exit=%d stderr=%s", path, res.ExitCode, res.RawStderr)
+	}
+	return strings.TrimSpace(res.RawStdout), nil
+}
+
+// CurlIMDS 在 worker 容器内打 IMDS 端点（LEAK-05）。
+//
+// 命令：`curl -sS -o /dev/null -w '%{http_code}' --max-time 3 <url>`。
+//
+// 解析：
+//   - exit 0 + stdout == "200" → Blocked=false（IMDS 响应成功，疑似真泄漏）。
+//   - exit 0 + http 4xx/5xx → Blocked=true, Reason="imds_http_error"。
+//   - exit 7 / 28 / stderr 含 refused / timeout → Blocked=true。
+func (p *GoldenPath) CurlIMDS(ctx context.Context, url string) (*LeakProbeResult, error) {
+	argv := []string{"curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}",
+		"--max-time", "3", url}
+	res, err := p.execWorkerCapture(ctx, argv)
+	if err != nil || res == nil {
+		return res, err
+	}
+	httpCode := strings.TrimSpace(res.RawStdout)
+	lower := strings.ToLower(res.RawStderr)
+	switch {
+	case res.ExitCode == 0 && httpCode == "200":
+		res.Blocked = false
+		res.Reason = "imds_responded_200"
+	case res.ExitCode == 0 && len(httpCode) == 3:
+		res.Blocked = true
+		res.Reason = "imds_http_" + httpCode
+	case strings.Contains(lower, "connection refused"):
+		res.Blocked = true
+		res.Reason = "imds_refused"
+	case strings.Contains(lower, "timed out"), strings.Contains(lower, "timeout"):
+		res.Blocked = true
+		res.Reason = "imds_timeout"
+	case strings.Contains(lower, "couldn't connect"),
+		strings.Contains(lower, "no route to host"),
+		strings.Contains(lower, "network is unreachable"):
+		res.Blocked = true
+		res.Reason = "imds_unreachable"
+	default:
+		res.Blocked = true
+		res.Reason = "imds_other_error"
+	}
+	return res, nil
+}
+
+// TryRawSocket 在 worker 容器内尝试创建 SOCK_RAW socket（LEAK-06）。
+//
+// 优先 python3 路径；缺失时回退 bash exec /dev/raw/icmp（旧风格行为相同）。
+//
+// 解析：
+//   - stdout 含 `RAW_OK` → Blocked=false（capability 允许 raw socket，实锤 leak）。
+//   - stderr 含 `PermissionError` / `Operation not permitted` → Blocked=true。
+func (p *GoldenPath) TryRawSocket(ctx context.Context) (*LeakProbeResult, error) {
+	script := `if command -v python3 >/dev/null; then
+  python3 -c 'import socket; s=socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP); print("RAW_OK")' 2>&1
+elif command -v python >/dev/null; then
+  python -c 'import socket; s=socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP); print("RAW_OK")' 2>&1
+else
+  bash -c 'exec 3<>/dev/raw/icmp 2>&1' && echo "RAW_OK"
+fi`
+	argv := []string{"bash", "-c", script}
+	res, err := p.execWorkerCapture(ctx, argv)
+	if err != nil || res == nil {
+		return res, err
+	}
+	combined := res.RawStdout + res.RawStderr
+	lower := strings.ToLower(combined)
+	switch {
+	case strings.Contains(combined, "RAW_OK"):
+		res.Blocked = false
+		res.Reason = "raw_socket_allowed"
+	case strings.Contains(lower, "permissionerror"),
+		strings.Contains(lower, "operation not permitted"),
+		strings.Contains(lower, "permission denied"):
+		res.Blocked = true
+		res.Reason = "raw_socket_denied"
+	default:
+		res.Blocked = true
+		res.Reason = "raw_socket_other_error"
+	}
+	return res, nil
+}
+
+// ListNftRulesOnHost 在宿主机执行 `nft list ruleset`（LEAK-07）。
+//
+// 实现路径：
+//   - 默认走 `docker run --rm --network host --cap-add NET_ADMIN --cap-add SYS_ADMIN
+//     <netshoot> nft list ruleset`。
+//   - 路径 B（`E2E_ALLOW_HOST_TCPDUMP=1` + uid==0）：直接 `nft list ruleset`。
+//
+// 失败 → 返 err，调用方 t.Skip。
+func (p *GoldenPath) ListNftRulesOnHost(ctx context.Context) (string, error) {
+	subCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	useHostNative := getEnvOrDefault("E2E_ALLOW_HOST_TCPDUMP", "") == "1" && os.Geteuid() == 0
+	var cmd *exec.Cmd
+	if useHostNative {
+		cmd = exec.CommandContext(subCtx, "nft", "list", "ruleset")
+	} else {
+		image := getEnvOrDefault("E2E_TCPDUMP_IMAGE", "nicolaka/netshoot:v0.13")
+		cmd = exec.CommandContext(subCtx, "docker", "run", "--rm",
+			"--network", "host",
+			"--cap-add", "NET_ADMIN", "--cap-add", "SYS_ADMIN",
+			image, "nft", "list", "ruleset")
+	}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return stdout.String(), fmt.Errorf("nft list ruleset: %w (stderr=%s)", err, stderr.String())
+	}
+	return stdout.String(), nil
+}
+
+// GetProcCapabilities 在 worker 容器内 `cat /proc/<pid>/status`（LEAK-08）。
+//
+// 返回完整 stdout 文本；调用方传给 ParseProcCapabilities 解析。
+func (p *GoldenPath) GetProcCapabilities(ctx context.Context, pid int) (string, error) {
+	argv := []string{"cat", fmt.Sprintf("/proc/%d/status", pid)}
+	res, err := p.execWorkerCapture(ctx, argv)
+	if err != nil {
+		return "", err
+	}
+	if res.ExitCode != 0 {
+		return res.RawStdout,
+			fmt.Errorf("cat /proc/%d/status: exit=%d stderr=%s", pid, res.ExitCode, res.RawStderr)
+	}
+	return res.RawStdout, nil
+}
+
+// EnsureWorkerLeakTools 在 LeakSuite SetupSuite 中调用，最多 best-effort
+// 安装 LEAK-* 用例需要的工具：dig (dnsutils) / kdig (knot-dnsutils) /
+// openssl / iputils-ping / python3-minimal。
+//
+// 行为：
+//   - 已存在 → 跳过；安装失败 → 仅 logger.Warn，让具体用例自行决定 Skip 或 Fail。
+//   - 一次性 apt-get update + install；不重复刷新 cache。
+//   - worker 容器句柄未填充 → 直接返 nil（用例侧会 Skip）。
+//
+// 镜像内已装 curl / cat / bash / grep / awk，不再处理。
+func (p *GoldenPath) EnsureWorkerLeakTools(ctx context.Context) error {
+	name, err := p.workerDockerName()
+	if err != nil {
+		return nil
+	}
+	script := `set -e
+need=()
+for pkg in dig kdig openssl ping python3; do
+  command -v "$pkg" >/dev/null 2>&1 || need+=("$pkg")
+done
+if [ "${#need[@]}" -eq 0 ]; then
+  echo "all-present"
+  exit 0
+fi
+apt-get update -qq >/dev/null 2>&1 || true
+apt-get install -y --no-install-recommends \
+  dnsutils knot-dnsutils openssl iputils-ping python3-minimal >/dev/null 2>&1 || true
+echo "install-attempted"`
+	cmd := exec.CommandContext(ctx, "docker", "exec", name, "bash", "-c", script)
+	out, runErr := cmd.CombinedOutput()
+	if runErr != nil {
+		return fmt.Errorf("ensure leak tools: %w (out=%s)", runErr, string(out))
+	}
+	return nil
+}
+
 // ─── 内部 helpers ──────────────────────────────────────────────────────
 
 // disableKeepAliveClient 返回一个禁 keep-alive 的 http.Client，避免长连接造成

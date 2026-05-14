@@ -1,0 +1,14 @@
+Name:	tini
+Umask:	0022
+State:	S (sleeping)
+Tgid:	1
+Pid:	1
+Uid:	0	0	0	0
+Gid:	0	0	0	0
+CapInh:	0000000000000000
+CapPrm:	00000000a83435fb
+CapEff:	00000000a83435fb
+CapBnd:	00000000a83435fb
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0

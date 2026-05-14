@@ -1,0 +1,7 @@
+CONNECTED(00000003)
+write:errno=104
+unable to load certificate
+4017A8B17F7F0000:error:0A000126:SSL routines:ssl3_read_n:unexpected eof while reading:../ssl/record/rec_layer_s3.c:308:
+no peer certificate available
+SSL handshake has read 0 bytes and written 318 bytes
+Verification: OK

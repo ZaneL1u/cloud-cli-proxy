@@ -15,12 +15,29 @@ package e2e
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	bootstraperrors "github.com/zanel1u/cloud-cli-proxy/internal/controlplane/http"
 )
+
+// readLeakFixture 是 Phase 49 LEAK-* 纯函数单测的 fixture 加载入口。
+// 走 runtime.Caller 反推项目根，禁绝对路径硬编码。
+func readLeakFixture(t *testing.T, name string) string {
+	t.Helper()
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Dir(file)
+	path := filepath.Join(root, "testdata", "leak", name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", name, err)
+	}
+	return string(data)
+}
 
 // ─── MVS-02 / Vote 多数派裁决 ─────────────────────────────────────────
 
@@ -696,3 +713,414 @@ func TestHelpersCLIErrorCases_Wellformed(t *testing.T) {
 		}
 	}
 }
+
+// ─── Phase 49 / LEAK-* 纯函数单测（fixture-driven） ────────────────────
+
+// ─── ClassifyLeakProbe 行为分支 ────────────────────────────────────────
+
+func TestHelpersClassifyLeakProbe_NilInputInconclusive(t *testing.T) {
+	if got := ClassifyLeakProbe(nil, true); got != LeakVerdictInconclusive {
+		t.Fatalf("nil result expected Inconclusive, got %s", got)
+	}
+}
+
+func TestHelpersClassifyLeakProbe_DockerExecErrorInconclusive(t *testing.T) {
+	res := &LeakProbeResult{ExitCode: -1, Reason: ""}
+	if got := ClassifyLeakProbe(res, true); got != LeakVerdictInconclusive {
+		t.Fatalf("ExitCode=-1 + empty Reason expected Inconclusive, got %s", got)
+	}
+}
+
+func TestHelpersClassifyLeakProbe_BlockedExpectedPass(t *testing.T) {
+	res := &LeakProbeResult{Blocked: true, Reason: "dig_timeout", ExitCode: 9}
+	if got := ClassifyLeakProbe(res, true); got != LeakVerdictPass {
+		t.Fatalf("expected Pass, got %s", got)
+	}
+}
+
+func TestHelpersClassifyLeakProbe_NotBlockedNotExpectedPass(t *testing.T) {
+	res := &LeakProbeResult{Blocked: false, Reason: "ok", ExitCode: 0}
+	if got := ClassifyLeakProbe(res, false); got != LeakVerdictPass {
+		t.Fatalf("expected Pass when neither blocked nor expected, got %s", got)
+	}
+}
+
+func TestHelpersClassifyLeakProbe_LeakIsFail(t *testing.T) {
+	res := &LeakProbeResult{Blocked: false, Reason: "imds_responded_200", ExitCode: 0}
+	if got := ClassifyLeakProbe(res, true); got != LeakVerdictFail {
+		t.Fatalf("expected Fail when leaked, got %s", got)
+	}
+}
+
+func TestHelpersLeakVerdict_String(t *testing.T) {
+	cases := map[LeakVerdict]string{
+		LeakVerdictUnknown:      "Unknown",
+		LeakVerdictPass:         "Pass",
+		LeakVerdictFail:         "Fail",
+		LeakVerdictInconclusive: "Inconclusive",
+	}
+	for k, want := range cases {
+		if got := k.String(); got != want {
+			t.Fatalf("LeakVerdict(%d).String(): got %q want %q", k, got, want)
+		}
+	}
+}
+
+func TestHelpersLeakDangerousCaps_Locked(t *testing.T) {
+	want := []string{CapNetRaw, CapNetAdmin, CapSysAdmin}
+	if len(LeakDangerousCaps) != len(want) {
+		t.Fatalf("LeakDangerousCaps len=%d want %d", len(LeakDangerousCaps), len(want))
+	}
+	for i, c := range want {
+		if LeakDangerousCaps[i] != c {
+			t.Fatalf("LeakDangerousCaps[%d]=%q want %q", i, LeakDangerousCaps[i], c)
+		}
+	}
+}
+
+// ─── ParseNftRules fixture 驱动 ────────────────────────────────────────
+
+func TestHelpersParseNftRules_LinkLocalDropPresent(t *testing.T) {
+	raw := readLeakFixture(t, "nft_ruleset_with_link_local_drop.txt")
+	rules := ParseNftRules(raw)
+	if !HasLinkLocalDropRule(rules) {
+		t.Fatalf("expected at least one link-local drop rule, got rules=%+v", rules)
+	}
+
+	var sawIMDS, sawWideCIDR bool
+	for _, r := range rules {
+		if r.Action == "drop" && r.Dst == "169.254.169.254" {
+			sawIMDS = true
+		}
+		if r.Action == "drop" && r.Dst == "169.254.0.0/16" {
+			sawWideCIDR = true
+		}
+	}
+	if !sawIMDS || !sawWideCIDR {
+		t.Fatalf("expected both 169.254.169.254 and 169.254.0.0/16 drop rules; got rules=%+v", rules)
+	}
+}
+
+func TestHelpersParseNftRules_LinkLocalAbsent(t *testing.T) {
+	raw := readLeakFixture(t, "nft_ruleset_no_link_local.txt")
+	rules := ParseNftRules(raw)
+	if HasLinkLocalDropRule(rules) {
+		t.Fatalf("expected NO link-local drop, but rules contain one: %+v", rules)
+	}
+	var sawMdns bool
+	for _, r := range rules {
+		if r.Action == "drop" && r.Proto == "udp" && r.Port == 5353 {
+			sawMdns = true
+		}
+	}
+	if !sawMdns {
+		t.Fatalf("expected mdns 5353 drop, rules=%+v", rules)
+	}
+}
+
+func TestHelpersParseNftRules_CountersFixture(t *testing.T) {
+	raw := readLeakFixture(t, "nft_ruleset_with_counters.txt")
+	rules := ParseNftRules(raw)
+	if len(rules) < 4 {
+		t.Fatalf("expected ≥4 rules, got %d (%+v)", len(rules), rules)
+	}
+	var sawDoT, sawPlainDNS bool
+	for _, r := range rules {
+		if r.Action == "drop" && r.Proto == "tcp" && r.Port == 853 {
+			sawDoT = true
+		}
+		if r.Action == "drop" && r.Proto == "udp" && r.Port == 53 {
+			sawPlainDNS = true
+		}
+	}
+	if !sawDoT || !sawPlainDNS {
+		t.Fatalf("expected DoT (tcp/853) and plain DNS (udp/53) drop rules, got %+v", rules)
+	}
+}
+
+func TestHelpersParseNftRules_EmptyFixture(t *testing.T) {
+	raw := readLeakFixture(t, "nft_ruleset_empty.txt")
+	rules := ParseNftRules(raw)
+	if len(rules) != 0 {
+		t.Fatalf("expected 0 rules in empty fixture, got %d (%+v)", len(rules), rules)
+	}
+	if HasLinkLocalDropRule(nil) {
+		t.Fatalf("HasLinkLocalDropRule(nil) must be false")
+	}
+}
+
+func TestHelpersParseNftRules_EmptyRawString(t *testing.T) {
+	rules := ParseNftRules("")
+	if len(rules) != 0 {
+		t.Fatalf("empty input must yield 0 rules, got %+v", rules)
+	}
+}
+
+// ─── ParseNftCounters fixture 驱动 ─────────────────────────────────────
+
+func TestHelpersParseNftCounters_WithCommentsKeyed(t *testing.T) {
+	raw := readLeakFixture(t, "nft_ruleset_with_counters.txt")
+	counters := ParseNftCounters(raw)
+	if got, ok := counters["imds-drop"]; !ok || got != 7 {
+		t.Fatalf("counter[imds-drop]=%d ok=%v want 7", got, ok)
+	}
+	if got, ok := counters["dot-drop"]; !ok || got != 4 {
+		t.Fatalf("counter[dot-drop]=%d ok=%v want 4", got, ok)
+	}
+	if got, ok := counters["plain-dns-8888"]; !ok || got != 11 {
+		t.Fatalf("counter[plain-dns-8888]=%d ok=%v want 11", got, ok)
+	}
+	if got, ok := counters["sbfw-tail"]; !ok || got != 99 {
+		t.Fatalf("counter[sbfw-tail]=%d ok=%v want 99", got, ok)
+	}
+}
+
+func TestHelpersParseNftCounters_EmptyFixture(t *testing.T) {
+	raw := readLeakFixture(t, "nft_ruleset_empty.txt")
+	counters := ParseNftCounters(raw)
+	if len(counters) != 0 {
+		t.Fatalf("empty fixture must yield 0 counters, got %+v", counters)
+	}
+}
+
+func TestHelpersParseNftCounters_FallbackChainIndex(t *testing.T) {
+	// 不带 comment，应回落到 <chain>:<index>。
+	raw := `table ip filter {
+	chain output {
+		ip daddr 169.254.169.254 counter packets 3 bytes 192 drop
+		ip daddr 169.254.0.0/16 counter packets 8 bytes 512 drop
+	}
+}`
+	counters := ParseNftCounters(raw)
+	if got, ok := counters["output:0"]; !ok || got != 3 {
+		t.Fatalf("counter[output:0]=%d ok=%v want 3 (counters=%+v)", got, ok, counters)
+	}
+	if got, ok := counters["output:1"]; !ok || got != 8 {
+		t.Fatalf("counter[output:1]=%d ok=%v want 8 (counters=%+v)", got, ok, counters)
+	}
+}
+
+// ─── KnownCapabilityBits 锁定 ──────────────────────────────────────────
+
+func TestHelpersKnownCapabilityBits_LocksCriticalSubset(t *testing.T) {
+	want := map[int]string{
+		12: CapNetAdmin,
+		13: CapNetRaw,
+		21: CapSysAdmin,
+	}
+	for bit, name := range want {
+		got, ok := KnownCapabilityBits[bit]
+		if !ok {
+			t.Errorf("KnownCapabilityBits missing bit %d (%s)", bit, name)
+			continue
+		}
+		if got != name {
+			t.Errorf("KnownCapabilityBits[%d]=%q want %q", bit, got, name)
+		}
+	}
+	if len(KnownCapabilityBits) < 10 {
+		t.Errorf("KnownCapabilityBits should cover ≥10 caps, got %d", len(KnownCapabilityBits))
+	}
+}
+
+// ─── ParseProcCapabilities fixture 驱动 ────────────────────────────────
+
+func TestHelpersParseProcCapabilities_Clean(t *testing.T) {
+	raw := readLeakFixture(t, "proc_status_clean.txt")
+	caps, err := ParseProcCapabilities(raw)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	for _, dangerous := range LeakDangerousCaps {
+		if caps.Eff[dangerous] {
+			t.Errorf("clean fixture must NOT have %s in CapEff, got=%v", dangerous, caps.Eff)
+		}
+		if caps.Bnd[dangerous] {
+			t.Errorf("clean fixture must NOT have %s in CapBnd, got=%v", dangerous, caps.Bnd)
+		}
+	}
+	if !caps.Eff[CapChown] {
+		t.Errorf("clean fixture should still have CHOWN in CapEff, got=%v", caps.Eff)
+	}
+}
+
+func TestHelpersParseProcCapabilities_DirtyHasDangerous(t *testing.T) {
+	raw := readLeakFixture(t, "proc_status_dirty.txt")
+	caps, err := ParseProcCapabilities(raw)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	for _, dangerous := range []string{CapNetRaw, CapNetAdmin, CapSysAdmin} {
+		if !caps.Eff[dangerous] {
+			t.Errorf("dirty fixture must have %s in CapEff, got=%v", dangerous, caps.Eff)
+		}
+		if !caps.Bnd[dangerous] {
+			t.Errorf("dirty fixture must have %s in CapBnd, got=%v", dangerous, caps.Bnd)
+		}
+	}
+}
+
+func TestHelpersParseProcCapabilities_PartialAllBoundOnly(t *testing.T) {
+	// Inh/Prm/Eff 全 0；Bnd=0x3fffffffff（位 0..37 都置 1）。
+	raw := readLeakFixture(t, "proc_status_partial.txt")
+	caps, err := ParseProcCapabilities(raw)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	for _, dangerous := range LeakDangerousCaps {
+		if caps.Eff[dangerous] {
+			t.Errorf("partial fixture: %s should NOT be in Eff (eff is 0)", dangerous)
+		}
+		if !caps.Bnd[dangerous] {
+			t.Errorf("partial fixture: %s should be in Bnd (bnd is all-ones)", dangerous)
+		}
+	}
+}
+
+func TestHelpersParseProcCapabilities_CorruptHexErr(t *testing.T) {
+	raw := readLeakFixture(t, "proc_status_corrupt.txt")
+	_, err := ParseProcCapabilities(raw)
+	if err == nil {
+		t.Fatalf("expected err on corrupt hex, got nil")
+	}
+}
+
+func TestHelpersParseProcCapabilities_MissingLines(t *testing.T) {
+	// 只给 2 行，缺 Eff / Bnd。
+	raw := "CapInh:\t0000000000000000\nCapPrm:\t0000000000000000\n"
+	_, err := ParseProcCapabilities(raw)
+	if err == nil {
+		t.Fatalf("expected err on missing CapEff/CapBnd, got nil")
+	}
+}
+
+func TestHelpersParseNftRules_AcceptRulesNotMissed(t *testing.T) {
+	raw := readLeakFixture(t, "nft_ruleset_with_link_local_drop.txt")
+	rules := ParseNftRules(raw)
+	var sawAccept bool
+	for _, r := range rules {
+		if r.Action == "accept" {
+			sawAccept = true
+			break
+		}
+	}
+	if !sawAccept {
+		t.Fatalf("expected at least one accept rule, got %+v", rules)
+	}
+}
+
+func TestHelpersParseNftRules_TableChainContextPropagated(t *testing.T) {
+	raw := readLeakFixture(t, "nft_ruleset_with_link_local_drop.txt")
+	rules := ParseNftRules(raw)
+	for _, r := range rules {
+		if r.Table == "" {
+			t.Fatalf("rule missing Table context: %+v", r)
+		}
+		if r.Chain == "" {
+			t.Fatalf("rule missing Chain context: %+v", r)
+		}
+	}
+}
+
+func TestHelpersHasLinkLocalDropRule_RejectsAcceptOnly(t *testing.T) {
+	rules := []NftRule{
+		{Action: "accept", Dst: "169.254.0.0/16"},
+		{Action: "drop", Dst: "1.1.1.1"},
+	}
+	if HasLinkLocalDropRule(rules) {
+		t.Fatalf("accept-only link-local must NOT count as drop")
+	}
+}
+
+func TestHelpersHasLinkLocalDropRule_AcceptsExactIMDS(t *testing.T) {
+	rules := []NftRule{
+		{Action: "drop", Dst: "169.254.169.254/32"},
+	}
+	if !HasLinkLocalDropRule(rules) {
+		t.Fatalf("expected exact 169.254.169.254/32 drop to count")
+	}
+}
+
+func TestHelpersParseProcCapabilities_TabSeparator(t *testing.T) {
+	raw := "CapInh:\t0000000000000000\n" +
+		"CapPrm:\t00000000a80405fb\n" +
+		"CapEff:\t00000000a80405fb\n" +
+		"CapBnd:\t00000000a80405fb\n" +
+		"CapAmb:\t0000000000000000\n"
+	caps, err := ParseProcCapabilities(raw)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !caps.Eff[CapChown] {
+		t.Errorf("expected CHOWN in Eff with tab separator, got %v", caps.Eff)
+	}
+}
+
+func TestHelpersParseProcCapabilities_AllZerosNoCaps(t *testing.T) {
+	raw := "CapInh:\t0000000000000000\n" +
+		"CapPrm:\t0000000000000000\n" +
+		"CapEff:\t0000000000000000\n" +
+		"CapBnd:\t0000000000000000\n"
+	caps, err := ParseProcCapabilities(raw)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(caps.Eff) != 0 {
+		t.Errorf("all-zero hex must yield empty Eff set, got %v", caps.Eff)
+	}
+	if len(caps.Bnd) != 0 {
+		t.Errorf("all-zero hex must yield empty Bnd set, got %v", caps.Bnd)
+	}
+}
+
+func TestHelpersParseProcCapabilities_NetAdminBitOnly(t *testing.T) {
+	// 0x1000 = 1<<12 = NET_ADMIN
+	raw := "CapInh:\t0000000000000000\n" +
+		"CapPrm:\t0000000000001000\n" +
+		"CapEff:\t0000000000001000\n" +
+		"CapBnd:\t0000000000001000\n"
+	caps, err := ParseProcCapabilities(raw)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !caps.Eff[CapNetAdmin] {
+		t.Errorf("expected CAP_NET_ADMIN in Eff for hex 0x1000, got %v", caps.Eff)
+	}
+	if caps.Eff[CapNetRaw] || caps.Eff[CapSysAdmin] {
+		t.Errorf("only NET_ADMIN should be set, got %v", caps.Eff)
+	}
+}
+
+func TestHelpersParseProcCapabilities_SysAdminBitOnly(t *testing.T) {
+	// 0x200000 = 1<<21 = SYS_ADMIN
+	raw := "CapInh:\t0000000000000000\n" +
+		"CapPrm:\t0000000000200000\n" +
+		"CapEff:\t0000000000200000\n" +
+		"CapBnd:\t0000000000200000\n"
+	caps, err := ParseProcCapabilities(raw)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !caps.Eff[CapSysAdmin] {
+		t.Errorf("expected CAP_SYS_ADMIN in Eff for hex 0x200000, got %v", caps.Eff)
+	}
+}
+
+func TestHelpersExpandCapBits_NetRawBit(t *testing.T) {
+	// bit 13 = CAP_NET_RAW
+	caps, err := ParseProcCapabilities(
+		"CapInh:\t0000000000000000\n" +
+			"CapPrm:\t0000000000002000\n" +
+			"CapEff:\t0000000000002000\n" +
+			"CapBnd:\t0000000000002000\n")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !caps.Eff[CapNetRaw] {
+		t.Errorf("expected CAP_NET_RAW in Eff for hex 0x2000, got %v", caps.Eff)
+	}
+	if caps.Eff[CapNetAdmin] || caps.Eff[CapSysAdmin] {
+		t.Errorf("only NET_RAW should be set, got %v", caps.Eff)
+	}
+}
+

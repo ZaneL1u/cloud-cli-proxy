@@ -1,0 +1,15 @@
+table ip filter {
+	chain output {
+		type filter hook output priority filter; policy accept;
+		ip daddr 169.254.169.254 counter packets 5 bytes 320 drop comment "imds-drop"
+		ip daddr 169.254.0.0/16 counter packets 12 bytes 768 drop comment "linklocal-drop"
+		oifname "sb-tun0" accept
+		counter packets 0 bytes 0 log prefix "sbfw-drop " drop
+	}
+}
+table ip6 filter6 {
+	chain output6 {
+		type filter hook output priority filter; policy drop;
+		oif "lo" accept
+	}
+}

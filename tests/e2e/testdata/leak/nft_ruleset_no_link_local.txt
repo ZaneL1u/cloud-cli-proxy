@@ -1,0 +1,15 @@
+table ip filter {
+	chain output {
+		type filter hook output priority filter; policy accept;
+		oifname "sb-tun0" accept
+		udp dport 5353 counter packets 0 bytes 0 drop comment "mdns-drop"
+		udp dport 5355 counter packets 0 bytes 0 drop comment "llmnr-drop"
+		counter packets 3 bytes 192 log prefix "sbfw-drop " drop
+	}
+}
+table ip6 filter6 {
+	chain output6 {
+		type filter hook output priority filter; policy drop;
+		oif "lo" accept
+	}
+}

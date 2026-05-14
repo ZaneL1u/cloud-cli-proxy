@@ -1,0 +1,7 @@
+;; communications error to 8.8.8.8#53: timed out
+;; communications error to 8.8.8.8#53: timed out
+;; communications error to 8.8.8.8#53: timed out
+
+; <<>> DiG 9.18.18-0ubuntu0.22.04.2-Ubuntu <<>> +short +time=3 +tries=1 @8.8.8.8 example.com
+;; global options: +cmd
+;; no servers could be reached

@@ -1,0 +1,9 @@
+table ip filter {
+	chain output {
+		type filter hook output priority filter; policy accept;
+		ip daddr 169.254.169.254 counter packets 7 bytes 448 drop comment "imds-drop"
+		tcp dport 853 counter packets 4 bytes 256 drop comment "dot-drop"
+		udp dport 53 ip daddr 8.8.8.8 counter packets 11 bytes 704 drop comment "plain-dns-8888"
+		counter packets 99 bytes 6336 log prefix "sbfw-drop " drop comment "sbfw-tail"
+	}
+}
