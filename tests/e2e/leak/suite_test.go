@@ -50,6 +50,20 @@ func StartLeakGolden(t *testing.T) (*e2e.GoldenPath, bool) {
 	return g, false
 }
 
+// EnsureDumper 注册用例失败钩子，输出一行 logger.Warn 提醒 artifact dump
+// 应由 BaseSuite TearDownTest 接管（Phase 52 OBS-01..03 引入完整 dumper）。
+func EnsureDumper(t *testing.T, g *e2e.GoldenPath) {
+	t.Helper()
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		t.Logf("LEAK fixture dump hook triggered for %s; artifact dump should be collected by harness",
+			t.Name())
+		_ = g
+	})
+}
+
 // EnsureLeakWorkerTools 在 LEAK 用例 setup 阶段 best-effort 安装探测工具。
 // 失败仅 t.Logf，让具体用例按需 Skip。
 func EnsureLeakWorkerTools(t *testing.T, g *e2e.GoldenPath) {
