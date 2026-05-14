@@ -14,7 +14,9 @@ package e2e
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -440,6 +442,189 @@ var HostHealthRecoveryContract = struct {
 }{
 	UnhealthyWithin: 30 * time.Second,
 	HealthyWithin:   60 * time.Second,
+}
+
+// ─── MVS-09 / Kill-switch：sing-box 崩溃断网 ──────────────────────────
+
+// KillswitchVerdict 是 ClassifyKillswitchResult 的返回枚举（MVS-09 / Phase 48 Plan 01）。
+//
+// 语义对照表：
+//
+//	probeExitCode != 0 && leakedPackets == 0 → KillswitchOK
+//	probeExitCode == 0 && leakedPackets == 0 → KillswitchProbeUnexpectedlySucceeded
+//	probeExitCode != 0 && leakedPackets > 0  → KillswitchPacketLeak
+//	probeExitCode == 0 && leakedPackets > 0  → KillswitchBoth
+type KillswitchVerdict int
+
+const (
+	KillswitchUnknown KillswitchVerdict = iota
+	KillswitchOK
+	KillswitchProbeUnexpectedlySucceeded
+	KillswitchPacketLeak
+	KillswitchBoth
+)
+
+// String 让 KillswitchVerdict 在 t.Log / artifact dump 中可读。
+func (v KillswitchVerdict) String() string {
+	switch v {
+	case KillswitchOK:
+		return "OK"
+	case KillswitchProbeUnexpectedlySucceeded:
+		return "ProbeUnexpectedlySucceeded"
+	case KillswitchPacketLeak:
+		return "PacketLeak"
+	case KillswitchBoth:
+		return "Both"
+	default:
+		return "Unknown"
+	}
+}
+
+// ClassifyKillswitchResult 把容器内 curl 退出码 + host eth0 tcpdump 计数合成
+// kill-switch 裁决（MVS-09）。
+//
+// 入参：
+//   - probeExitCode：容器内 `curl --max-time N <url>` 退出码。0 = 仍能出网。
+//   - leakedPackets：host eth0 在 BPF `src host <worker> and not dst <gateway>`
+//     下捕获的「绕过 gateway」包数。
+//
+// 任一非零包 + curl 0 都视为违例；只有两者同时干净才 KillswitchOK。
+func ClassifyKillswitchResult(probeExitCode int, leakedPackets int) KillswitchVerdict {
+	switch {
+	case probeExitCode != 0 && leakedPackets == 0:
+		return KillswitchOK
+	case probeExitCode == 0 && leakedPackets == 0:
+		return KillswitchProbeUnexpectedlySucceeded
+	case probeExitCode != 0 && leakedPackets > 0:
+		return KillswitchPacketLeak
+	default:
+		return KillswitchBoth
+	}
+}
+
+// KillswitchTimingContract 锁定 MVS-09 与 Phase 50 KILL-01 共享的 timing 不变量。
+//
+//   - ProbeMaxLatency：kill gateway 后允许容器内 curl 探测的最大等待时间。
+//   - TcpdumpWindow：host eth0 抓包 oracle 的捕获窗口（让 curl 在这个窗口内发完包）。
+//
+// 任一漂移 → darwin 单测立即 fail，Phase 50 必须同步修。
+var KillswitchTimingContract = struct {
+	ProbeMaxLatency time.Duration
+	TcpdumpWindow   time.Duration
+}{
+	ProbeMaxLatency: 3 * time.Second,
+	TcpdumpWindow:   5 * time.Second,
+}
+
+// tcpdumpCountRe 抓 tcpdump stderr 中 `N packets captured` 字面量。
+// tcpdump 退出时输出形如：
+//
+//	5 packets captured
+//	5 packets received by filter
+//	0 packets dropped by kernel
+//
+// 大小写不敏感（部分 BSD tcpdump 用大写）。
+var tcpdumpCountRe = regexp.MustCompile(`(?i)(\d+)\s+packets?\s+captured`)
+
+// ErrTcpdumpCountNotFound 表示 stderr 中找不到 `N packets captured` 字样。
+// 调用方应据此向上层冒泡（不能默默当成 0）。
+var ErrTcpdumpCountNotFound = errors.New("tcpdump count: pattern not found in stderr")
+
+// ParseTcpdumpCountOutput 从 tcpdump 退出后写入 stderr 的统计行中抽出捕获包数。
+//
+// 行为：
+//   - 命中 tcpdumpCountRe 第一组 → 返回 (N, nil)。
+//   - 空 stderr / 缺关键字 → 返回 (0, ErrTcpdumpCountNotFound)。
+//   - 数字解析失败（极少见，但兜底） → 返回 (0, err)。
+//
+// 不做 trim/lower 之外的归一化，避免吞掉 tcpdump 真实错误。
+func ParseTcpdumpCountOutput(stderr string) (int, error) {
+	if strings.TrimSpace(stderr) == "" {
+		return 0, ErrTcpdumpCountNotFound
+	}
+	m := tcpdumpCountRe.FindStringSubmatch(stderr)
+	if len(m) < 2 {
+		return 0, ErrTcpdumpCountNotFound
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, fmt.Errorf("tcpdump count: parse %q: %w", m[1], err)
+	}
+	return n, nil
+}
+
+// ─── MVS-10 / Kill-switch：resolv.conf 篡改免疫 ───────────────────────
+
+// ResolvConfTamperResult 是 GoldenPath.TamperResolvConf 的返回枚举（MVS-10）。
+//
+//   - TamperApplied：worker 容器内 `echo > /etc/resolv.conf` 成功覆写，
+//     `grep` 能命中新 nameserver。这是「绕过 ro bind mount」成功的合法分支。
+//   - TamperRejected：写入失败（EROFS / EBUSY / permission denied），
+//     系统侧抗住了，这也是合法分支（CONTEXT §Area 2）。
+//   - TamperUnknown：exec 本身报错，调用方需 t.Fatalf。
+type ResolvConfTamperResult int
+
+const (
+	TamperUnknown ResolvConfTamperResult = iota
+	TamperApplied
+	TamperRejected
+)
+
+// String 让 ResolvConfTamperResult 在 t.Log 输出可读。
+func (r ResolvConfTamperResult) String() string {
+	switch r {
+	case TamperApplied:
+		return "Applied"
+	case TamperRejected:
+		return "Rejected"
+	default:
+		return "Unknown"
+	}
+}
+
+// ResolvConfTamperContract 锁定 MVS-10 篡改用的目标 nameserver。
+//
+// 与 host eth0 BPF filter（`udp port 53 and dst 8.8.8.8`）必须保持一致，
+// 任一漂移会导致抓包 oracle 抓不到泄漏包。
+var ResolvConfTamperContract = struct {
+	Nameserver string
+}{
+	Nameserver: "8.8.8.8",
+}
+
+// ClassifyResolvConfDNSOutcome 把 (tamper 结果, DNS probe 分类, 抓包计数)
+// 合成 MVS-10 最终裁决。
+//
+// 行为表（来源：48-02-PLAN.md §Steps Step 3）：
+//
+//	Rejected | *                  | *     | true
+//	Applied  | Tunneled / Denied  | 0     | true
+//	Applied  | Tunneled / Denied  | >0    | false（抓包 oracle 发现绕过）
+//	Applied  | Leaked             | *     | false
+//	Applied  | Unknown            | *     | false
+//
+// 返回 (ok, reason)。reason 用于 t.Logf / artifact dump，便于排障。
+func ClassifyResolvConfDNSOutcome(tamper ResolvConfTamperResult, dnsResult DNSProbeResult, leakedPackets int) (bool, string) {
+	if tamper == TamperRejected {
+		return true, "ro bind mount 抗住了 resolv.conf 写入（系统侧防御生效）"
+	}
+	if tamper != TamperApplied {
+		return false, fmt.Sprintf("tamper result=%s 不在合法分支（Applied/Rejected）内", tamper)
+	}
+	if leakedPackets > 0 {
+		return false, fmt.Sprintf("host eth0 抓到 %d 个 UDP/53 → %s 包，存在直连泄漏",
+			leakedPackets, ResolvConfTamperContract.Nameserver)
+	}
+	switch dnsResult {
+	case DNSResultTunneled:
+		return true, "tun 接管 DNS，用户态改写不生效"
+	case DNSResultDenied:
+		return true, "防火墙明确拒绝直连 DNS"
+	case DNSResultLeaked:
+		return false, "DNS 被分类为 Leaked，明确证据走宿主机直连"
+	default:
+		return false, fmt.Sprintf("DNS 分类不明（%s），需 t.Logf stderr 排障", dnsResult)
+	}
 }
 
 // ─── 既有锁定表（保留） ────────────────────────────────────────────────

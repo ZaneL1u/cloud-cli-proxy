@@ -14,6 +14,7 @@
 package e2e
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -486,6 +487,189 @@ func TestHelpersHostHealthRecoveryContract_Locked(t *testing.T) {
 	}
 	if HostHealthRecoveryContract.HealthyWithin != 60*time.Second {
 		t.Fatalf("HealthyWithin drifted: %v", HostHealthRecoveryContract.HealthyWithin)
+	}
+}
+
+// ─── MVS-09 / Kill-switch：sing-box 崩溃断网 ──────────────────────────
+
+func TestHelpersParseTcpdumpCount_FivePackets(t *testing.T) {
+	stderr := "tcpdump: listening on eth0, link-type EN10MB, capture size 262144 bytes\n" +
+		"5 packets captured\n" +
+		"5 packets received by filter\n" +
+		"0 packets dropped by kernel\n"
+	got, err := ParseTcpdumpCountOutput(stderr)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got != 5 {
+		t.Fatalf("expected 5, got %d", got)
+	}
+}
+
+func TestHelpersParseTcpdumpCount_ZeroPackets(t *testing.T) {
+	stderr := "tcpdump: listening on eth0\n0 packets captured\n0 packets received by filter\n"
+	got, err := ParseTcpdumpCountOutput(stderr)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got != 0 {
+		t.Fatalf("expected 0, got %d", got)
+	}
+}
+
+func TestHelpersParseTcpdumpCount_SingularPacket(t *testing.T) {
+	stderr := "1 packet captured\n1 packet received by filter\n"
+	got, err := ParseTcpdumpCountOutput(stderr)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("expected 1, got %d", got)
+	}
+}
+
+func TestHelpersParseTcpdumpCount_EmptyStderr(t *testing.T) {
+	_, err := ParseTcpdumpCountOutput("")
+	if !errors.Is(err, ErrTcpdumpCountNotFound) {
+		t.Fatalf("expected ErrTcpdumpCountNotFound, got %v", err)
+	}
+}
+
+func TestHelpersParseTcpdumpCount_NoMatchSubstring(t *testing.T) {
+	stderr := "tcpdump: permission denied (cannot open BPF device)\n"
+	_, err := ParseTcpdumpCountOutput(stderr)
+	if !errors.Is(err, ErrTcpdumpCountNotFound) {
+		t.Fatalf("expected ErrTcpdumpCountNotFound on permission denied stderr, got %v", err)
+	}
+}
+
+func TestHelpersClassifyKillswitch_OK(t *testing.T) {
+	got := ClassifyKillswitchResult(28, 0)
+	if got != KillswitchOK {
+		t.Fatalf("expected KillswitchOK, got %s", got)
+	}
+}
+
+func TestHelpersClassifyKillswitch_ProbeUnexpectedlySucceeded(t *testing.T) {
+	got := ClassifyKillswitchResult(0, 0)
+	if got != KillswitchProbeUnexpectedlySucceeded {
+		t.Fatalf("expected KillswitchProbeUnexpectedlySucceeded, got %s", got)
+	}
+}
+
+func TestHelpersClassifyKillswitch_PacketLeak(t *testing.T) {
+	got := ClassifyKillswitchResult(28, 3)
+	if got != KillswitchPacketLeak {
+		t.Fatalf("expected KillswitchPacketLeak, got %s", got)
+	}
+}
+
+func TestHelpersClassifyKillswitch_Both(t *testing.T) {
+	got := ClassifyKillswitchResult(0, 5)
+	if got != KillswitchBoth {
+		t.Fatalf("expected KillswitchBoth, got %s", got)
+	}
+}
+
+func TestHelpersKillswitchVerdict_String(t *testing.T) {
+	cases := map[KillswitchVerdict]string{
+		KillswitchUnknown:                    "Unknown",
+		KillswitchOK:                         "OK",
+		KillswitchProbeUnexpectedlySucceeded: "ProbeUnexpectedlySucceeded",
+		KillswitchPacketLeak:                 "PacketLeak",
+		KillswitchBoth:                       "Both",
+	}
+	for k, want := range cases {
+		if got := k.String(); got != want {
+			t.Fatalf("KillswitchVerdict(%d).String(): got %q want %q", k, got, want)
+		}
+	}
+}
+
+func TestHelpersKillswitchTimingContract_Locked(t *testing.T) {
+	if KillswitchTimingContract.ProbeMaxLatency != 3*time.Second {
+		t.Fatalf("ProbeMaxLatency drifted: %v", KillswitchTimingContract.ProbeMaxLatency)
+	}
+	if KillswitchTimingContract.TcpdumpWindow != 5*time.Second {
+		t.Fatalf("TcpdumpWindow drifted: %v", KillswitchTimingContract.TcpdumpWindow)
+	}
+}
+
+// ─── MVS-10 / Kill-switch：resolv.conf 篡改免疫 ───────────────────────
+
+func TestHelpersResolvConfTamperResult_String(t *testing.T) {
+	cases := map[ResolvConfTamperResult]string{
+		TamperUnknown:  "Unknown",
+		TamperApplied:  "Applied",
+		TamperRejected: "Rejected",
+	}
+	for k, want := range cases {
+		if got := k.String(); got != want {
+			t.Fatalf("ResolvConfTamperResult(%d).String(): got %q want %q", k, got, want)
+		}
+	}
+}
+
+func TestHelpersResolvConfTamperContract_Locked(t *testing.T) {
+	if ResolvConfTamperContract.Nameserver != "8.8.8.8" {
+		t.Fatalf("Nameserver drifted: got %q want 8.8.8.8", ResolvConfTamperContract.Nameserver)
+	}
+}
+
+func TestHelpersClassifyResolvConfDNS_RejectedAlwaysOK(t *testing.T) {
+	// 即使后续 dnsResult / packets 异常，只要篡改被系统拒绝就 ok。
+	ok, reason := ClassifyResolvConfDNSOutcome(TamperRejected, DNSResultUnknown, 7)
+	if !ok {
+		t.Fatalf("expected ok=true on TamperRejected, reason=%q", reason)
+	}
+	if !strings.Contains(reason, "ro bind mount") {
+		t.Fatalf("reason 应当解释 ro bind mount 生效，got %q", reason)
+	}
+}
+
+func TestHelpersClassifyResolvConfDNS_AppliedTunneledNoLeak(t *testing.T) {
+	ok, reason := ClassifyResolvConfDNSOutcome(TamperApplied, DNSResultTunneled, 0)
+	if !ok {
+		t.Fatalf("expected ok=true, reason=%q", reason)
+	}
+}
+
+func TestHelpersClassifyResolvConfDNS_AppliedDeniedNoLeak(t *testing.T) {
+	ok, reason := ClassifyResolvConfDNSOutcome(TamperApplied, DNSResultDenied, 0)
+	if !ok {
+		t.Fatalf("expected ok=true on Denied, reason=%q", reason)
+	}
+}
+
+func TestHelpersClassifyResolvConfDNS_AppliedTunneledWithLeak(t *testing.T) {
+	// 抓包 oracle 发现绕过：即使 dig 走 tun 也算 fail。
+	ok, reason := ClassifyResolvConfDNSOutcome(TamperApplied, DNSResultTunneled, 2)
+	if ok {
+		t.Fatalf("expected ok=false on packet leak, reason=%q", reason)
+	}
+	if !strings.Contains(reason, "8.8.8.8") {
+		t.Fatalf("reason 应当含 nameserver 字面，got %q", reason)
+	}
+}
+
+func TestHelpersClassifyResolvConfDNS_AppliedLeaked(t *testing.T) {
+	ok, reason := ClassifyResolvConfDNSOutcome(TamperApplied, DNSResultLeaked, 0)
+	if ok {
+		t.Fatalf("expected ok=false on DNSResultLeaked, reason=%q", reason)
+	}
+}
+
+func TestHelpersClassifyResolvConfDNS_AppliedUnknown(t *testing.T) {
+	ok, reason := ClassifyResolvConfDNSOutcome(TamperApplied, DNSResultUnknown, 0)
+	if ok {
+		t.Fatalf("expected ok=false on DNSResultUnknown, reason=%q", reason)
+	}
+}
+
+func TestHelpersClassifyResolvConfDNS_TamperUnknownIsFail(t *testing.T) {
+	ok, reason := ClassifyResolvConfDNSOutcome(TamperUnknown, DNSResultTunneled, 0)
+	if ok {
+		t.Fatalf("expected ok=false on TamperUnknown, reason=%q", reason)
 	}
 }
 

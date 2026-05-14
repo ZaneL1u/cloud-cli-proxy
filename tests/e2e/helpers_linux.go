@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -476,6 +477,287 @@ func (p *GoldenPath) WaitHostHealthStatus(ctx context.Context, expected HostHeal
 		harness.WithTimeout(timeout),
 		harness.WithPollInterval(500*time.Millisecond),
 	)
+}
+
+// ─── Phase 48 Plan 01 / MVS-09：sing-box 崩溃断网 ─────────────────────
+
+// errWorkerContainerHandleUnavailable 是 ProbeOutboundFromUser / ProbeDNSFromUser
+// 在 worker 容器名尚未填充（Scenario Step 7 sentinel 期间）时返回的错误，
+// 调用方应据此 t.Skip 而不是 t.Fatalf。
+var errWorkerContainerHandleUnavailable = errors.New("worker container handle unavailable (scenario step 7 未实现)")
+
+// gatewayDockerName 优先返回 GatewayHandle.ContainerID（Phase 45 Step 4..6
+// 真实填充），否则回退到约定命名 `cloudproxy-gw-<HostID>`。
+//
+// 在 Step 4..6 sentinel 期间，ContainerID 与 HostID 都可能为空；调用方需要
+// 据此判 t.Skip。
+func (p *GoldenPath) gatewayDockerName() (string, error) {
+	if p == nil || p.Gateway == nil {
+		return "", errors.New("gateway handle nil")
+	}
+	if id := strings.TrimSpace(p.Gateway.ContainerID); id != "" {
+		return id, nil
+	}
+	if p.Gateway.HostID != "" {
+		return "cloudproxy-gw-" + p.Gateway.HostID, nil
+	}
+	if p.Host != nil && p.Host.ID != "" {
+		return "cloudproxy-gw-" + p.Host.ID, nil
+	}
+	return "", errors.New("gateway container id/name unavailable (scenario step 4..6 未实现)")
+}
+
+// workerDockerName 类似 gatewayDockerName，但走 worker 容器命名约定。
+func (p *GoldenPath) workerDockerName() (string, error) {
+	if p == nil || p.Host == nil {
+		return "", errors.New("host handle nil")
+	}
+	if name := strings.TrimSpace(p.Host.ContainerName); name != "" {
+		return name, nil
+	}
+	if p.Host.ID != "" {
+		return "cloudproxy-" + p.Host.ID, nil
+	}
+	return "", errWorkerContainerHandleUnavailable
+}
+
+// KillGateway 通过 `docker kill --signal=KILL <gateway>` 强杀 sing-box 网关容器
+// （MVS-09）。
+//
+// 行为约定：
+//   - 优先用 GatewayHandle.ContainerID；回退到 `cloudproxy-gw-<HostID>` 命名。
+//   - 固定 SIGKILL，不发 SIGTERM（CONTEXT §Area 1 决策，避免触发 sing-box
+//     graceful shutdown / cleanup 路径）。
+//   - 调完后通过 `docker inspect -f '{{.State.Running}}'` 二次确认；非 false
+//     即视为 kill 未生效（与 docker exit code 0 互不替代）。
+//   - 句柄未填充（Step 4..6 sentinel） → 返回错，调用方 t.Skip。
+//
+// 不用 docker stop / docker rm：契约是「sing-box 崩溃」而不是「优雅退出」。
+func (p *GoldenPath) KillGateway(ctx context.Context) error {
+	name, err := p.gatewayDockerName()
+	if err != nil {
+		return fmt.Errorf("kill gateway: %w", err)
+	}
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "docker", "kill", "--signal=KILL", name)
+	cmd.Stderr = &stderr
+	if runErr := cmd.Run(); runErr != nil {
+		return fmt.Errorf("kill gateway: docker kill %s: %w (stderr=%s)",
+			name, runErr, stderr.String())
+	}
+
+	var inspectOut bytes.Buffer
+	insp := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.State.Running}}", name)
+	insp.Stdout = &inspectOut
+	if inspErr := insp.Run(); inspErr != nil {
+		// inspect 失败本身不致命：可能容器已被 docker 自动清理。容器不在 = 已死。
+		return nil
+	}
+	if strings.TrimSpace(inspectOut.String()) != "false" {
+		return fmt.Errorf("kill gateway: container %s still running after docker kill (state=%q)",
+			name, strings.TrimSpace(inspectOut.String()))
+	}
+	return nil
+}
+
+// ProbeOutboundFromUser 在 worker 容器内跑 `curl -sS --max-time <N> <url>`，
+// 返回 exit code 与 err（MVS-09 主断言：kill gateway 后 curl 必须非 0 退出）。
+//
+// 行为：
+//   - 通过 `docker exec` 走 worker 容器（句柄未就绪 → errWorkerContainerHandleUnavailable）。
+//   - timeout 转换为整数秒；< 1s 一律按 1s 处理（curl --max-time 不支持小数）。
+//   - exec.ExitError 解包出退出码；其它错（docker daemon 不通）返回 err 非 nil
+//     + exitCode=-1。
+//
+// 不暴露 stdout（kill-switch 验证只看 exitCode）。
+func (p *GoldenPath) ProbeOutboundFromUser(ctx context.Context, url string, timeout time.Duration) (int, error) {
+	name, err := p.workerDockerName()
+	if err != nil {
+		return -1, err
+	}
+	secs := int(timeout.Seconds())
+	if secs < 1 {
+		secs = 1
+	}
+	cmd := exec.CommandContext(ctx, "docker", "exec", name,
+		"curl", "-sS", "--max-time", strconv.Itoa(secs), url)
+	if runErr := cmd.Run(); runErr != nil {
+		var exitErr *exec.ExitError
+		if errors.As(runErr, &exitErr) {
+			return exitErr.ExitCode(), nil
+		}
+		return -1, fmt.Errorf("probe outbound: docker exec %s: %w", name, runErr)
+	}
+	return 0, nil
+}
+
+// TcpdumpOnHostEth0 在宿主机 eth0 上以「host network + cap-add NET_RAW/NET_ADMIN」
+// sidecar 起一次 tcpdump 子进程，返回 BPF 命中的包数（MVS-09 / MVS-10 独立 oracle）。
+//
+// 实现路径：
+//   - 默认走 `docker run --rm --network host --cap-add NET_RAW --cap-add NET_ADMIN
+//     nicolaka/netshoot:v0.13 tcpdump -nn -i eth0 -c <count> <bpfFilter>`。
+//     使用 host network 让 sidecar 看到真实宿主机 NIC；count 命中或 timeout 到即退出。
+//   - 路径 B（`E2E_ALLOW_HOST_TCPDUMP=1` + uid==0）：直接 `tcpdump -i eth0 ...`，
+//     不起 sidecar；仅在自管 runner 上启用。
+//
+// 解析 stderr 中 `N packets captured`（通过 ParseTcpdumpCountOutput）得到包数。
+// 解析失败 → 返回 0 + 包装后的 ErrTcpdumpCountNotFound（调用方应据此把
+// tcpdump 整段 stderr 打 t.Logf 排障）。
+//
+// timeout 控制 tcpdump 自身硬退出（通过 ctx 派生 + `-G`/`-W` 不用，sidecar 走
+// ctx.Done 即可）。
+func (p *GoldenPath) TcpdumpOnHostEth0(ctx context.Context, bpfFilter string, count int, timeout time.Duration) (int, error) {
+	if count <= 0 {
+		count = 1
+	}
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	tcpdumpArgs := []string{
+		"-nn", "-i", "eth0", "-c", strconv.Itoa(count), bpfFilter,
+	}
+
+	var stderr bytes.Buffer
+	subCtx, cancel := context.WithTimeout(ctx, timeout+2*time.Second)
+	defer cancel()
+
+	useHostNative := getEnvOrDefault("E2E_ALLOW_HOST_TCPDUMP", "") == "1" && os.Geteuid() == 0
+	var cmd *exec.Cmd
+	if useHostNative {
+		args := append([]string{}, tcpdumpArgs...)
+		cmd = exec.CommandContext(subCtx, "tcpdump", args...)
+	} else {
+		dockerArgs := []string{
+			"run", "--rm",
+			"--network", "host",
+			"--cap-add", "NET_RAW", "--cap-add", "NET_ADMIN",
+			getEnvOrDefault("E2E_TCPDUMP_IMAGE", "nicolaka/netshoot:v0.13"),
+			"tcpdump",
+		}
+		dockerArgs = append(dockerArgs, tcpdumpArgs...)
+		cmd = exec.CommandContext(subCtx, "docker", dockerArgs...)
+	}
+	cmd.Stderr = &stderr
+
+	runErr := cmd.Run()
+	// tcpdump 在 `-c N` 命中后退出码 0；超时被 ctx 杀掉时 exit code 非 0。
+	// 即便子进程被杀，统计行通常已经写到 stderr（tcpdump 在 SIGTERM 时也会
+	// 输出 captured 计数）。
+	packets, parseErr := ParseTcpdumpCountOutput(stderr.String())
+	if parseErr != nil {
+		if runErr != nil {
+			return 0, fmt.Errorf("tcpdump host eth0: %w; run err: %v; stderr=%s",
+				parseErr, runErr, stderr.String())
+		}
+		return 0, fmt.Errorf("tcpdump host eth0: %w; stderr=%s",
+			parseErr, stderr.String())
+	}
+	return packets, nil
+}
+
+// InspectContainerIPv4 通过 `docker inspect -f '{{...}}'` 拿容器在 *指定 docker
+// network* 内的 IPv4 地址。用例需要 worker 容器 IP 来拼 host eth0 的 BPF filter。
+//
+// 行为：
+//   - networkName 为空 → 取 NetworkSettings.IPAddress（旧默认 bridge 网络字段）。
+//   - networkName 非空 → 取 NetworkSettings.Networks[<name>].IPAddress。
+//   - 出错 / 空字符串 → 返回 err 非 nil，调用方 t.Skip。
+func (p *GoldenPath) InspectContainerIPv4(ctx context.Context, containerName, networkName string) (string, error) {
+	if containerName == "" {
+		return "", errors.New("inspect container ipv4: container name empty")
+	}
+	var format string
+	if networkName == "" {
+		format = "{{.NetworkSettings.IPAddress}}"
+	} else {
+		format = fmt.Sprintf(`{{(index .NetworkSettings.Networks "%s").IPAddress}}`, networkName)
+	}
+	var out bytes.Buffer
+	cmd := exec.CommandContext(ctx, "docker", "inspect", "-f", format, containerName)
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("inspect %s: %w", containerName, err)
+	}
+	ip := strings.TrimSpace(out.String())
+	if ip == "" {
+		return "", fmt.Errorf("inspect %s: ipv4 empty (network=%s)", containerName, networkName)
+	}
+	return ip, nil
+}
+
+// ─── Phase 48 Plan 02 / MVS-10：resolv.conf 篡改免疫 ──────────────────
+
+// TamperResolvConf 在 worker 容器内尝试以用户态手法改写 `/etc/resolv.conf`，
+// 模拟用户绕过 ro bind mount 的尝试（MVS-10）。
+//
+// 实现路径：
+//   - `cp /etc/resolv.conf /tmp/r.bak 2>/dev/null; echo 'nameserver X' > /etc/resolv.conf
+//     && grep -q 'X' /etc/resolv.conf`
+//   - exit 0 → TamperApplied（绕过成功，文件已被覆盖）
+//   - exit != 0 → TamperRejected（系统侧抗住了，e.g. ro mount / EROFS / EBUSY）
+//   - docker exec 本身报错 → TamperUnknown + err 非 nil（用例 t.Fatalf）
+//
+// CONTEXT §Area 2：Applied 与 Rejected 都是合法分支，由 ClassifyResolvConfDNSOutcome
+// 据 DNS 结果与抓包合成最终裁决。
+func (p *GoldenPath) TamperResolvConf(ctx context.Context, nameserver string) (ResolvConfTamperResult, error) {
+	name, err := p.workerDockerName()
+	if err != nil {
+		return TamperUnknown, err
+	}
+	script := fmt.Sprintf(
+		"cp /etc/resolv.conf /tmp/r.bak 2>/dev/null; "+
+			"echo 'nameserver %s' > /etc/resolv.conf && grep -q '%s' /etc/resolv.conf",
+		nameserver, nameserver,
+	)
+	cmd := exec.CommandContext(ctx, "docker", "exec", name, "bash", "-c", script)
+	runErr := cmd.Run()
+	if runErr == nil {
+		return TamperApplied, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) {
+		return TamperRejected, nil
+	}
+	return TamperUnknown, fmt.Errorf("tamper resolv.conf: docker exec %s: %w", name, runErr)
+}
+
+// ProbeDNSFromUser 在 worker 容器内跑 `dig +short +time=<sec> +tries=1 <domain>`，
+// 把 exit code + stderr 喂给 ClassifyDNSResult 得到 DNS 通路分类（MVS-10）。
+//
+// 返回值：
+//   - 标准 DNSProbeResult 枚举（Tunneled / Denied / Leaked / Unknown）。
+//   - err：仅在 docker exec 本身报错（容器不在 / docker 不通）时非 nil。
+//
+// 单源不做 vote；本 plan 关心通路本身，不关心回显 IP。
+func (p *GoldenPath) ProbeDNSFromUser(ctx context.Context, domain string, timeout time.Duration) (DNSProbeResult, error) {
+	name, err := p.workerDockerName()
+	if err != nil {
+		return DNSResultUnknown, err
+	}
+	secs := int(timeout.Seconds())
+	if secs < 1 {
+		secs = 1
+	}
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
+	cmd := exec.CommandContext(ctx, "docker", "exec", name,
+		"dig", "+short", fmt.Sprintf("+time=%d", secs), "+tries=1", domain)
+	cmd.Stderr = &stderr
+	cmd.Stdout = &stdout
+	runErr := cmd.Run()
+	if runErr == nil {
+		if strings.TrimSpace(stdout.String()) == "" {
+			// exit 0 但 stdout 空：dig 在某些 timeout 场景下也走这条路；归 Denied。
+			return DNSResultDenied, nil
+		}
+		return DNSResultTunneled, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) {
+		return ClassifyDNSResult(exitErr.ExitCode(), stderr.String()), nil
+	}
+	return DNSResultUnknown, fmt.Errorf("probe dns: docker exec %s: %w", name, runErr)
 }
 
 // ─── 内部 helpers ──────────────────────────────────────────────────────
