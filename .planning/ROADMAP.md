@@ -125,59 +125,182 @@
 <details>
 <summary>◆ v3.6 端到端测试体系与网络隔离验证 (Phases 45-52) — IN PROGRESS</summary>
 
-- [ ] Phase 45: 测试基础设施与 CI 骨架 (5/5 plans)
-  - E2E-01: `tests/e2e/` 目录 + testcontainers-go + testify/suite
-  - E2E-02: headscale-style Scenario 抽象
-  - E2E-03: CI 双层架构（hosted + self-hosted Linux runner）
-  - E2E-04: 失败自动归档 artifact
-  - E2E-05: waitFor 条件等待（禁止裸 sleep）
+### Phase 45: 测试基础设施与 CI 骨架
 
-- [ ] Phase 46: MVS 黄金路径与出口 IP 验证 (5/5 plans)
-  - MVS-01: bootstrap 黄金路径 e2e
-  - MVS-02: 出口 IP 匹配验证（三源轮询）
-  - MVS-03: DNS 强制走 tun
-  - MVS-04: 默认拒绝生效（多 IP × 多端口）
-  - MVS-05: CLI 错误码契约
+**Goal**: 在本仓库长出可复用的 e2e 骨架（testcontainers-go + testify/suite + Scenario 抽象 + 双层 CI runner + 失败 artifact 归档 + waitFor 替代裸 sleep），让后续所有网络栈用例都能基于同一套 harness 写真实跑得通的测试。
 
-- [ ] Phase 47: MVS 治理与心跳验证 (3/3 plans)
-  - MVS-06: 到期容器自动停止 + 审计事件
-  - MVS-07: 出口 IP 双绑互斥
-  - MVS-08: host-agent 心跳与恢复
+**Depends on**: Phase 47 (v3.5 sing-box 两段式静态配置 + 拆分 DNS + uat-bypass.sh CI 守护已就绪)
 
-- [ ] Phase 48: Kill-switch 核心验证 (2/2 plans)
-  - MVS-09: sing-box 崩溃后容器断网
-  - MVS-10: 用户态 resolv.conf 篡改免疫
+**Requirements**: E2E-01 / E2E-02 / E2E-03 / E2E-04 / E2E-05
 
-- [ ] Phase 49: 防泄漏对抗测试 (8/8 plans)
-  - LEAK-01: DNS 明文 UDP/53 旁路
-  - LEAK-02: DoT (853) 旁路
-  - LEAK-03: ICMP 阻断
-  - LEAK-04: IPv6 阻断
-  - LEAK-05: IMDS 阻断
-  - LEAK-06: raw socket 拒绝
-  - LEAK-07: link-local 显式 drop
-  - LEAK-08: capability 审计
+**Plans**: 5 plans
 
-- [ ] Phase 50: Kill-switch 压力测试 (4/4 plans)
-  - KILL-01: SIGKILL gateway → 断网
-  - KILL-02: tun0 down → 断网
-  - KILL-03: Pumba netem 故障注入
-  - KILL-04: network disconnect 不回落
+- [ ] 45-01-PLAN.md — `tests/e2e/` 目录骨架 + testcontainers-go + testify/suite 接入
+- [ ] 45-02-PLAN.md — Scenario 抽象（控制面 + host-agent + Postgres + N 个用户容器 + sing-box gateway 拓扑声明式描述）
+- [ ] 45-03-PLAN.md — CI 双层架构（hosted runner 跑非特权测试 + self-hosted Linux runner 跑特权网络栈 e2e）
+- [ ] 45-04-PLAN.md — 失败自动归档 artifact 集成（容器日志 / nft ruleset / netns 列表 / 路由表 / pg dump）
+- [ ] 45-05-PLAN.md — waitFor 条件等待 helper + 禁止裸 sleep 的 lint/约定
 
-- [ ] Phase 51: 代码层质量加固 (8/8 plans)
-  - QUAL-01: verify.go 多源轮询
-  - QUAL-02: verify.go 多目标泄漏检测
-  - QUAL-03: verify.go 全 nameserver 校验
-  - QUAL-04: namespace.go 探测窗口参数化
-  - QUAL-05: nftables 规则加 counter
-  - QUAL-06: worker cap-drop NET_RAW/NET_ADMIN
-  - QUAL-07: go test -race -shuffle=on
-  - QUAL-08: goleak.VerifyTestMain
+**Details:**
 
-- [ ] Phase 52: 可观测性与诊断 (3/3 plans)
-  - OBS-01: collect-artifacts.sh 脚本
-  - OBS-02: artifact 目录结构
-  - OBS-03: CI upload-artifact 集成
+1. `tests/e2e/` 目录存在，使用 testcontainers-go + testify/suite 组织，suite 拥有 `SetupSuite/TearDownSuite` 生命周期，可 `go test ./tests/e2e/...` 单独跑通最小烟雾用例。
+2. Scenario 抽象可声明式描述「控制面 + host-agent + Postgres + N 个用户容器 + sing-box gateway」拓扑，通过 builder API 一行声明用户数、出口 IP 数、协议类型，不必复制粘贴启动代码。
+3. `.github/workflows/` 至少存在两个 e2e job：hosted runner 跑非特权（Go 单元 + API 集成 + BATS smoke），self-hosted Linux runner 跑特权网络栈 e2e；两者 job name 在 README 中可被指引到。
+4. 任何 e2e 用例失败时自动调用归档 hook，artifact 目录至少包含容器日志 / `nft list ruleset` / `ip netns list` / `ip route` / `pg_dump`，CI 上 `actions/upload-artifact@v4` 拿得到。
+5. 测试 harness 内禁止 `time.Sleep` 用作"等待条件就绪"，统一通过 `waitFor(ctx, predicate, timeout)` helper；CI 上有 grep/lint 守护防回退。
+
+### Phase 46: MVS 黄金路径与出口 IP 验证
+
+**Goal**: 把"首次 bootstrap → 进入 SSH → 出网经由绑定的出口 IP → DNS 走 tun → 直连外网被拒绝 → CLI 错误码契约稳定"这条用户主路径用 e2e 跑通，作为 MVS（Minimum Viable Suite）第一组真实可信用例。
+
+**Depends on**: Phase 45 (e2e 骨架与 Scenario 抽象就绪)
+
+**Requirements**: MVS-01 / MVS-02 / MVS-03 / MVS-04 / MVS-05
+
+**Plans**: 5 plans
+
+- [ ] 46-01-PLAN.md — bootstrap 黄金路径 e2e（curl → 认证 → 容器启动 → SSH banner）
+- [ ] 46-02-PLAN.md — 出口 IP 匹配验证（容器内 `curl ifconfig.me`，三源轮询 ip.me / ifconfig.io / ipinfo.io）
+- [ ] 46-03-PLAN.md — DNS 强制走 tun（容器内 `dig @1.1.1.1 example.com` 被 tun 接管或被防火墙拒绝）
+- [ ] 46-04-PLAN.md — 默认拒绝生效（容器内直连 `bash -c 'echo >/dev/tcp/...'`，覆盖 1.1.1.1:80 / 8.8.8.8:443 / 9.9.9.9:443 / 169.254.169.254:80）
+- [ ] 46-05-PLAN.md — CLI 错误码契约（auth_invalid=10 / account_disabled=11 / account_expired=12 / host_not_found=13 / 其它=1/2）
+
+**Details:**
+
+1. `bootstrap` e2e 跑完一轮：scenario 起容器 → 模拟 curl 认证 → 等待 `host.ready` → expect 子进程拿到 SSH banner，无人工步骤、无裸 sleep。
+2. 容器内出口 IP 校验从 ≥3 个独立回显源拉，多数派一致才判 PASS；若某源全部超时，e2e 不直接 fail，而是按"投票"语义裁决，避免外网抖动误报。
+3. DNS 测试同时覆盖"被 tun 接管返回正常 A 记录"和"被防火墙明确拒绝"两种语义，断言至少其一成立，并 dump nft `counter` 命中数。
+4. 直连外网测试遍历多 IP × 多端口矩阵（1.1.1.1:80 / 8.8.8.8:443 / 9.9.9.9:443 / 169.254.169.254:80），全部必须超时或被拒绝，任何一个连通即 fail。
+5. CLI 错误码用真实 cloud-claude binary 触发各场景（错密码 / 禁用账号 / 过期账号 / 不存在的 host），断言 exit code 与文档表一致。
+
+### Phase 47: MVS 治理与心跳验证
+
+**Goal**: 把到期容器自动停止 + 出口 IP 双绑互斥 + host-agent 心跳与恢复三条治理路径变成 e2e 自动用例，杜绝"上线后才发现治理逻辑没生效"。
+
+**Depends on**: Phase 46 (黄金路径 e2e 就绪后才有共享的容器/host fixture)
+
+**Requirements**: MVS-06 / MVS-07 / MVS-08
+
+**Plans**: 3 plans
+
+- [ ] 47-01-PLAN.md — 到期容器自动停止 + 审计事件落库（ExpiryScanner + `host.stopped`）
+- [ ] 47-02-PLAN.md — 出口 IP 双绑互斥（API 层第二次绑定被拒绝并返回明确错误码）
+- [ ] 47-03-PLAN.md — host-agent 心跳与恢复（强杀进程 → 30s 内 unhealthy → 重启自动恢复）
+
+**Details:**
+
+1. 用 fake clock 或缩短 ExpiryScanner 周期，让到期用户的运行容器在 e2e 内被自动停止；审计事件 `host.stopped` 必须出现在 `events` 表，行内含触发原因。
+2. 同一出口 IP 通过 API 绑定到 Host A 之后，再尝试绑定到 Host B 必须返回 4xx + 稳定错误码（不允许 500），且现有绑定不被破坏。
+3. `kill -9` host-agent 后，控制面 health 状态必须在 30s 内转 unhealthy；重启 host-agent 后 30s 内自动转回 healthy，全过程不依赖人工 force resync。
+
+### Phase 48: Kill-switch 核心验证
+
+**Goal**: 验证两条最关键的 kill-switch：sing-box 崩溃后用户容器立即断网（不降级直连），以及容器内手工篡改 resolv.conf 仍然走 tun 或被拒绝。
+
+**Depends on**: Phase 46 (需要黄金路径 e2e 起好的容器 + 出口 IP 抓取能力)
+
+**Requirements**: MVS-09 / MVS-10
+
+**Plans**: 2 plans
+
+- [ ] 48-01-PLAN.md — sing-box 崩溃后容器断网（`docker kill` gateway → 容器内 curl 失败，不回落直连）
+- [ ] 48-02-PLAN.md — 用户态 resolv.conf 篡改免疫（容器内 `echo nameserver 8.8.8.8 > /etc/resolv.conf` → DNS 仍走 tun 或被防火墙拒绝）
+
+**Details:**
+
+1. `docker kill` sing-box gateway 之后，3 秒内容器内 `curl https://ifconfig.me` 必须失败；用 `tcpdump -i eth0` 确认 host eth0 没有出现来自该容器 IP 的非网关流量。
+2. 容器内 `echo nameserver 8.8.8.8 > /etc/resolv.conf` 执行成功（因为 ro bind mount 之上还能在用户态做 cp + mv），但随后 `dig example.com` 仍只走 tun 或被防火墙明确拒绝；host eth0 抓包必须无 udp/53 → 8.8.8.8 流量。
+
+### Phase 49: 防泄漏对抗测试
+
+**Goal**: 把 8 条防泄漏不变量（DNS 明文 / DoT / ICMP / IPv6 / IMDS / raw socket / link-local / capability）固化为可重复跑的 e2e 用例，对抗常见旁路绕过手段。
+
+**Depends on**: Phase 45 (artifact 归档 + Scenario 已就绪) + Phase 47 (Bypass 治理用例已经覆盖白名单基线)
+
+**Requirements**: LEAK-01 / LEAK-02 / LEAK-03 / LEAK-04 / LEAK-05 / LEAK-06 / LEAK-07 / LEAK-08
+
+**Plans**: 8 plans
+
+- [ ] 49-01-PLAN.md — LEAK-01 DNS 明文 UDP/53 旁路检测（`dig @8.8.8.8` + host eth0 抓包断言）
+- [ ] 49-02-PLAN.md — LEAK-02 DoT (853) 旁路检测（`kdig +tls @1.1.1.1` + host eth0 抓包断言）
+- [ ] 49-03-PLAN.md — LEAK-03 ICMP 阻断（`ping 8.8.8.8` 必须失败）
+- [ ] 49-04-PLAN.md — LEAK-04 IPv6 阻断（`curl -6 ipv6.google.com` 必须失败 + `disable_ipv6=1` 双保险）
+- [ ] 49-05-PLAN.md — LEAK-05 IMDS 阻断（`169.254.169.254` 与 `169.254.170.2` 必须失败）
+- [ ] 49-06-PLAN.md — LEAK-06 raw socket 拒绝（`SOCK_RAW` 必须 PermissionError）
+- [ ] 49-07-PLAN.md — LEAK-07 link-local 显式 drop（nftables 规则覆盖 `169.254.0.0/16`）
+- [ ] 49-08-PLAN.md — LEAK-08 capability 审计（worker CapEff/CapBnd 不含 NET_RAW/NET_ADMIN/SYS_ADMIN）
+
+**Details:**
+
+1. 每条 LEAK-* 用例都通过 host eth0 抓包 / `nft list ruleset` / `getpcaps` 等内核或宿主机视角的"独立 oracle"做断言，不依赖容器自身报告。
+2. 失败时自动归档抓包文件 + nft ruleset + capability dump 到 artifact，方便事后复盘。
+3. 8 条用例可单独跑也可作为 `tests/e2e/leak/...` 套件一起跑，整组耗时 ≤ 5 分钟。
+
+### Phase 50: Kill-switch 压力测试
+
+**Goal**: 通过 SIGKILL / `tun0 down` / Pumba netem 故障注入 / `docker network disconnect` 等手段对 kill-switch 做压力测试，确认任何故障姿势下 worker 都不会回落到 host 默认路由。
+
+**Depends on**: Phase 48 (核心 kill-switch 用例已稳定可作为基线对照)
+
+**Requirements**: KILL-01 / KILL-02 / KILL-03 / KILL-04
+
+**Plans**: 4 plans
+
+- [ ] 50-01-PLAN.md — KILL-01 `docker kill -SIGKILL` sing-box gateway → 3 秒内容器 curl 失败
+- [ ] 50-02-PLAN.md — KILL-02 `ip link set tun0 down` → 容器 curl 失败
+- [ ] 50-03-PLAN.md — KILL-03 Pumba netem delay/loss 注入 → SSH 会话存活但出口 IP 校验可能超时（行为契约固定）
+- [ ] 50-04-PLAN.md — KILL-04 网关容器 `docker network disconnect` → worker 不回落 host 默认路由（host eth0 抓包零非网关流量）
+
+**Details:**
+
+1. KILL-01..02 关注"硬故障 → 立即断网"延迟必须 ≤ 3 秒，期间不允许任何明文请求逃逸到 host eth0。
+2. KILL-03 要确立"网络劣化下的可观察行为契约"：SSH 控制流必须存活，出口 IP 校验允许超时但不允许给出错误的 IP；e2e 把这条契约写死。
+3. KILL-04 重点在"控制面意外 disconnect 网络后是否会自动 fallback 到 host bridge"，必须证明不会，且容器内 curl 失败、host eth0 无来自该容器的非网关流量。
+
+### Phase 51: 代码层质量加固
+
+**Goal**: 把 verify.go 多源轮询 / 多目标泄漏检测 / 全 nameserver 校验，namespace.go 探测窗口参数化，nftables 规则加 counter，worker cap-drop NET_RAW/NET_ADMIN，以及 `go test -race -shuffle=on` 与 goleak.VerifyTestMain 这 8 条质量改造一次性落地。
+
+**Depends on**: Phase 46 + Phase 49 (e2e 用例已经能反向暴露 verify/namespace/firewall 的不足)
+
+**Requirements**: QUAL-01 / QUAL-02 / QUAL-03 / QUAL-04 / QUAL-05 / QUAL-06 / QUAL-07 / QUAL-08
+
+**Plans**: 8 plans
+
+- [ ] 51-01-PLAN.md — verify.go `verifyEgressIP` 多源轮询（≥3 个独立回显服务）
+- [ ] 51-02-PLAN.md — verify.go `verifyLeakBlocked` 多目标参数化（多 IP × 多端口）
+- [ ] 51-03-PLAN.md — verify.go `verifyDNS` 遍历全部 nameserver 行
+- [ ] 51-04-PLAN.md — namespace.go `GetContainerNetNS` 探测窗口与重试上限暴露给 e2e 配置
+- [ ] 51-05-PLAN.md — worker_firewall_linux.go 全部规则加 `counter` 表达式
+- [ ] 51-06-PLAN.md — worker 容器启动参数加 `--cap-drop=NET_RAW --cap-drop=NET_ADMIN`
+- [ ] 51-07-PLAN.md — `go test ./... -race -shuffle=on -count=1` 成为默认测试命令
+- [ ] 51-08-PLAN.md — goleak.VerifyTestMain 接入（排除 sing-box / pgx 已知泄漏）
+
+**Details:**
+
+1. QUAL-01..03 改造完成后，一次性回归跑 Phase 46 + Phase 49 的全部 e2e 用例必须仍通过，且 verify.go 行为对外行为契约不变（仅"内部更稳健"）。
+2. QUAL-05 落地后，所有 firewall 规则在 `nft list ruleset` 输出中带 counter；新增的 nft counter 在 e2e artifact 里可读，作为后续排障一手证据。
+3. QUAL-07/08 改造后 CI 默认就跑 `-race -shuffle=on -count=1`，goleak 会拦截非已知模式的 goroutine 泄漏。
+
+### Phase 52: 可观测性与诊断
+
+**Goal**: 把 e2e 失败时的"事后排障"做成一键工程：脚本统一收集容器日志 / 网络状态 / Docker 元信息 / Postgres dump / 系统状态，CI 自动 upload-artifact，开发者无需手工 ssh 到 runner。
+
+**Depends on**: Phase 45 (e2e CI 骨架就绪) + Phase 51 (nft counter 加好后 artifact 内容更有用)
+
+**Requirements**: OBS-01 / OBS-02 / OBS-03
+
+**Plans**: 3 plans
+
+- [ ] 52-01-PLAN.md — `tests/e2e/harness/collect-artifacts.sh` 脚本（可在失败 trap 中调用）
+- [ ] 52-02-PLAN.md — artifact 目录结构（logs / network / docker / postgres / system 五个子目录）
+- [ ] 52-03-PLAN.md — CI workflow 在 e2e 失败时自动 `actions/upload-artifact@v4` 归档
+
+**Details:**
+
+1. `collect-artifacts.sh` 在任何 e2e 用例失败时被自动触发，输出目录树固定为 logs/network/docker/postgres/system 五个子目录，每个子目录 README 写明"里面是什么"。
+2. CI failure path 上传的 artifact 文件在 GitHub Actions UI 中可见，体积保持在 100MB 以内（必要时压缩或滚动裁剪）。
+3. 本地开发者也可手动 `bash tests/e2e/harness/collect-artifacts.sh ./out` 复用同一套采集逻辑，与 CI 行为对齐。
 
 </details>
 
