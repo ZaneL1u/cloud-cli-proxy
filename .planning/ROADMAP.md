@@ -136,10 +136,10 @@
 **Plans**: 5 plans
 
 - [x] 45-01-PLAN.md — `tests/e2e/` 目录骨架 + testcontainers-go + testify/suite 接入 — completed 2026-05-14
-- [ ] 45-02-PLAN.md — Scenario 抽象（builder API + 控制面 + host-agent + Postgres + N 个用户容器 + sing-box gateway 真实生产路径）
+- [~] 45-02-PLAN.md — Scenario 抽象骨架 + Step 1（postgres testcontainer）真实实现 + Step 2..7 留 TODO — partial 2026-05-14（端到端启动序列由 Phase 46 第一个用例落地时补齐，详见 45-02-SUMMARY.md）
 - [x] 45-03-PLAN.md — waitFor helper + 4 个语义化变体（Log/Port/HTTP/Exec）+ DumpHook 占位 — completed 2026-05-14
-- [ ] 45-04-PLAN.md — 失败自动归档 artifact 集成（容器日志 / nft ruleset / netns 列表 / 路由表 / pg dump）
-- [ ] 45-05-PLAN.md — CI 双层 workflow（hosted ubuntu-24.04 runner + paths 强制守护 + 失败 PR comment）+ lint-no-bare-sleep 守护脚本
+- [x] 45-04-PLAN.md — 失败 artifact 归档 hook + 5 子目录占位 + ArtifactDumper + BaseSuite 集成 — completed 2026-05-14
+- [x] 45-05-PLAN.md — CI 双层 workflow（hosted ubuntu-24.04 runner + paths 强制守护 + 失败 PR comment）+ lint-no-bare-sleep 守护脚本 — completed 2026-05-14
 
 > 注：Phase 45 plan 编号意图与初稿微调 —— Plan 03（原文案"CI 双层架构"）改为 waitFor helper（CONTEXT.md §Area 4 决策），CI 接线挪到 Plan 05；同时 ROADMAP 草稿中 E2E-03"self-hosted Linux runner"已根据 CONTEXT.md §Area 3 调整为 hosted ubuntu-24.04（与 v3.5 uat-bypass.yml 同款）。
 

@@ -1,0 +1,136 @@
+name: e2e
+
+# Phase 45 Plan 05：v3.6 端到端测试体系 CI 守护。
+#
+# 双 job 结构：
+#   1. lint — 永远跑（不依赖 docker）：bash -n + lint-no-bare-sleep + go vet + go build
+#   2. e2e  — 仅在 lint 通过后跑：go test -tags=e2e ./tests/e2e/... -count=1
+#
+# 触发策略：PR paths 过滤 + push to main；命中 tests/e2e/ 或可能影响 e2e 的源码
+# 路径时强制跑且 block PR merge（CONTEXT.md §Area 3 已锁定）。
+#
+# 失败时自动 actions/upload-artifact@v4 归档 ./out/e2e-artifacts/，
+# 并通过 actions/github-script@v7 在 PR 评论里贴下载入口（中文）。
+#
+# 注：CONTEXT.md §Area 3 已把 ROADMAP §E2E-03 草稿中 "self-hosted Linux runner"
+# 调整为 hosted ubuntu-24.04（理由：与 uat-bypass.yml 同款、免运维、当前用例规模可承载）；
+# 调整记录在 Phase 45 SUMMARY，未来若用例规模触及 hosted runner 性能瓶颈再评估迁移。
+#
+# 已知限制：actions/github-script@v7 在 fork PR 上 GITHUB_TOKEN 权限被强制降级为
+# read，PR 评论会 403；artifact 上传仍正常。仅同仓 PR 享受自动评论。
+
+on:
+  pull_request:
+    paths:
+      - "tests/e2e/**"
+      - "internal/network/**"
+      - "internal/runtime/**"
+      - "internal/agent/**"
+      - "internal/agentapi/**"
+      - "cmd/host-agent/**"
+      - "cmd/control-plane/**"
+      - "scripts/lint-no-bare-sleep.sh"
+      - ".github/workflows/e2e.yml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write   # 失败时 actions/github-script 发 PR 评论需要
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint (bash + go vet + lint-no-bare-sleep)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: bash -n lint-no-bare-sleep
+        run: bash -n scripts/lint-no-bare-sleep.sh
+
+      - name: Run lint-no-bare-sleep
+        run: bash scripts/lint-no-bare-sleep.sh
+
+      - name: go vet (e2e)
+        run: go vet -tags=e2e ./tests/e2e/...
+
+      - name: go build (e2e)
+        run: go build -tags=e2e ./tests/e2e/...
+
+  e2e:
+    name: e2e (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    needs: lint
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install apt prerequisites (nft / dnsutils / jq / curl)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y nftables dnsutils jq curl
+
+      - name: go build (main binaries)
+        run: go build ./...
+
+      - name: Run e2e suite
+        env:
+          CLOUD_CLI_PROXY_E2E_ARTIFACT_DIR: ./out/e2e-artifacts
+        run: go test -tags=e2e ./tests/e2e/... -count=1 -v -timeout=15m
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts-${{ github.run_id }}
+          path: ./out/e2e-artifacts/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Comment artifact link on PR (failure)
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const body = [
+              '### ❌ e2e 失败 — 排障证据已归档',
+              '',
+              `**Run:** ${runUrl}`,
+              '',
+              `**Artifact 名称：** \`e2e-artifacts-${process.env.GITHUB_RUN_ID}\``,
+              '',
+              '点开上面的 Run 链接，滚到 "Artifacts" 段下载 zip；解压后在五子目录中查看：',
+              '- `logs/` 容器日志',
+              '- `network/` nft / netns / route',
+              '- `docker/` docker ps / inspect',
+              '- `postgres/` pg_dump',
+              '- `system/` 宿主机状态 + wait-timeout 备忘录',
+              '',
+              '（Phase 52 OBS-01..03 接入完整收集逻辑后，五子目录会有更详尽的内容；当前 Phase 45 阶段为占位 + waitFor 超时备忘。）',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });

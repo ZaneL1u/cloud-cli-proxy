@@ -27,3 +27,7 @@ type NoopDumpHook struct{}
 func (NoopDumpHook) OnWaitForTimeout(_ context.Context, _ string, _ error) error {
 	return nil
 }
+
+// 静态断言 ArtifactDumper（Plan 04）实现 DumpHook 接口。
+// 若 ArtifactDumper.OnWaitForTimeout 签名漂移，编译期立即失败。
+var _ DumpHook = (*ArtifactDumper)(nil)

@@ -40,7 +40,21 @@ type BaseSuite struct {
 	Cancel      context.CancelFunc
 	Logger      *slog.Logger
 	ProjectRoot string
+
+	// dumper 由调用方在 SetupSuite / SetupTest 中通过 SetArtifactDumper 注入。
+	// 未注入时 TearDownTest 失败分支只 logger.Warn，不阻塞用例。
+	// Plan 04 引入；Phase 52 OBS-01..03 接入完整收集逻辑后行为不变。
+	dumper *ArtifactDumper
 }
+
+// SetArtifactDumper 在 SetupSuite 或 SetupTest 阶段由调用方注入。
+// Plan 02 Scenario 落地后，典型用法：
+//
+//	s.SetArtifactDumper(harness.NewArtifactDumper(scenario, ""))
+func (s *BaseSuite) SetArtifactDumper(d *ArtifactDumper) { s.dumper = d }
+
+// ArtifactDumper 返回当前注入的 dumper；未注入时返回 nil。
+func (s *BaseSuite) ArtifactDumper() *ArtifactDumper { return s.dumper }
 
 // SetupSuite 在整个 suite 跑第一个用例之前执行一次。
 func (s *BaseSuite) SetupSuite() {
@@ -60,9 +74,30 @@ func (s *BaseSuite) TearDownSuite() {
 // SetupTest 留作 Plan 02+ 的 Scenario 注入点（当前为空）。
 func (s *BaseSuite) SetupTest() {}
 
-// TearDownTest 留作 Plan 04 失败 artifact dump 钩点（当前为空）。
-// Plan 04 会在此检查 s.T().Failed() 并调用 dump.Collect(...)。
-func (s *BaseSuite) TearDownTest() {}
+// TearDownTest 在每个 Test* 用例结束后被 testify/suite 自动调用。
+//
+// Plan 04 起的语义：若 t.Failed() 为 true 且 dumper 已通过 SetArtifactDumper
+// 注入，自动调用 dumper.Collect(s.Ctx, s.T().Name()) 把排障证据归档；
+// 用例成功时不动 disk，避免污染 artifact 目录。
+//
+// dumper 未注入时仅 logger.Warn，不阻塞用例（适用于无 artifact 需求的场景）。
+func (s *BaseSuite) TearDownTest() {
+	if !s.T().Failed() {
+		return
+	}
+	if s.dumper == nil {
+		s.Logger.Warn("test failed but no artifact dumper configured", "test", s.T().Name())
+		return
+	}
+	dir, err := s.dumper.Collect(s.Ctx, s.T().Name())
+	if err != nil {
+		s.Logger.Warn("artifact collect failed",
+			"test", s.T().Name(), "err", err)
+		return
+	}
+	s.Logger.Info("artifact collected on failure",
+		"test", s.T().Name(), "dir", dir)
+}
 
 // projectRootFromCaller 通过 runtime.Caller 反推仓库根目录（go.mod 所在目录）。
 // 不依赖 git，也不依赖 CWD（go test 在不同目录下 CWD 不稳定）。

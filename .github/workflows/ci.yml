@@ -126,3 +126,20 @@ jobs:
             exit 1
           fi
           echo "PASS: image size within BASE-04 budget"
+
+  lint-no-bare-sleep:
+    name: Lint — no bare sleep in tests/e2e
+    # Phase 45 Plan 05：守护 tests/e2e/ 套件不出现裸 time.Sleep。
+    # 与 .github/workflows/e2e.yml 的同名步骤双重守护：本 job 永远跑（不带
+    # paths 过滤），保证脚本本身不腐烂；e2e.yml 上的 lint 是 paths 过滤后的
+    # 强制守护。重复运行成本极低（脚本 < 1s）。
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: bash -n
+        run: bash -n scripts/lint-no-bare-sleep.sh
+
+      - name: Run lint-no-bare-sleep
+        run: bash scripts/lint-no-bare-sleep.sh
