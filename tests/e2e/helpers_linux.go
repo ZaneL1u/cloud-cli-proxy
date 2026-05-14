@@ -1149,6 +1149,220 @@ echo "install-attempted"`
 	return nil
 }
 
+// ─── Phase 50 / KILL-01..04 压力测试 helpers ────────────────────────────
+
+// SetTunDevDown 在 gateway 容器内执行 `ip link set tun0 down`，模拟
+// sing-box tun 设备被关掉的软故障（KILL-02）。
+//
+// 行为：
+//   - 通过 gatewayDockerName() 拿容器名；句柄缺失 → 返回 err，调用方 t.Skip。
+//   - `docker exec <gw> ip link set tun0 down`；exit 非 0 → wrap 后返回，
+//     用例 t.Fatalf。
+//   - 设备名锁定为 `tun0`（grep `internal/network/singbox_provider_linux.go`：
+//     sing-box auto_route 在 gateway 容器内创建 tun0 设备）。
+//   - 与 worker netns 内 nft `oifname "sb-tun0"` 中的接口名不同：sb-tun0 是
+//     worker 侧防火墙规则用的标识，KILL-02 关的是 gateway 容器内的设备。
+func (p *GoldenPath) SetTunDevDown(ctx context.Context) error {
+	name, err := p.gatewayDockerName()
+	if err != nil {
+		return fmt.Errorf("set tun0 down: %w", err)
+	}
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "docker", "exec", name, "ip", "link", "set", "tun0", "down")
+	cmd.Stderr = &stderr
+	if runErr := cmd.Run(); runErr != nil {
+		return fmt.Errorf("set tun0 down: docker exec %s: %w (stderr=%s)",
+			name, runErr, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
+// SetTunDevUp 在 gateway 容器内执行 `ip link set tun0 up`，是 KILL-02 cleanup
+// 的对称操作。
+//
+// 与 SetTunDevDown 不同：本函数失败应视为 best-effort（用例侧仅 t.Logf），
+// 因为该用例的契约结果在 t.Cleanup 触发前已经定盘，恢复失败只影响
+// 该 Scenario 实例后续可用性（每用例独立 GoldenPath 隔离）。
+func (p *GoldenPath) SetTunDevUp(ctx context.Context) error {
+	name, err := p.gatewayDockerName()
+	if err != nil {
+		return fmt.Errorf("set tun0 up: %w", err)
+	}
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "docker", "exec", name, "ip", "link", "set", "tun0", "up")
+	cmd.Stderr = &stderr
+	if runErr := cmd.Run(); runErr != nil {
+		return fmt.Errorf("set tun0 up: docker exec %s: %w (stderr=%s)",
+			name, runErr, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
+// DisconnectGatewayFromBridge 把 gateway 从其专属自定义 bridge
+// (`cloudproxy-net-<HostID>`) 摘走（KILL-04）。
+//
+// 行为：
+//  1. `docker inspect` 拿当前 gateway 接入的所有网络名 + IP。
+//  2. 用 PickGatewayBridgeNetwork 纯函数挑出 `cloudproxy-net-*` 前缀的网络
+//     （兜底首个非 default `bridge` 的网络）。
+//  3. `docker network disconnect <netName> <gateway>`。
+//
+// 返回 (savedNet, savedIP, nil) 供 ReconnectGatewayToBridge 在 cleanup 时使用。
+// savedNet == "" → gateway 未接 cloudproxy-net 类网络，调用方 t.Skipf 并把
+// backend gap 流转 Phase 51（同 Phase 49 LEAK-06/07/08 流程）。
+func (p *GoldenPath) DisconnectGatewayFromBridge(ctx context.Context) (string, string, error) {
+	name, err := p.gatewayDockerName()
+	if err != nil {
+		return "", "", fmt.Errorf("disconnect gateway: %w", err)
+	}
+	var inspectOut bytes.Buffer
+	insp := exec.CommandContext(ctx, "docker", "inspect", "-f",
+		`{{range $k, $v := .NetworkSettings.Networks}}{{$k}}={{$v.IPAddress}};{{end}}`,
+		name)
+	insp.Stdout = &inspectOut
+	if inspErr := insp.Run(); inspErr != nil {
+		return "", "", fmt.Errorf("inspect gateway %s: %w", name, inspErr)
+	}
+	savedNet, savedIP := PickGatewayBridgeNetwork(inspectOut.String())
+	if savedNet == "" {
+		return "", "", fmt.Errorf("disconnect gateway: %s has no cloudproxy-net / custom bridge network", name)
+	}
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "docker", "network", "disconnect", savedNet, name)
+	cmd.Stderr = &stderr
+	if runErr := cmd.Run(); runErr != nil {
+		return savedNet, savedIP, fmt.Errorf("disconnect %s from %s: %w (stderr=%s)",
+			name, savedNet, runErr, strings.TrimSpace(stderr.String()))
+	}
+	return savedNet, savedIP, nil
+}
+
+// ReconnectGatewayToBridge 把 gateway 接回 KILL-04 disconnect 前的 docker 网络。
+//
+// 静态 IP 为空 → 走 docker 自动分配（subnet 范围内不一定能拿回原 IP）。
+// 失败仅 wrap err；调用方在 t.Cleanup 内 best-effort（t.Logf）。
+func (p *GoldenPath) ReconnectGatewayToBridge(ctx context.Context, netName, staticIP string) error {
+	if strings.TrimSpace(netName) == "" {
+		return errors.New("reconnect gateway: net name empty")
+	}
+	name, err := p.gatewayDockerName()
+	if err != nil {
+		return fmt.Errorf("reconnect gateway: %w", err)
+	}
+	args := []string{"network", "connect"}
+	if strings.TrimSpace(staticIP) != "" {
+		args = append(args, "--ip", staticIP)
+	}
+	args = append(args, netName, name)
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd.Stderr = &stderr
+	if runErr := cmd.Run(); runErr != nil {
+		return fmt.Errorf("reconnect %s to %s: %w (stderr=%s)",
+			name, netName, runErr, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
+// InjectPumbaNetem 起一个 Pumba sidecar 进程，对 target 容器注入 netem 故障
+// （KILL-03）。
+//
+// 行为：
+//   - 调 BuildPumbaNetemArgs 拼 argv；空 → 返回 err。
+//   - 起 `docker run --rm --name <sidecar> -v /var/run/docker.sock:/var/run/docker.sock <image> netem ...`，
+//     用 `cmd.Start()` detached；返回 cleanup 函数：cleanup 通过
+//     `docker kill <sidecar>` + cmd.Wait 收尾。
+//   - 启动失败（exec.LookPath docker 缺、image pull 错）→ 返回 (nil, err)，
+//     调用方 t.Skipf 并把 ImageMissing / DaemonDown 流转 VERIFICATION。
+//
+// 注意：Pumba `--duration` 自然结束时 cmd 自动退出；用例侧 cleanup 是兜底，
+// 避免 t.Fatalf 之后 sidecar 还在跑。
+func (p *GoldenPath) InjectPumbaNetem(ctx context.Context, target string, params PumbaNetemParams) (func(), error) {
+	if _, lookErr := exec.LookPath("docker"); lookErr != nil {
+		return nil, fmt.Errorf("inject pumba: docker not in PATH: %w", lookErr)
+	}
+	argv := BuildPumbaNetemArgs(target, params)
+	if len(argv) == 0 {
+		return nil, fmt.Errorf("inject pumba: empty argv for target=%q params=%+v", target, params)
+	}
+
+	sidecarName := fmt.Sprintf("pumba-%s-%d", sanitizeContainerName(target), time.Now().UnixNano())
+	full := append([]string{
+		"run", "--rm", "--name", sidecarName,
+		"-v", "/var/run/docker.sock:/var/run/docker.sock",
+	}, argv[1:]...)
+	cmd := exec.CommandContext(ctx, "docker", full...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if startErr := cmd.Start(); startErr != nil {
+		return nil, fmt.Errorf("inject pumba: start: %w (stderr=%s)",
+			startErr, strings.TrimSpace(stderr.String()))
+	}
+
+	cleanup := func() {
+		killCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = exec.CommandContext(killCtx, "docker", "kill", sidecarName).Run()
+		_ = cmd.Wait()
+	}
+	return cleanup, nil
+}
+
+// sanitizeContainerName 把 Pumba sidecar 名字中的非法字符替换为 `-`，避免
+// `docker run --name` 拒收（target 可能含点号 / 大写字母）。
+func sanitizeContainerName(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '-' || r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	out := b.String()
+	if out == "" {
+		out = "target"
+	}
+	return out
+}
+
+// ProbeSSHBanner 在 worker 容器内通过 `bash -c 'exec 3<>/dev/tcp/localhost/22
+// && head -c 6 <&3 | grep -q "^SSH-"'` 探测 SSH 22 端口是否仍能拿到 banner
+// （KILL-03 SSH 存活契约）。
+//
+// 行为：
+//   - timeout 通过 ctx 控制；外层用例传 10s 即可。
+//   - exit 0 → nil（banner 拿到「SSH-」前缀）。
+//   - exit 非 0 / docker exec 错 → wrap err 返回。
+//   - 不暴露 stdout（banner 内容用例不消费）。
+//
+// 选 `/dev/tcp` 而非 `nc -z`：避免依赖 worker 镜像内有无 netcat；bash 内建
+// `/dev/tcp` 在常见镜像（debian-slim / ubuntu）都可用。
+func (p *GoldenPath) ProbeSSHBanner(ctx context.Context, timeout time.Duration) error {
+	name, err := p.workerDockerName()
+	if err != nil {
+		return err
+	}
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	subCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	script := `exec 3<>/dev/tcp/localhost/22 && head -c 6 <&3 | grep -q '^SSH-'`
+	cmd := exec.CommandContext(subCtx, "docker", "exec", name, "bash", "-c", script)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if runErr := cmd.Run(); runErr != nil {
+		return fmt.Errorf("probe ssh banner: docker exec %s: %w (stderr=%s)",
+			name, runErr, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
 // ─── 内部 helpers ──────────────────────────────────────────────────────
 
 // disableKeepAliveClient 返回一个禁 keep-alive 的 http.Client，避免长连接造成

@@ -1,0 +1,5 @@
+time="2026-05-14T18:32:01Z" level=info msg="Pumba version v0.10.0"
+time="2026-05-14T18:32:01Z" level=info msg="Running netem command"
+time="2026-05-14T18:32:01Z" level=info msg="Applying netem delay 1000ms to cloudproxy-gw-alpha"
+time="2026-05-14T18:32:01Z" level=info msg="tc qdisc add dev eth0 root netem delay 1000ms"
+time="2026-05-14T18:32:01Z" level=info msg="netem command was applied successfully"

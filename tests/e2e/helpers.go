@@ -1001,6 +1001,333 @@ func expandCapBits(bits uint64) map[string]bool {
 // capability 集合。任一命中 → 用例 fail。
 var LeakDangerousCaps = []string{CapNetRaw, CapNetAdmin, CapSysAdmin}
 
+// ─── Phase 50 / KILL-01..04 Kill-switch 压力测试共享类型 ───────────────
+
+// StressVerdict 是 Phase 50 KILL-01..04 各用例最终裁决枚举。
+//
+//   - StressVerdictPass：实际行为与契约一致（KILL-01/02/04 断网且无包，
+//     或 KILL-03 SSH 存活且出口 IP 投票符合预期）。
+//   - StressVerdictFail：实际行为违反契约（断网延迟超阈 / host eth0 抓到非
+//     网关流量 / SSH 死掉 / 投票回显非预期 IP）。
+//   - StressVerdictInconclusive：仅 KILL-03 启用，contract.AllowInconclusive
+//     为 true 时投票全弃权可归此分支，用例 t.Skipf 而不是 t.Fatalf。
+//
+// 与 Phase 49 LeakVerdict 风格相同但语义独立：LEAK 看「是否泄漏」，
+// 压力测试看「sing-box 倒下 / 劣化 / 网摘走时 worker 是否回落直连」。
+type StressVerdict int
+
+const (
+	StressVerdictUnknown StressVerdict = iota
+	StressVerdictPass
+	StressVerdictFail
+	StressVerdictInconclusive
+)
+
+// String 让 StressVerdict 在 t.Log / artifact dump 中可读。
+func (v StressVerdict) String() string {
+	switch v {
+	case StressVerdictPass:
+		return "Pass"
+	case StressVerdictFail:
+		return "Fail"
+	case StressVerdictInconclusive:
+		return "Inconclusive"
+	default:
+		return "Unknown"
+	}
+}
+
+// KillswitchStressContract 锁定 KILL-01..04 各自的行为契约（CONTEXT §Specifics）。
+//
+// 字段语义：
+//   - MaxDisconnectMs：KILL-01/02/04 要求「kill / disconnect / tun-down 触发后
+//     ≤ N ms 内 worker curl 必须失败」；KILL-03 设 0 表示不做断网 timing 断言。
+//   - SSHAlive：KILL-03 要求 worker SSH 22 端口在故障期间存活；其它 KILL 设 false
+//     表示不关心。
+//   - AllowInconclusive：KILL-03 允许出口 IP 投票全弃权（netem delay 1000ms 下
+//     curl 全 timeout 属正常劣化路径）；其它 KILL 设 false。
+//
+// 任一字段漂移 → darwin 单测立即 fail，避免静默放宽 SLA。
+var KillswitchStressContract = map[string]struct {
+	MaxDisconnectMs   int
+	SSHAlive          bool
+	AllowInconclusive bool
+}{
+	"KILL-01": {MaxDisconnectMs: 3000, SSHAlive: false, AllowInconclusive: false},
+	"KILL-02": {MaxDisconnectMs: 3000, SSHAlive: false, AllowInconclusive: false},
+	"KILL-03": {MaxDisconnectMs: 0, SSHAlive: true, AllowInconclusive: true},
+	"KILL-04": {MaxDisconnectMs: 3000, SSHAlive: false, AllowInconclusive: false},
+}
+
+// StressEvidence 是 ClassifyStressResult 的入参聚合（CONTEXT §Specifics）。
+//
+//   - ProbeExitCode / LeakedPackets / ElapsedMs：KILL-01/02/04 使用。
+//   - SSHAlive / EgressIPVote / ExpectedEgressIP：KILL-03 使用。
+//
+// 不强求所有字段同时有意义；ClassifyStressResult 内按 kill id 选择读哪几个。
+type StressEvidence struct {
+	ProbeExitCode    int
+	LeakedPackets    int
+	ElapsedMs        int
+	SSHAlive         bool
+	EgressIPVote     VoteResult
+	ExpectedEgressIP string
+}
+
+// ClassifyStressResult 把 (kill id, evidence) 合成 StressVerdict + reason。
+//
+// 行为表（与 KillswitchStressContract 对齐）：
+//
+//	KILL-01 / KILL-02 / KILL-04（MaxDisconnectMs > 0）：
+//	  ProbeExitCode == 0          → Fail "probe unexpectedly succeeded"
+//	  LeakedPackets > 0           → Fail "host eth0 captured N non-gateway packets"
+//	  ElapsedMs > MaxDisconnectMs → Fail "disconnect latency NMs exceeds threshold"
+//	  其它                         → Pass
+//
+//	KILL-03（AllowInconclusive=true）：
+//	  SSHAlive == false                                       → Fail "ssh banner missing"
+//	  EgressIPVote.OK && Winner != ExpectedEgressIP           → Fail "vote winner X != expected Y"
+//	  EgressIPVote 全弃权 (Winner == "" && !OK && len(Dissent)==0) → Inconclusive "vote all-abstain"
+//	  其它                                                     → Pass
+//
+//	kill 未在 contract 中 → Unknown + "unknown kill id"
+func ClassifyStressResult(kill string, ev StressEvidence) (StressVerdict, string) {
+	contract, ok := KillswitchStressContract[kill]
+	if !ok {
+		return StressVerdictUnknown, fmt.Sprintf("unknown kill id %q", kill)
+	}
+
+	if contract.MaxDisconnectMs > 0 {
+		if ev.ProbeExitCode == 0 {
+			return StressVerdictFail, "probe unexpectedly succeeded after fault injection"
+		}
+		if ev.LeakedPackets > 0 {
+			return StressVerdictFail, fmt.Sprintf("host eth0 captured %d non-gateway packets", ev.LeakedPackets)
+		}
+		if ev.ElapsedMs > contract.MaxDisconnectMs {
+			return StressVerdictFail, fmt.Sprintf("disconnect latency %dms exceeds threshold %dms",
+				ev.ElapsedMs, contract.MaxDisconnectMs)
+		}
+		return StressVerdictPass, fmt.Sprintf("disconnect within %dms, 0 leaked packets", contract.MaxDisconnectMs)
+	}
+
+	if contract.SSHAlive && !ev.SSHAlive {
+		return StressVerdictFail, "ssh banner not received within timeout (control flow not alive)"
+	}
+	if ev.EgressIPVote.OK && ev.ExpectedEgressIP != "" && ev.EgressIPVote.Winner != ev.ExpectedEgressIP {
+		return StressVerdictFail, fmt.Sprintf("vote winner %q != expected %q",
+			ev.EgressIPVote.Winner, ev.ExpectedEgressIP)
+	}
+	if !ev.EgressIPVote.OK && ev.EgressIPVote.Winner == "" && len(ev.EgressIPVote.Dissent) == 0 {
+		if contract.AllowInconclusive {
+			return StressVerdictInconclusive, "egress IP vote all-abstain (allowed under netem stress)"
+		}
+		return StressVerdictFail, "egress IP vote all-abstain (not allowed for this kill)"
+	}
+	return StressVerdictPass, "ssh alive and egress IP vote stable"
+}
+
+// ─── Phase 50 / KILL-03 Pumba netem 参数与输出解析 ─────────────────────
+
+// PumbaNetemParams 锁定 Pumba sidecar 注入网络故障的参数（CONTEXT §Specifics）。
+//
+// Mode：当前 KILL-03 锁 "delay"；loss / duplicate 留备选（未来 phase 启用）。
+// DelayMs：delay 模式参数，<= 0 时回退默认 1000ms（CONTEXT §Specifics 锁 1000ms）。
+// LossPct：loss 模式参数，0-100。
+// Duration：Pumba `--duration` 字段，<= 0 时回退默认 30s。
+// Image：Pumba image 全名 + tag，空时回退 "gaiaadm/pumba:0.10.0"。
+// TcImage：Pumba 内部 tc sidecar image，空时回退 "gaiadocker/iproute2"。
+type PumbaNetemParams struct {
+	Mode     string
+	DelayMs  int
+	LossPct  int
+	Duration time.Duration
+	Image    string
+	TcImage  string
+}
+
+const (
+	defaultPumbaImage    = "gaiaadm/pumba:0.10.0"
+	defaultPumbaTcImage  = "gaiadocker/iproute2"
+	defaultPumbaDelayMs  = 1000
+	defaultPumbaDuration = 30 * time.Second
+)
+
+// BuildPumbaNetemArgs 把 PumbaNetemParams 拼成完整 `docker run` argv（不含 docker
+// daemon socket bind mount —— 那部分由 InjectPumbaNetem 在 Linux 入口包统一加）。
+//
+// target（gateway 容器名）为空 → 返回 nil（用例侧报错）。
+// Mode == "" / "delay" → 走 delay 路径；"loss" → 走 loss 路径；其它 → 返回 nil。
+func BuildPumbaNetemArgs(target string, params PumbaNetemParams) []string {
+	if strings.TrimSpace(target) == "" {
+		return nil
+	}
+	image := params.Image
+	if image == "" {
+		image = defaultPumbaImage
+	}
+	tcImage := params.TcImage
+	if tcImage == "" {
+		tcImage = defaultPumbaTcImage
+	}
+	duration := params.Duration
+	if duration <= 0 {
+		duration = defaultPumbaDuration
+	}
+
+	args := []string{
+		"docker", "run", "--rm",
+		image,
+		"netem",
+		"--duration", duration.String(),
+		"--tc-image", tcImage,
+	}
+
+	mode := params.Mode
+	if mode == "" {
+		mode = "delay"
+	}
+	switch mode {
+	case "delay":
+		delayMs := params.DelayMs
+		if delayMs <= 0 {
+			delayMs = defaultPumbaDelayMs
+		}
+		args = append(args, "delay", "--time", strconv.Itoa(delayMs))
+	case "loss":
+		loss := params.LossPct
+		if loss <= 0 {
+			loss = 50
+		}
+		args = append(args, "loss", "--percent", strconv.Itoa(loss))
+	default:
+		return nil
+	}
+	args = append(args, target)
+	return args
+}
+
+// PumbaOutcome 是 ParsePumbaOutput 的返回枚举（CONTEXT §Specifics）。
+//
+// Applied：Pumba 成功注入 netem 规则。
+// ImageMissing：Pumba image 或 tc image 拉不下来（CI 网络白名单未覆盖）。
+// DaemonDown：docker daemon 不可达（sidecar 起不来）。
+// Failed：注入失败但非上述明确分支（target 不存在 / 权限错 / 其它）。
+// Unknown：输出无法识别。
+type PumbaOutcome int
+
+const (
+	PumbaOutcomeUnknown PumbaOutcome = iota
+	PumbaOutcomeApplied
+	PumbaOutcomeFailed
+	PumbaOutcomeImageMissing
+	PumbaOutcomeDaemonDown
+)
+
+// String 让 PumbaOutcome 在 t.Log / artifact dump 中可读。
+func (o PumbaOutcome) String() string {
+	switch o {
+	case PumbaOutcomeApplied:
+		return "Applied"
+	case PumbaOutcomeFailed:
+		return "Failed"
+	case PumbaOutcomeImageMissing:
+		return "ImageMissing"
+	case PumbaOutcomeDaemonDown:
+		return "DaemonDown"
+	default:
+		return "Unknown"
+	}
+}
+
+// ParsePumbaOutput 把 Pumba sidecar 的 stdout + stderr 合并匹配，返回 PumbaOutcome。
+//
+// 关键字识别（小写匹配）：
+//   - ImageMissing：`manifest unknown` / `pull access denied` / `image not found` /
+//     `no such image` / `repository does not exist`。
+//   - DaemonDown：`cannot connect to the docker daemon` /
+//     `is the docker daemon running`。
+//   - Applied：`tc qdisc add` / `applying netem` / `running netem command` /
+//     `successful` （Pumba 0.10.x 输出关键字）。
+//   - Failed：`error response from daemon` / `no such container` / `permission denied`
+//     / `failed to`。
+//   - 其它 / 空 → Unknown。
+//
+// 检测顺序：ImageMissing > DaemonDown > Applied > Failed > Unknown。
+func ParsePumbaOutput(stdout, stderr string) PumbaOutcome {
+	combined := strings.ToLower(stdout + "\n" + stderr)
+	if combined == "\n" || strings.TrimSpace(combined) == "" {
+		return PumbaOutcomeUnknown
+	}
+	switch {
+	case strings.Contains(combined, "manifest unknown"),
+		strings.Contains(combined, "pull access denied"),
+		strings.Contains(combined, "image not found"),
+		strings.Contains(combined, "no such image"),
+		strings.Contains(combined, "repository does not exist"):
+		return PumbaOutcomeImageMissing
+	case strings.Contains(combined, "cannot connect to the docker daemon"),
+		strings.Contains(combined, "is the docker daemon running"):
+		return PumbaOutcomeDaemonDown
+	case strings.Contains(combined, "tc qdisc add"),
+		strings.Contains(combined, "applying netem"),
+		strings.Contains(combined, "running netem command"),
+		strings.Contains(combined, "successful"):
+		return PumbaOutcomeApplied
+	case strings.Contains(combined, "error response from daemon"),
+		strings.Contains(combined, "no such container"),
+		strings.Contains(combined, "permission denied"),
+		strings.Contains(combined, "failed to"):
+		return PumbaOutcomeFailed
+	default:
+		return PumbaOutcomeUnknown
+	}
+}
+
+// ─── Phase 50 / KILL-04 docker inspect 网络选择 ────────────────────────
+
+// PickGatewayBridgeNetwork 从 `docker inspect -f` 输出的
+// `<name>=<ip>;<name>=<ip>;` 字面量中挑出 KILL-04 应当 disconnect 的
+// 「cloudproxy 专属 bridge」。
+//
+// 选择策略（CONTEXT §Area 3）：
+//  1. 优先 `cloudproxy-net-` 前缀（v3.5 之后控制面真实接入的网络）；
+//  2. 兜底取第一个名字 != "bridge" 且 != "" 的网络（避免摘默认 bridge）；
+//  3. 找不到 → 返回 ("","")。
+//
+// 与 PLAN 50-04 单测 4 case 锁死：only-cloudproxy / only-bridge / multi-custom /
+// empty。
+func PickGatewayBridgeNetwork(raw string) (net, ip string) {
+	if strings.TrimSpace(raw) == "" {
+		return "", ""
+	}
+	entries := strings.Split(raw, ";")
+	var fallbackNet, fallbackIP string
+	for _, e := range entries {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		name := strings.TrimSpace(parts[0])
+		addr := strings.TrimSpace(parts[1])
+		if name == "" {
+			continue
+		}
+		if strings.HasPrefix(name, "cloudproxy-net-") {
+			return name, addr
+		}
+		if name != "bridge" && fallbackNet == "" {
+			fallbackNet = name
+			fallbackIP = addr
+		}
+	}
+	return fallbackNet, fallbackIP
+}
+
 // ─── 既有锁定表（保留） ────────────────────────────────────────────────
 
 // CLIErrorCases 是 MVS-05 的 4 个 table-driven 用例预设（用例代码可直接 range）。

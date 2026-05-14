@@ -39,6 +39,20 @@ func readLeakFixture(t *testing.T, name string) string {
 	return string(data)
 }
 
+// readKillswitchFixture 是 Phase 50 KILL-* 纯函数单测的 fixture 加载入口。
+// 与 readLeakFixture 同模式，路径换到 testdata/killswitch/。
+func readKillswitchFixture(t *testing.T, name string) string {
+	t.Helper()
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Dir(file)
+	path := filepath.Join(root, "testdata", "killswitch", name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", name, err)
+	}
+	return string(data)
+}
+
 // ─── MVS-02 / Vote 多数派裁决 ─────────────────────────────────────────
 
 func TestHelpersVote_Majority(t *testing.T) {
@@ -1121,6 +1135,357 @@ func TestHelpersExpandCapBits_NetRawBit(t *testing.T) {
 	}
 	if caps.Eff[CapNetAdmin] || caps.Eff[CapSysAdmin] {
 		t.Errorf("only NET_RAW should be set, got %v", caps.Eff)
+	}
+}
+
+// ─── Phase 50 / KILL-01..04 压力测试纯函数单测 ─────────────────────────
+
+func TestHelpersStressVerdict_String(t *testing.T) {
+	cases := map[StressVerdict]string{
+		StressVerdictUnknown:      "Unknown",
+		StressVerdictPass:         "Pass",
+		StressVerdictFail:         "Fail",
+		StressVerdictInconclusive: "Inconclusive",
+	}
+	for k, want := range cases {
+		if got := k.String(); got != want {
+			t.Fatalf("StressVerdict(%d).String(): got %q want %q", k, got, want)
+		}
+	}
+}
+
+func TestHelpersKillswitchStressContract_Locked(t *testing.T) {
+	want := map[string]struct {
+		MaxDisconnectMs   int
+		SSHAlive          bool
+		AllowInconclusive bool
+	}{
+		"KILL-01": {3000, false, false},
+		"KILL-02": {3000, false, false},
+		"KILL-03": {0, true, true},
+		"KILL-04": {3000, false, false},
+	}
+	if len(KillswitchStressContract) != len(want) {
+		t.Fatalf("contract len=%d want %d", len(KillswitchStressContract), len(want))
+	}
+	for kill, w := range want {
+		got, ok := KillswitchStressContract[kill]
+		if !ok {
+			t.Errorf("contract missing %s", kill)
+			continue
+		}
+		if got.MaxDisconnectMs != w.MaxDisconnectMs {
+			t.Errorf("%s MaxDisconnectMs=%d want %d", kill, got.MaxDisconnectMs, w.MaxDisconnectMs)
+		}
+		if got.SSHAlive != w.SSHAlive {
+			t.Errorf("%s SSHAlive=%v want %v", kill, got.SSHAlive, w.SSHAlive)
+		}
+		if got.AllowInconclusive != w.AllowInconclusive {
+			t.Errorf("%s AllowInconclusive=%v want %v", kill, got.AllowInconclusive, w.AllowInconclusive)
+		}
+	}
+}
+
+func TestHelpersClassifyStress_UnknownKill(t *testing.T) {
+	v, reason := ClassifyStressResult("KILL-99", StressEvidence{})
+	if v != StressVerdictUnknown {
+		t.Fatalf("expected Unknown, got %s reason=%q", v, reason)
+	}
+	if !strings.Contains(reason, "unknown") {
+		t.Fatalf("reason should mention unknown, got %q", reason)
+	}
+}
+
+func TestHelpersClassifyStress_KILL01_PassOnDisconnect(t *testing.T) {
+	v, reason := ClassifyStressResult("KILL-01", StressEvidence{
+		ProbeExitCode: 28, LeakedPackets: 0, ElapsedMs: 1200,
+	})
+	if v != StressVerdictPass {
+		t.Fatalf("expected Pass, got %s reason=%q", v, reason)
+	}
+}
+
+func TestHelpersClassifyStress_KILL01_FailOnProbeSucceeded(t *testing.T) {
+	v, reason := ClassifyStressResult("KILL-01", StressEvidence{
+		ProbeExitCode: 0, LeakedPackets: 0, ElapsedMs: 100,
+	})
+	if v != StressVerdictFail {
+		t.Fatalf("expected Fail on probe succeeded, got %s reason=%q", v, reason)
+	}
+	if !strings.Contains(reason, "probe unexpectedly") {
+		t.Fatalf("reason mismatch: %q", reason)
+	}
+}
+
+func TestHelpersClassifyStress_KILL01_FailOnLeakPackets(t *testing.T) {
+	v, reason := ClassifyStressResult("KILL-01", StressEvidence{
+		ProbeExitCode: 28, LeakedPackets: 5, ElapsedMs: 1500,
+	})
+	if v != StressVerdictFail {
+		t.Fatalf("expected Fail on leaked packets, got %s reason=%q", v, reason)
+	}
+	if !strings.Contains(reason, "5") {
+		t.Fatalf("reason should include packet count, got %q", reason)
+	}
+}
+
+func TestHelpersClassifyStress_KILL01_FailOnLatency(t *testing.T) {
+	v, reason := ClassifyStressResult("KILL-01", StressEvidence{
+		ProbeExitCode: 28, LeakedPackets: 0, ElapsedMs: 5500,
+	})
+	if v != StressVerdictFail {
+		t.Fatalf("expected Fail on latency, got %s reason=%q", v, reason)
+	}
+	if !strings.Contains(reason, "exceeds") {
+		t.Fatalf("reason should mention threshold, got %q", reason)
+	}
+}
+
+func TestHelpersClassifyStress_KILL02_Pass(t *testing.T) {
+	v, _ := ClassifyStressResult("KILL-02", StressEvidence{
+		ProbeExitCode: 124, LeakedPackets: 0, ElapsedMs: 2000,
+	})
+	if v != StressVerdictPass {
+		t.Fatalf("expected Pass, got %s", v)
+	}
+}
+
+func TestHelpersClassifyStress_KILL04_FailOnPacketLeak(t *testing.T) {
+	v, reason := ClassifyStressResult("KILL-04", StressEvidence{
+		ProbeExitCode: 28, LeakedPackets: 1, ElapsedMs: 500,
+	})
+	if v != StressVerdictFail {
+		t.Fatalf("expected Fail on single leaked packet, got %s reason=%q", v, reason)
+	}
+}
+
+func TestHelpersClassifyStress_KILL03_PassWithVote(t *testing.T) {
+	v, _ := ClassifyStressResult("KILL-03", StressEvidence{
+		SSHAlive:         true,
+		EgressIPVote:     VoteResult{Winner: "203.0.113.5", OK: true},
+		ExpectedEgressIP: "203.0.113.5",
+	})
+	if v != StressVerdictPass {
+		t.Fatalf("expected Pass when vote matches expected, got %s", v)
+	}
+}
+
+func TestHelpersClassifyStress_KILL03_FailOnSSHDead(t *testing.T) {
+	v, reason := ClassifyStressResult("KILL-03", StressEvidence{
+		SSHAlive: false,
+	})
+	if v != StressVerdictFail {
+		t.Fatalf("expected Fail when SSH dead, got %s reason=%q", v, reason)
+	}
+	if !strings.Contains(reason, "ssh") {
+		t.Fatalf("reason should mention ssh, got %q", reason)
+	}
+}
+
+func TestHelpersClassifyStress_KILL03_FailOnWrongIP(t *testing.T) {
+	v, reason := ClassifyStressResult("KILL-03", StressEvidence{
+		SSHAlive:         true,
+		EgressIPVote:     VoteResult{Winner: "1.2.3.4", OK: true},
+		ExpectedEgressIP: "5.6.7.8",
+	})
+	if v != StressVerdictFail {
+		t.Fatalf("expected Fail when vote winner != expected, got %s reason=%q", v, reason)
+	}
+	if !strings.Contains(reason, "1.2.3.4") || !strings.Contains(reason, "5.6.7.8") {
+		t.Fatalf("reason should include both winner and expected, got %q", reason)
+	}
+}
+
+func TestHelpersClassifyStress_KILL03_InconclusiveOnAbstain(t *testing.T) {
+	v, reason := ClassifyStressResult("KILL-03", StressEvidence{
+		SSHAlive:         true,
+		EgressIPVote:     VoteResult{Winner: "", OK: false, Dissent: nil},
+		ExpectedEgressIP: "5.6.7.8",
+	})
+	if v != StressVerdictInconclusive {
+		t.Fatalf("expected Inconclusive on all-abstain, got %s reason=%q", v, reason)
+	}
+	if !strings.Contains(reason, "abstain") {
+		t.Fatalf("reason should mention abstain, got %q", reason)
+	}
+}
+
+// ─── Phase 50 / Pumba 参数构建 + 输出解析 ──────────────────────────────
+
+func TestHelpersBuildPumbaNetemArgs_DelayDefaults(t *testing.T) {
+	argv := BuildPumbaNetemArgs("cloudproxy-gw-alpha", PumbaNetemParams{})
+	if len(argv) == 0 {
+		t.Fatalf("expected non-empty argv")
+	}
+	if argv[0] != "docker" || argv[1] != "run" || argv[2] != "--rm" {
+		t.Fatalf("argv must start with `docker run --rm`, got %v", argv)
+	}
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "gaiaadm/pumba:0.10.0") {
+		t.Fatalf("expected default Pumba image, got %q", joined)
+	}
+	if !strings.Contains(joined, "--duration 30s") {
+		t.Fatalf("expected default duration 30s, got %q", joined)
+	}
+	if !strings.Contains(joined, "delay --time 1000") {
+		t.Fatalf("expected default delay 1000ms, got %q", joined)
+	}
+	if argv[len(argv)-1] != "cloudproxy-gw-alpha" {
+		t.Fatalf("target must be last arg, got %q", argv[len(argv)-1])
+	}
+}
+
+func TestHelpersBuildPumbaNetemArgs_CustomImage(t *testing.T) {
+	argv := BuildPumbaNetemArgs("gw", PumbaNetemParams{
+		Mode:     "delay",
+		DelayMs:  500,
+		Duration: 10 * time.Second,
+		Image:    "private.registry/pumba:custom",
+		TcImage:  "private.registry/iproute2:1",
+	})
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "private.registry/pumba:custom") {
+		t.Fatalf("expected custom image, got %q", joined)
+	}
+	if !strings.Contains(joined, "--tc-image private.registry/iproute2:1") {
+		t.Fatalf("expected custom tc-image, got %q", joined)
+	}
+	if !strings.Contains(joined, "--duration 10s") {
+		t.Fatalf("expected duration 10s, got %q", joined)
+	}
+	if !strings.Contains(joined, "delay --time 500") {
+		t.Fatalf("expected delay 500ms, got %q", joined)
+	}
+}
+
+func TestHelpersBuildPumbaNetemArgs_EmptyTarget(t *testing.T) {
+	argv := BuildPumbaNetemArgs("   ", PumbaNetemParams{})
+	if argv != nil {
+		t.Fatalf("expected nil argv on empty target, got %v", argv)
+	}
+}
+
+func TestHelpersBuildPumbaNetemArgs_LossMode(t *testing.T) {
+	argv := BuildPumbaNetemArgs("gw", PumbaNetemParams{Mode: "loss", LossPct: 30})
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "loss --percent 30") {
+		t.Fatalf("expected loss 30%%, got %q", joined)
+	}
+}
+
+func TestHelpersBuildPumbaNetemArgs_UnknownMode(t *testing.T) {
+	argv := BuildPumbaNetemArgs("gw", PumbaNetemParams{Mode: "garbage"})
+	if argv != nil {
+		t.Fatalf("expected nil argv on unknown mode, got %v", argv)
+	}
+}
+
+func TestHelpersParsePumbaOutput_Applied(t *testing.T) {
+	raw := readKillswitchFixture(t, "pumba_applied.txt")
+	got := ParsePumbaOutput(raw, "")
+	if got != PumbaOutcomeApplied {
+		t.Fatalf("expected Applied, got %s", got)
+	}
+}
+
+func TestHelpersParsePumbaOutput_ImageMissing(t *testing.T) {
+	raw := readKillswitchFixture(t, "pumba_image_missing.txt")
+	got := ParsePumbaOutput("", raw)
+	if got != PumbaOutcomeImageMissing {
+		t.Fatalf("expected ImageMissing, got %s", got)
+	}
+}
+
+func TestHelpersParsePumbaOutput_DaemonDown(t *testing.T) {
+	raw := readKillswitchFixture(t, "pumba_daemon_down.txt")
+	got := ParsePumbaOutput("", raw)
+	if got != PumbaOutcomeDaemonDown {
+		t.Fatalf("expected DaemonDown, got %s", got)
+	}
+}
+
+func TestHelpersParsePumbaOutput_Failed(t *testing.T) {
+	raw := readKillswitchFixture(t, "pumba_failed.txt")
+	got := ParsePumbaOutput(raw, "")
+	if got != PumbaOutcomeFailed {
+		t.Fatalf("expected Failed, got %s", got)
+	}
+}
+
+func TestHelpersParsePumbaOutput_Unknown(t *testing.T) {
+	got := ParsePumbaOutput("", "")
+	if got != PumbaOutcomeUnknown {
+		t.Fatalf("expected Unknown on empty, got %s", got)
+	}
+	got = ParsePumbaOutput("random garbage text\n", "")
+	if got != PumbaOutcomeUnknown {
+		t.Fatalf("expected Unknown on garbage, got %s", got)
+	}
+}
+
+func TestHelpersPumbaOutcome_String(t *testing.T) {
+	cases := map[PumbaOutcome]string{
+		PumbaOutcomeUnknown:      "Unknown",
+		PumbaOutcomeApplied:      "Applied",
+		PumbaOutcomeFailed:       "Failed",
+		PumbaOutcomeImageMissing: "ImageMissing",
+		PumbaOutcomeDaemonDown:   "DaemonDown",
+	}
+	for k, want := range cases {
+		if got := k.String(); got != want {
+			t.Fatalf("PumbaOutcome(%d).String(): got %q want %q", k, got, want)
+		}
+	}
+}
+
+// ─── Phase 50 / KILL-04 网络选择纯函数 ─────────────────────────────────
+
+func TestHelpersPickGatewayBridgeNetwork_CloudproxyPreferred(t *testing.T) {
+	raw := "cloudproxy-net-alpha=10.99.0.2;bridge=172.17.0.5;"
+	net, ip := PickGatewayBridgeNetwork(raw)
+	if net != "cloudproxy-net-alpha" {
+		t.Fatalf("expected cloudproxy-net-alpha, got %q", net)
+	}
+	if ip != "10.99.0.2" {
+		t.Fatalf("expected ip 10.99.0.2, got %q", ip)
+	}
+}
+
+func TestHelpersPickGatewayBridgeNetwork_OnlyBridgeReturnsEmpty(t *testing.T) {
+	raw := "bridge=172.17.0.5;"
+	net, ip := PickGatewayBridgeNetwork(raw)
+	if net != "" || ip != "" {
+		t.Fatalf("expected empty on bridge-only, got net=%q ip=%q", net, ip)
+	}
+}
+
+func TestHelpersPickGatewayBridgeNetwork_NonCloudproxyCustomFallback(t *testing.T) {
+	raw := "my-custom-net=10.0.0.5;bridge=172.17.0.2;"
+	net, ip := PickGatewayBridgeNetwork(raw)
+	if net != "my-custom-net" {
+		t.Fatalf("expected fallback to my-custom-net, got %q", net)
+	}
+	if ip != "10.0.0.5" {
+		t.Fatalf("expected ip 10.0.0.5, got %q", ip)
+	}
+}
+
+func TestHelpersPickGatewayBridgeNetwork_EmptyInput(t *testing.T) {
+	net, ip := PickGatewayBridgeNetwork("")
+	if net != "" || ip != "" {
+		t.Fatalf("expected empty on empty input, got net=%q ip=%q", net, ip)
+	}
+	net, ip = PickGatewayBridgeNetwork("   \n  ")
+	if net != "" || ip != "" {
+		t.Fatalf("expected empty on whitespace input, got net=%q ip=%q", net, ip)
+	}
+}
+
+func TestHelpersPickGatewayBridgeNetwork_MultiCloudproxyTakesFirst(t *testing.T) {
+	raw := "cloudproxy-net-alpha=10.99.0.2;cloudproxy-net-beta=10.99.1.2;bridge=172.17.0.5;"
+	net, _ := PickGatewayBridgeNetwork(raw)
+	if net != "cloudproxy-net-alpha" {
+		t.Fatalf("expected first cloudproxy-net-*, got %q", net)
 	}
 }
 

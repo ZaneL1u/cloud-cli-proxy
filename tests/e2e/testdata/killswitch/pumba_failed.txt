@@ -1,0 +1,3 @@
+time="2026-05-14T18:32:01Z" level=info msg="Pumba version v0.10.0"
+time="2026-05-14T18:32:01Z" level=error msg="Error response from daemon: No such container: cloudproxy-gw-missing"
+time="2026-05-14T18:32:01Z" level=fatal msg="failed to inject netem fault"
