@@ -580,6 +580,22 @@ func (r *Repository) GetBindingHostID(ctx context.Context, bindingID string) (st
 	return hostID, nil
 }
 
+// GetBindingHostIDByEgressIP Phase 51 Plan 09 / 闭 Phase 47 D-47-3：查询某个
+// 出口 IP 当前绑定到哪个 host（用于 admin Bind API 的双绑互斥 pre-check）。
+//
+// 没有 row → 返回 pgx.ErrNoRows，调用方据此判定「此 egress IP 当前未绑定」。
+// host_egress_bindings 表无 egress_ip_id 单列 UNIQUE，理论可能有多 host 绑同
+// IP 的状态（应该已经被 Bind 闸住，但保险加 LIMIT 1）。
+func (r *Repository) GetBindingHostIDByEgressIP(ctx context.Context, egressIPID string) (string, error) {
+	var hostID string
+	if err := r.db.QueryRow(ctx, `
+		SELECT host_id::text FROM host_egress_bindings WHERE egress_ip_id = $1 LIMIT 1
+	`, egressIPID).Scan(&hostID); err != nil {
+		return "", fmt.Errorf("get binding host id by egress ip: %w", err)
+	}
+	return hostID, nil
+}
+
 func (r *Repository) GetHostDetail(ctx context.Context, hostID string) (HostDetail, error) {
 	host, err := r.GetHost(ctx, hostID)
 	if err != nil {

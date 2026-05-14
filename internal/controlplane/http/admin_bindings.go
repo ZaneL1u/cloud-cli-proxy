@@ -17,7 +17,16 @@ type AdminBindingStore interface {
 	BindEgressIPToHost(context.Context, string, string) (repository.HostBinding, error)
 	UnbindEgressIPFromHost(context.Context, string) error
 	GetBindingHostID(context.Context, string) (string, error)
+	// GetBindingHostIDByEgressIP Phase 51 Plan 09：返回该 egress IP 当前绑定
+	// 的 host_id；row 不存在时返回 pgx.ErrNoRows。
+	GetBindingHostIDByEgressIP(context.Context, string) (string, error)
 }
+
+// ErrCodeEgressIPAlreadyBound Phase 51 Plan 09 / 闭 Phase 47 D-47-3：当
+// 双绑互斥被拦截时 admin Bind API 响应中的稳定 error_code 字段值。
+// 与 Phase 47 helpers `EgressIPDoubleBindContract` / `ParseBindEgressIPResponse`
+// 锁定的契约对齐（机器可读 + 中文 message）。
+const ErrCodeEgressIPAlreadyBound = "egress_ip_already_bound"
 
 type AdminBindingsHandler struct {
 	logger *slog.Logger
@@ -60,6 +69,31 @@ func (h *AdminBindingsHandler) Bind() nethttp.Handler {
 
 		if host.Status == "running" {
 			writeJSON(w, nethttp.StatusConflict, map[string]string{"error": "cannot bind egress IP to running host, stop host first"})
+			return
+		}
+
+		// Phase 51 Plan 09 / 闭 Phase 47 D-47-3：双绑互斥 pre-check。
+		// 如果该 egress IP 已绑定到另一台 host → 409 + 稳定 error_code +
+		// 中文 message + 英文 message 子串（兼容 Phase 47 helpers 既有断言）。
+		// 同 host 重新绑定同 IP 时跳过 pre-check，走原 INSERT 路径，由
+		// host_egress_bindings 表的 UNIQUE (host_id, egress_ip_id) 复合键兜底
+		// 重复 row（行为不变）。
+		existingHostID, lookupErr := h.store.GetBindingHostIDByEgressIP(r.Context(), req.EgressIPID)
+		if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
+			h.logger.Error("check existing binding by egress ip failed",
+				"egress_ip_id", req.EgressIPID, "error", lookupErr)
+			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{
+				"error": "check existing binding failed",
+			})
+			return
+		}
+		if lookupErr == nil && existingHostID != "" && existingHostID != req.HostID {
+			writeJSON(w, nethttp.StatusConflict, map[string]any{
+				"error":        "出口 IP 已绑定到其它宿主机 (egress IP already bound to another host)",
+				"error_code":   ErrCodeEgressIPAlreadyBound,
+				"host_id":      existingHostID,
+				"egress_ip_id": req.EgressIPID,
+			})
 			return
 		}
 
