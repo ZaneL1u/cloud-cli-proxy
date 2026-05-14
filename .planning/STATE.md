@@ -4,14 +4,14 @@ milestone: v3.6
 milestone_name: 端到端测试体系与网络隔离验证
 status: in_progress
 stopped_at: null
-last_updated: "2026-05-14T11:00:00Z"
-last_activity: 2026-05-14 - Phase 46 完成（MVS 骨架 + 24 纯函数单测 darwin PASS / Linux 真机 deferred-to-CI）
+last_updated: "2026-05-14T11:30:00Z"
+last_activity: 2026-05-14 - Phase 47 完成（MVS 治理 + 17 新纯函数单测，3 处 backend GAP 列 Phase 51 修）
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 38
-  completed_plans: 10
-  percent: 26
+  completed_plans: 13
+  percent: 34
 ---
 
 # Project State

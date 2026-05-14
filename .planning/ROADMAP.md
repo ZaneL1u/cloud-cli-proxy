@@ -187,9 +187,11 @@
 
 **Plans**: 3 plans
 
-- [ ] 47-01-PLAN.md — 到期容器自动停止 + 审计事件落库（ExpiryScanner + `host.stopped`）
-- [ ] 47-02-PLAN.md — 出口 IP 双绑互斥（API 层第二次绑定被拒绝并返回明确错误码）
-- [ ] 47-03-PLAN.md — host-agent 心跳与恢复（强杀进程 → 30s 内 unhealthy → 重启自动恢复）
+- [x] 47-01-PLAN.md — 到期容器自动停止 + `host.stop.expired` 审计事件（环境变量 `EXPIRY_SCAN_INTERVAL`）— completed 2026-05-14
+- [x] 47-02-PLAN.md — 出口 IP 双绑互斥（写预期行为，backend pre-check 缺失列 Phase 51 QUAL-04 修复）— completed 2026-05-14
+- [x] 47-03-PLAN.md — host-agent 心跳与恢复（`pkill -9` 进程级 + `/healthz` checks.agent 轮询）— completed 2026-05-14
+
+> 注：CONTEXT 草案与源码偏差 5 项（事件名 `host.stop.expired` / env 名 `EXPIRY_SCAN_INTERVAL` / 双绑缺 pre-check / 仅全局 `/healthz` 无 per-host / 健康枚举为 `ok/warning/degraded` × `ok/unreachable`），全部以源码为准，详见 47-VERIFICATION.md §ROADMAP 偏差节。
 
 **Details:**
 
@@ -322,8 +324,8 @@
 | 29-35. v3.0 远端开发体验升级 | v3.0 | 30/30 | Complete | 2026-04-23 |
 | 36-37. v3.1 映射语义补齐与懒加载 | v3.1 | 11/11 | Complete | 2026-04-24 |
 | 38-44. v3.4 多形态容器接入 | v3.4 | 14/14 | Complete | 2026-05-08 |
-| 45-52. v3.6 端到端测试体系 | v3.6 | 10/38 | In Progress | — |
+| 45-52. v3.6 端到端测试体系 | v3.6 | 13/38 | In Progress | — |
 
 ---
 
-*Last updated: 2026-05-14 — Phase 46 完成（MVS 骨架 + 24 单测 darwin PASS，Linux 真机断言 deferred-to-CI）。*
+*Last updated: 2026-05-14 — Phase 47 完成（MVS 治理骨架 + 17 新纯函数单测，3 处 backend GAP 列 Phase 51 QUAL-04 修复）。*
