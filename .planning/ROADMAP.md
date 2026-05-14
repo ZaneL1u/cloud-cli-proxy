@@ -209,8 +209,10 @@
 
 **Plans**: 2 plans
 
-- [ ] 48-01-PLAN.md — sing-box 崩溃后容器断网（`docker kill` gateway → 容器内 curl 失败，不回落直连）
-- [ ] 48-02-PLAN.md — 用户态 resolv.conf 篡改免疫（容器内 `echo nameserver 8.8.8.8 > /etc/resolv.conf` → DNS 仍走 tun 或被防火墙拒绝）
+- [x] 48-01-PLAN.md — sing-box 崩溃后容器断网（`docker kill` → ≤3s curl 失败 + privileged sidecar 抓包零非网关流量）— completed 2026-05-14
+- [x] 48-02-PLAN.md — resolv.conf 篡改免疫（`ClassifyResolvConfDNSOutcome` Tunneled/Denied OR 语义 + host eth0 抓包零 UDP/53→8.8.8.8）— completed 2026-05-14
+
+> 注：host eth0 tcpdump 改走 `docker run --network host --cap-add NET_RAW/NET_ADMIN netshoot` privileged sidecar 路径（CONTEXT §Area 3 Claude's Discretion 允许的备选），新增 `E2E_TCPDUMP_IMAGE` / `E2E_ALLOW_HOST_TCPDUMP` env 覆盖。
 
 **Details:**
 
@@ -324,8 +326,8 @@
 | 29-35. v3.0 远端开发体验升级 | v3.0 | 30/30 | Complete | 2026-04-23 |
 | 36-37. v3.1 映射语义补齐与懒加载 | v3.1 | 11/11 | Complete | 2026-04-24 |
 | 38-44. v3.4 多形态容器接入 | v3.4 | 14/14 | Complete | 2026-05-08 |
-| 45-52. v3.6 端到端测试体系 | v3.6 | 13/38 | In Progress | — |
+| 45-52. v3.6 端到端测试体系 | v3.6 | 15/38 | In Progress | — |
 
 ---
 
-*Last updated: 2026-05-14 — Phase 47 完成（MVS 治理骨架 + 17 新纯函数单测，3 处 backend GAP 列 Phase 51 QUAL-04 修复）。*
+*Last updated: 2026-05-14 — Phase 48 完成（Kill-switch 核心 2 plan，20 新单测，tcpdump 走 netshoot sidecar）。*
