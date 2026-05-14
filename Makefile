@@ -59,8 +59,9 @@ db-reset: ## Reset database (destroy volume and restart)
 
 test: test-go test-smoke ## Run all tests
 
-test-go: ## Run Go tests
-	go test ./... -count=1
+test-go: ## Run Go tests (Phase 51 QUAL-07: -race -shuffle=on 默认；tests/e2e 跑 docker，不带 race)
+	go test $$(go list ./... | grep -v '/tests/e2e$$') -race -shuffle=on -count=1
+	go test ./tests/e2e/... -count=1
 
 test-smoke: ## Run BATS bootstrap smoke tests
 	pnpm exec bats tests/smoke/
@@ -164,7 +165,8 @@ ci-doctor-grep: cloud-claude ## Run scripts/ci-doctor-grep.sh against built clou
 	bash scripts/ci-doctor-grep.sh ./cloud-claude
 
 .PHONY: ci-gate
-ci-gate: ## CI gate: short go test + ci-doctor-grep + uat dry-run
-	go test ./... -count=1 -short
+ci-gate: ## CI gate: short go test + ci-doctor-grep + uat dry-run (Phase 51 QUAL-07: -race -shuffle=on)
+	go test $$(go list ./... | grep -v '/tests/e2e$$') -race -shuffle=on -count=1 -short
+	go test ./tests/e2e/... -count=1 -short
 	$(MAKE) ci-doctor-grep
 	bash tests/scripts/uat-v31-promotion.sh --dry-run

@@ -28,8 +28,11 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Run Go tests
-        run: go test ./... -count=1
+      - name: Run Go tests (Phase 51 QUAL-07: -race -shuffle=on，tests/e2e 排除)
+        run: |
+          set -euo pipefail
+          go test $(go list ./... | grep -v '/tests/e2e$') -race -shuffle=on -count=1
+          go test ./tests/e2e/... -count=1
 
   web-build:
     name: Web Build
