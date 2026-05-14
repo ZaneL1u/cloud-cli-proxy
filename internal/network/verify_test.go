@@ -112,6 +112,82 @@ func TestVerifyEgressIPMulti_AllTimeout(t *testing.T) {
 	}
 }
 
+// ─── Phase 51 QUAL-02: verifyLeakBlockedMulti / defaultLeakTargets 单测 ──────
+
+func TestDefaultLeakTargets_LockedContract(t *testing.T) {
+	want := []leakTarget{
+		{Host: "1.1.1.1", Port: 80},
+		{Host: "8.8.8.8", Port: 443},
+		{Host: "9.9.9.9", Port: 443},
+		{Host: "169.254.169.254", Port: 80},
+	}
+	if len(defaultLeakTargets) != len(want) {
+		t.Fatalf("defaultLeakTargets length: want %d got %d", len(want), len(defaultLeakTargets))
+	}
+	for i, w := range want {
+		if defaultLeakTargets[i] != w {
+			t.Errorf("defaultLeakTargets[%d]: want %+v got %+v", i, w, defaultLeakTargets[i])
+		}
+	}
+}
+
+func TestVerifyLeakBlockedMulti_AllBlocked(t *testing.T) {
+	withFakeNsenterRunner(t, func(call fakeNsenterCall) ([]byte, error) {
+		return nil, errors.New("timeout")
+	})
+
+	var result VerifyResult
+	verifyLeakBlockedMulti(context.Background(), []string{"nsenter"}, defaultLeakTargets, &result)
+	if !result.LeakBlocked {
+		t.Errorf("expected LeakBlocked=true when all targets blocked")
+	}
+	if result.LeakTarget != "1.1.1.1:80" {
+		t.Errorf("expected default LeakTarget=1.1.1.1:80, got %q", result.LeakTarget)
+	}
+}
+
+func TestVerifyLeakBlockedMulti_OneLeaked(t *testing.T) {
+	withFakeNsenterRunner(t, func(call fakeNsenterCall) ([]byte, error) {
+		joined := strings.Join(call.args, " ")
+		if strings.Contains(joined, "/dev/tcp/8.8.8.8/443") {
+			return nil, nil
+		}
+		return nil, errors.New("timeout")
+	})
+
+	var result VerifyResult
+	verifyLeakBlockedMulti(context.Background(), []string{"nsenter"}, defaultLeakTargets, &result)
+	if result.LeakBlocked {
+		t.Errorf("expected LeakBlocked=false when 8.8.8.8:443 leaked")
+	}
+	if result.LeakTarget != "8.8.8.8:443" {
+		t.Errorf("expected LeakTarget=8.8.8.8:443, got %q", result.LeakTarget)
+	}
+}
+
+func TestVerifyLeakBlockedMulti_AllLeaked(t *testing.T) {
+	withFakeNsenterRunner(t, func(call fakeNsenterCall) ([]byte, error) {
+		return nil, nil
+	})
+
+	var result VerifyResult
+	verifyLeakBlockedMulti(context.Background(), []string{"nsenter"}, defaultLeakTargets, &result)
+	if result.LeakBlocked {
+		t.Errorf("expected LeakBlocked=false when all leaked")
+	}
+	if result.LeakTarget != "1.1.1.1:80" {
+		t.Errorf("expected LeakTarget=first matrix entry 1.1.1.1:80, got %q", result.LeakTarget)
+	}
+}
+
+func TestVerifyLeakBlockedMulti_EmptyTargets(t *testing.T) {
+	var result VerifyResult
+	verifyLeakBlockedMulti(context.Background(), []string{"nsenter"}, nil, &result)
+	if !result.LeakBlocked {
+		t.Errorf("expected LeakBlocked=true with empty targets (nothing to leak)")
+	}
+}
+
 // ─── Phase 47 Plan 03 / 既有单测 ─────────────────────────────────────────────
 
 func TestVerifyResult_AllPassed(t *testing.T) {

@@ -46,6 +46,33 @@ var egressIPSources = []string{
 	"https://ipinfo.io/ip",
 }
 
+// leakTarget 是 verifyLeakBlockedMulti 探测的单个 IP:Port 目标。
+type leakTarget struct {
+	Host string
+	Port int
+}
+
+// String 返回 host:port 字符串表示，便于写入 result.LeakTarget。
+func (t leakTarget) String() string {
+	return fmt.Sprintf("%s:%d", t.Host, t.Port)
+}
+
+// defaultLeakTargets Phase 51 QUAL-02：与 Phase 46 tests/e2e/helpers.go
+// `DefaultDenyMatrix` 锁定的 4 个 target 完全对齐：
+//
+//	1.1.1.1:80
+//	8.8.8.8:443
+//	9.9.9.9:443
+//	169.254.169.254:80
+//
+// production 不能 import tests/e2e 包，故本地复刻同列表。
+var defaultLeakTargets = []leakTarget{
+	{Host: "1.1.1.1", Port: 80},
+	{Host: "8.8.8.8", Port: 443},
+	{Host: "9.9.9.9", Port: 443},
+	{Host: "169.254.169.254", Port: 80},
+}
+
 // nsenterRunner 在容器 netns 中执行命令的可注入 hook。
 //
 // 模式与 bypass_reload.go::nftRunner 一致：抽包级 var 是为了让单测可以注入 fake，
@@ -313,17 +340,76 @@ func verifyDNS(ctx context.Context, prefix []string, expectedDNS string, result 
 	result.DNSCorrect = firstNS == expectedDNS
 }
 
+// verifyLeakBlocked Phase 51 QUAL-02：保留旧签名 backward-compat shim，
+// 内部走 verifyLeakBlockedMulti(defaultLeakTargets)。
+//
+// 行为约定：
+//   - 默认 LeakTarget="1.1.1.1:80"（兼容既有 TestVerifyNetworkIntegrity_LeakTargetSet）；
+//   - 全部 target 都被阻断 → LeakBlocked=true，LeakTarget 保留默认值；
+//   - 任一 target 连通 → LeakBlocked=false，LeakTarget 覆写为第一个泄漏 target
+//     的 "host:port" 字符串，便于上层日志 / metadata 定位。
 func verifyLeakBlocked(ctx context.Context, prefix []string, result *VerifyResult) {
+	verifyLeakBlockedMulti(ctx, prefix, defaultLeakTargets, result)
+}
+
+// verifyLeakBlockedMulti 并发对多 target 矩阵探测「容器内是否能直连出网」。
+//
+// 探测命令：`timeout 3 bash -c 'echo >/dev/tcp/HOST/PORT'`（与 Phase 46
+// BuildDenyProbeCmd 同形态）。命令 exit 0 = 连通 = leak；非 0 = blocked。
+//
+// 全部 blocked 才算 LeakBlocked=true；任一 leak 即 false。
+func verifyLeakBlockedMulti(ctx context.Context, prefix []string, targets []leakTarget, result *VerifyResult) {
 	result.LeakTarget = "1.1.1.1:80"
+
+	if len(targets) == 0 {
+		result.LeakBlocked = true
+		return
+	}
 
 	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	args := append(append([]string{}, prefix...), "timeout", "3", "bash", "-c", "echo >/dev/tcp/1.1.1.1/80")
-	_, err := nsenterRunner(checkCtx, args...)
+	type probeResult struct {
+		target leakTarget
+		leaked bool
+	}
+	results := make(chan probeResult, len(targets))
+	var wg sync.WaitGroup
+	for _, t := range targets {
+		wg.Add(1)
+		go func(t leakTarget) {
+			defer wg.Done()
+			cmd := fmt.Sprintf("echo >/dev/tcp/%s/%d", t.Host, t.Port)
+			args := append(append([]string{}, prefix...), "timeout", "3", "bash", "-c", cmd)
+			_, err := nsenterRunner(checkCtx, args...)
+			results <- probeResult{target: t, leaked: err == nil}
+		}(t)
+	}
+	wg.Wait()
+	close(results)
 
-	// Connection failure means firewall is blocking direct outbound — that's the desired state.
-	result.LeakBlocked = err != nil
+	leaked := make([]leakTarget, 0, len(targets))
+	for r := range results {
+		if r.leaked {
+			leaked = append(leaked, r.target)
+		}
+	}
+
+	if len(leaked) == 0 {
+		result.LeakBlocked = true
+		return
+	}
+
+	result.LeakBlocked = false
+	// 在 defaultLeakTargets 顺序下找到第一个泄漏 target，保证输出稳定可断言
+	for _, t := range targets {
+		for _, l := range leaked {
+			if t == l {
+				result.LeakTarget = t.String()
+				return
+			}
+		}
+	}
 }
 
 // verifyBypassEgressMatchesEth0 模拟白名单流量：curl 拉取目标 echo 服务，
