@@ -289,6 +289,14 @@ fi
 CONTAINER_USER="${CONTAINER_USER:-workspace}"
 CONTAINER_PASSWORD="${CONTAINER_SSH_PASSWORD:-workspace}"
 
+# HI-01 (53-REVIEW): 校验 CONTAINER_USER 合法性，防止路径穿越 / glob 注入。
+# 参考 useradd NAME_REGEX：仅允许 [a-z_][a-z0-9_-]{0,30}（POSIX portable username）。
+# 任何带 / .. * \0 \n 等非法字符的输入在 sing-box 启动前 fail-closed。
+if ! [[ "$CONTAINER_USER" =~ ^[a-z_][a-z0-9_-]{0,30}$ ]]; then
+  echo "[entrypoint] FATAL: CONTAINER_USER 非法（仅允许 POSIX portable username [a-z_][a-z0-9_-]{0,30}）: $CONTAINER_USER" >&2
+  exit 1
+fi
+
 # 清除 Ubuntu 镜像自带的 ubuntu 用户（UID 1000 冲突会导致 whoami 返回 ubuntu）
 if [ "$CONTAINER_USER" != "ubuntu" ] && id ubuntu >/dev/null 2>&1; then
   userdel -f ubuntu 2>/dev/null || true
