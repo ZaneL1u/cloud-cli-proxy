@@ -1,11 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: null
-milestone_name: null
+milestone: v4.0
+milestone_name: sing-box 同容器化
 status: planning
-stopped_at: null
-last_updated: "2026-05-14T16:00:00Z"
-last_activity: "v3.6 shipped 2026-05-14"
+last_updated: "2026-05-15T17:47:25.229Z"
+last_activity: 2026-05-15
 progress:
   total_phases: 0
   completed_phases: 0
@@ -25,12 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 ## Current Position
 
-Phase: —
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone definition
-Last activity: 2026-05-14 — v3.6 shipped, archived to `.planning/milestones/v3.6-*`，tag v3.6
-
-Progress: [░░░░░░░░░░] 0%
+Status: Defining requirements
+Last activity: 2026-05-15 — Milestone v4.0 started
 
 ## Accumulated Context
 
