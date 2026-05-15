@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -213,11 +214,17 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 		"create",
 		"--name", containerName,
 		"--network", "bridge",
-		"--restart", "no",
+		// Phase 54 D-54-4：单容器架构下 user 容器即出口，sing-box 在容器内自起
+		// tun0；容器进程异常退出时希望由 docker 自动拉起恢复服务（user 在 SSH
+		// 内 `exit` 不会触发 restart，因为 OpenSSH 是前台 PID 1 ≠ exit-code 0 的
+		// fail）。"no" 在 v3.x sidecar 模式下是合理的（gateway 与 user 容器解耦），
+		// 单容器下改 on-failure 让 sing-box 崩溃 / nft apply 失败 → 容器异常退出
+		// 时由 docker 兜底重启。
+		"--restart", "on-failure",
 		// Phase 51 QUAL-06 / 闭 Phase 49 GAP-1：worker capability 收紧。
-		//   - 保留 --cap-add NET_ADMIN：sing-box 在 worker netns 内创建 tun0
-		//     设备需要 CAP_NET_ADMIN（sing-box 进程通过 nsenter -n 进入 netns
-		//     执行），无法运行时 setcap，必须容器级保留。
+		//   - 保留 --cap-add NET_ADMIN：sing-box 在容器内 netns 创建 tun0 设备
+		//     需要 CAP_NET_ADMIN（Phase 54 单容器架构下由容器内 entrypoint 直接
+		//     启动 sing-box，仍必须保留）。
 		//   - 删除 --cap-add SYS_ADMIN：grep 业务代码不依赖；fuse mount 走
 		//     `--device /dev/fuse + apparmor=unconfined` 路径，fusermount setuid
 		//     root 即可，无需 SYS_ADMIN。
@@ -226,6 +233,9 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 		//     闭 Phase 49 LEAK-06 攻击面。
 		"--cap-add", "NET_ADMIN",
 		"--cap-drop", "NET_RAW",
+		// Phase 54：容器内 sing-box 需建 tun0，必须挂 /dev/net/tun 设备。
+		// Phase 53 smoke.sh 已验证语法在 Linux + macOS Docker Desktop 上都被接受。
+		"--device", "/dev/net/tun",
 		"--device", "/dev/fuse",
 		"--security-opt", "apparmor=unconfined",
 		"--label", "cloud-cli-proxy.managed=true",
@@ -300,19 +310,20 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 		args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
 	}
 
-	// Phase 45 Plan 02：容器 DNS 入口锁。当存在 sing-box gateway 出口配置时，
-	// 把 host 上由 PrepareGateway 写好的 resolv.conf / nsswitch.conf 以 ro
-	// bind mount 接管到容器内对应位置：
-	//   - /etc/resolv.conf  → nameserver 172.19.0.1（gateway tun0）
-	//   - /etc/nsswitch.conf → hosts: files dns
-	// ro 意味着容器内任何对这两个文件的写入都会被拒绝，闭合 BYPASS-DNS-03/04。
+	// Phase 54 (54-01)：单容器架构下 host-agent 把 sing-box config.json 以 ro
+	// bind mount 注入到 user 容器内 /etc/sing-box/config.json。entrypoint
+	// start_singbox_or_die 读取后即刻 shred -u 删除（D-V4-2 防 PoLP 泄漏）。
+	//
 	// 必须在 PrepareGateway 之后、docker create 之前注入（call-order 测试守护）。
+	// Phase 54-01 stub 阶段 writeContainerSingBoxConfig 返回 nil 不写盘，docker
+	// create 会因 source file 不存在立即失败 — 这是 fail fast 设计意图，54-02
+	// 实现真正写盘逻辑后整链才打通。
+	//
+	// 旧 v3.5 容器 DNS 入口锁的 /etc/resolv.conf / /etc/nsswitch.conf bind mount
+	// 已删除（D-54-5）：容器内 sing-box 自接管 DNS 入口，无需 host 端预写。
 	if egressCfg != nil && egressCfg.Proxy != nil {
-		gwDir := network.GatewayConfigDir(request.HostID)
-		args = append(args,
-			"-v", gwDir+"/resolv.conf:/etc/resolv.conf:ro",
-			"-v", gwDir+"/nsswitch.conf:/etc/nsswitch.conf:ro",
-		)
+		cfgPath := filepath.Join(network.SingBoxConfigDir(request.HostID), "config.json")
+		args = append(args, "-v", cfgPath+":/etc/sing-box/config.json:ro")
 	}
 
 	args = append(args, request.ImageName)
