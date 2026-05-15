@@ -97,21 +97,28 @@ completed: 2026-05-16
 
 | ID | 项 | 期望 | 实际 | 状态 |
 |---|---|---|---|---|
-| V1 | `docker build` | 镜像构建成功 | **失败**：在 pre-existing Claude Code 安装段（L127-170）退出 22（claude.ai/install.sh 403 + github release 404） | ⚠️ Deferred — 见下文 |
-| V2 | `sing-box version` | 含 `sing-box version 1.13.3` | 本地未跑（V1 未到 sing-box 步骤） | ⚠️ Deferred-to-runtime |
-| V3 | `getcap /usr/local/bin/sing-box` | `cap_net_admin,cap_net_bind_service=eip` | 本地未跑 | ⚠️ Deferred-to-runtime |
-| V4 | `id singbox` | `uid=9000(singbox) gid=9000(singbox)` | 本地未跑（不过 build 第 17 步 `[stage-0 11/26] groupadd ... singbox` 已成功执行 ✅） | ⚠️ Deferred-to-runtime（结构层已 build 通过） |
-| V5 | `sudo -n true` 失败 | 非 0 退出 | 本地未跑 | ⚠️ Deferred-to-runtime |
-| V6 | `groups workspace` 不含 sudo | 输出无 sudo | 本地未跑（不过 build 第 16 步 useradd 不再加 sudo group ✅） | ⚠️ Deferred-to-runtime |
-| V7 | `nft / setcap / getcap / getpcaps` 都在 PATH | 4 个路径输出 | 本地未跑（不过 build 第 5 步 apt install nftables/libcap2-bin 已成功 ✅） | ⚠️ Deferred-to-runtime |
-| Lint | `docker buildx build --check` | 0 warning | **通过**：`Check complete, no warnings found.` | ✅ |
+| V1 | `docker build`（完整 Dockerfile） | 镜像构建成功 | **失败**：在 pre-existing Claude Code 安装段（L127-170）退出 22（`claude.ai/install.sh` 403 + GitHub release `claude-code-linux-aarch64.tar.gz` 404） | ⚠️ Deferred — 不在 53-01 scope |
+| V1' | `docker build` standalone（仅 53-01 改动段） | 镜像构建成功 | **通过**：`sb-verify:53-01` 镜像 build 0 error（apt install nftables/libcap2-bin + sing-box install + setcap + singbox useradd） | ✅ |
+| V2 | `sing-box version` | 含 `sing-box version 1.13.3` | `sing-box version 1.13.3 / Environment: go1.25.8 linux/arm64` | ✅ |
+| V3 | `getcap /usr/local/bin/sing-box` | `cap_net_admin,cap_net_bind_service=eip` | `/usr/local/bin/sing-box cap_net_bind_service,cap_net_admin=eip` | ✅ |
+| V4 | `id singbox` | `uid=9000(singbox) gid=9000(singbox)` | `uid=9000(singbox) gid=9000(singbox) groups=9000(singbox)` | ✅ |
+| V5 | `sudo -n true` 失败 | 非 0 退出 / 用户不在 sudoers | 静态校验：Dockerfile 唯一 sudoers 字符串为注释行（`# 原 echo ... sudoers.d/workspace 已删除`），且 useradd workspace 行无 `-G sudo` | ✅ 静态通过；运行时验证 deferred |
+| V6 | `groups workspace` 不含 sudo | 输出无 sudo | 静态校验：useradd 行 `--gid "${WORKSPACE_GID}" --home-dir /workspace --create-home --shell /bin/bash` 不含 `-G sudo` / `--groups sudo` | ✅ 静态通过；运行时验证 deferred |
+| V7 | `nft / setcap / getcap / getpcaps` 都在 PATH | 4 个路径输出 | `/usr/sbin/nft` / `/usr/sbin/setcap` / `/usr/sbin/getcap` / `/usr/sbin/getpcaps` | ✅ |
+| Lint | `docker buildx build --check` | 0 warning | `Check complete, no warnings found.` | ✅ |
 
-**说明:** V1 在 pre-existing Claude Code 安装段失败，与 Plan 53-01 的 5 个改动无关。Dockerfile syntax 通过 `docker buildx build --check`（0 warning）。Build 实际推进到 step 19，前 18 步全部通过 — 覆盖了 T2/T3 的全部改动（apt 包新增、workspace 去 sudo useradd、singbox useradd）。T1（sing-box install）和 T4（setcap）位于 Claude Code 段之后，受 syntax check 与计划同 PATTERN（与 sing-box-gateway 完全一致）保护。
+**说明:**
+
+1. **V1**（完整 Dockerfile build）失败发生在 pre-existing Claude Code 安装段（L127-170），与 Plan 53-01 修改的 5 个段（T1..T5）完全无关 — claude.ai/install.sh 当前返回 403、且 v2.1.142 release 的 `claude-code-linux-aarch64.tar.gz` 文件名已不存在。归 SCOPE BOUNDARY 之外，不在本 Plan 修复责任范围。
+2. **V1'/V2/V3/V4/V7** 通过构造 standalone verify 镜像（apt install nftables/libcap2-bin/curl/ca-certificates → sing-box install → setcap → singbox useradd，镜像 tag `sb-verify:53-01`）实测，全部通过。Standalone Dockerfile 与 managed-user Dockerfile 中 53-01 改动段**逐字相同**，故等价于 53-01 段在 ubuntu:24.04 基础上的语义验证。
+3. **V2 运行注意**：因 sing-box binary 持有 `cap_net_admin+eip`，且容器 default bounding set 不含 `CAP_NET_ADMIN`，docker run 时必须 `--cap-add=NET_ADMIN`，否则 exec 报 `operation not permitted`。这是 Plan 53-02 entrypoint 配置的前提，已在该计划中显式声明。
+4. **V5/V6** 改为 Dockerfile 文本静态校验（grep 全文无 sudoers 写入与 sudo group 加入），等等价物，运行时复验留到 V1 完整 build 修复后回放。
 
 ## Deferred Issues
 
 - **D-53-PRE-1**（详见 `.planning/phases/53-entrypoint/deferred-items.md`）：Claude Code 安装段在本地 build 失败。归类为 SCOPE BOUNDARY 之外的 pre-existing 问题。
-- **V2..V7 Deferred-to-runtime:** 这些验证需要镜像 build 完成且容器可启动。等 D-53-PRE-1 修复后或在 CI 上跑完整 build 再回放。Plan 53-02 / 53-03 与 Phase 53 收尾时回填即可。
+- **V5/V6 Deferred-to-runtime:** 静态校验已通过；待 D-53-PRE-1 修复或 CI 完整 build 时跑 `docker run --rm managed-user:v4-dev sudo -n true` 与 `groups workspace` 二次复验。
+- **完整镜像端到端验证 Deferred:** V1（完整 Dockerfile build）+ V2..V7（基于完整镜像）需要 D-53-PRE-1 修复后或在 CI 干净环境跑一次。本 Plan 等价验证已通过 standalone verify 完成。
 
 ## Issues Encountered
 
@@ -138,8 +145,10 @@ completed: 2026-05-16
 - `[ -f deploy/docker/managed-user/Dockerfile ]` ✅
 - `[ -f .planning/phases/53-entrypoint/53-01-SUMMARY.md ]` ✅
 - `[ -f .planning/phases/53-entrypoint/deferred-items.md ]` ✅
-- 所有 T1..T5 改动在 `git diff` 中可见且与 PLAN 代码块一致 ✅
+- 所有 T1..T5 改动在 commit `9833227` 中可见且与 PLAN 代码块一致 ✅
 - `docker buildx build --check` 0 warning ✅
+- Standalone verify 镜像 `sb-verify:53-01` build PASS + V2/V3/V4/V7 实测 PASS ✅
+- V5/V6 静态校验：Dockerfile 全文无 sudoers 写入、useradd workspace 不带 sudo group ✅
 
 ---
 *Phase: 53-entrypoint*
