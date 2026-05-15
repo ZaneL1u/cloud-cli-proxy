@@ -173,11 +173,18 @@ start_singbox_or_die() {
   fi
 
   # 验证 config 文件权限（D-V4-2 / D-53-3 前置）
-  local perm owner
+  # CR-01 (53-REVIEW): sing-box 跑在 uid=9000，root:0600 在 DAC 下 read 必失败。
+  # 改为 root:singbox 0640 — owner=root 写、group=singbox 读，最小权限暴露。
+  local perm owner group
   perm="$(stat -c '%a' "$SING_BOX_CONFIG")"
   owner="$(stat -c '%U' "$SING_BOX_CONFIG")"
-  if [ "$perm" != "600" ] || [ "$owner" != "root" ]; then
-    echo "[entrypoint] FATAL: config 权限不对（want root:0600，got ${owner}:${perm}）" >&2
+  group="$(stat -c '%G' "$SING_BOX_CONFIG")"
+  if [ "$perm" != "640" ] || [ "$owner" != "root" ]; then
+    echo "[entrypoint] FATAL: config 权限不对（want root:singbox 0640，got ${owner}:${group}:${perm}）" >&2
+    exit 1
+  fi
+  if [ "$group" != "singbox" ]; then
+    echo "[entrypoint] FATAL: config group 不对（want singbox，got ${group}）" >&2
     exit 1
   fi
 

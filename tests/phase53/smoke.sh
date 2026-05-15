@@ -26,11 +26,13 @@ log() { printf "\033[1;36m[smoke]\033[0m %s\n" "$*"; }
 fail() { printf "\033[1;31m[FAIL]\033[0m %s\n" "$*" >&2; exit 1; }
 
 # ===== 准备 =====
-log "preparing fixture (writable copy, root:0600)"
+# CR-01 (53-REVIEW): sing-box 跑在 uid=9000，root:0600 读不到 → 改 root:singbox 0640。
+# 宿主机一般没有 singbox group，用 numeric gid=9000（容器内 useradd 已固定）。
+log "preparing fixture (writable copy, root:9000 0640)"
 cp "$FIXTURE_DIR/test-singbox-config.json" "$TMP_CONFIG"
-chmod 600 "$TMP_CONFIG"
-# config 必须由 root 拥有以模拟生产 host-agent 注入语义
-sudo chown root:root "$TMP_CONFIG" 2>/dev/null || true
+chmod 640 "$TMP_CONFIG"
+# config 必须由 root 拥有以模拟生产 host-agent 注入语义；group=9000 让容器内 singbox 用户可读
+sudo chown root:9000 "$TMP_CONFIG" 2>/dev/null || true
 
 # ===== 启动容器 =====
 log "starting container $CONTAINER_NAME from $IMAGE"
