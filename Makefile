@@ -66,6 +66,9 @@ test-go: ## Run Go tests (Phase 51 QUAL-07: -race -shuffle=on 默认；tests/e2e
 test-smoke: ## Run BATS bootstrap smoke tests
 	pnpm exec bats tests/smoke/
 
+phase53-smoke: ## Run Phase 53 image smoke tests (requires managed-user:v4-dev)
+	bash tests/phase53/smoke.sh
+
 # ── Images ────────────────────────────────────────────────────
 
 MANAGED_USER_TAG := $(shell grep '^image_name:' deploy/docker/managed-user/image.lock | cut -d' ' -f2)

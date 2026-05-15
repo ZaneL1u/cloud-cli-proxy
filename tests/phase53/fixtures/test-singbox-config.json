@@ -1,0 +1,36 @@
+{
+  "log": { "level": "info", "timestamp": true },
+  "dns": {
+    "servers": [
+      { "type": "udp", "tag": "upstream-dns", "server": "1.1.1.1" }
+    ],
+    "rules": [],
+    "final": "upstream-dns"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "tun0",
+      "address": ["172.19.0.1/30"],
+      "mtu": 1500,
+      "auto_route": true,
+      "strict_route": true,
+      "stack": "system",
+      "endpoint_independent_nat": true
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct-out"
+    }
+  ],
+  "route": {
+    "rules": [
+      { "action": "sniff" }
+    ],
+    "final": "direct-out",
+    "auto_detect_interface": true
+  }
+}
