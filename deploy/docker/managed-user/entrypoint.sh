@@ -188,9 +188,13 @@ start_singbox_or_die() {
     exit 1
   fi
 
-  # 启动 sing-box（runuser → singbox uid=9000，binary 文件 cap 提供 NET_ADMIN）
-  echo "[entrypoint] starting sing-box as uid=9000 (file-cap based)"
-  runuser -u "$SING_BOX_USER" -- /usr/local/bin/sing-box run -c "$SING_BOX_CONFIG" &
+  # 启动 sing-box（setpriv → singbox uid=9000，binary 文件 cap 提供 NET_ADMIN）
+  # HI-03 (53-REVIEW): 原先用 runuser 会走 PAM session fork，$! 抓到的是 wrapper PID（uid=0）
+  # 而非真正的 sing-box 进程，导致 ps 输出谎报 uid=0。setpriv 来自 util-linux 不走 PAM，
+  # 不 fork —— $! 直接是 sing-box 主进程 PID，uid=9000 可观测。
+  echo "[entrypoint] starting sing-box as uid=9000 (setpriv, no PAM fork)"
+  setpriv --reuid="$SING_BOX_USER" --regid="$SING_BOX_USER" --init-groups \
+    /usr/local/bin/sing-box run -c "$SING_BOX_CONFIG" &
   SING_BOX_PID=$!
 
   # WaitFor tun0 ready（替代裸 sleep）
@@ -201,6 +205,12 @@ start_singbox_or_die() {
       if kill -0 "$SING_BOX_PID" 2>/dev/null; then
         local sb_uid
         sb_uid="$(ps -o uid= -p "$SING_BOX_PID" 2>/dev/null | tr -d ' ' || echo 'unknown')"
+        # HI-03 hard-assert：必须 uid=9000，否则 fail-closed（防 setpriv 静默 fallback）
+        if [ "$sb_uid" != "9000" ]; then
+          echo "[entrypoint] FATAL: sing-box uid=$sb_uid != 9000（fail-closed）" >&2
+          kill "$SING_BOX_PID" 2>/dev/null || true
+          exit 1
+        fi
         echo "[entrypoint] tun0 ready (sing-box pid=$SING_BOX_PID, uid=$sb_uid)"
         return 0
       fi
