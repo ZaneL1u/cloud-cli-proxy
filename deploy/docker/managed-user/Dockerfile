@@ -54,6 +54,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         tini \
         nftables \
         libcap2-bin \
+        dnsutils \
     && rm -rf /var/lib/apt/lists/*
 
 RUN sed -i 's/^#user_allow_other/user_allow_other/' /etc/fuse.conf \
