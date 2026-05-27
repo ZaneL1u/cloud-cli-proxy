@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: sing-box 同容器化
-status: executing
+status: ready_to_plan
 stopped_at: v3.6 archived to .planning/milestones/ + tag v3.6
 last_updated: "2026-05-27T10:55:08.606Z"
 last_activity: 2026-05-27 -- Phase 55 execution started
 progress:
   total_phases: 12
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 12
   completed_plans: 7
-  percent: 58
+  percent: 25
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 ## Current Position
 
-Phase: 55 (e2e 重构 + 同容器安全断言) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 55
-Last activity: 2026-05-27 -- Phase 55 execution started
+Phase: 56
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-27
 
 ## Accumulated Context
 

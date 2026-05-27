@@ -24,7 +24,7 @@
 
 - [x] Phase 53: 镜像与 entrypoint 基线（IMG-01..04 + EP-01..04 + NET-01..04，12 REQ）
 - [x] Phase 54: 控制面单容器化（CTRL-01..05，5 REQ）
-- [ ] Phase 55: e2e 重构 + 同容器安全断言（SEC-01..03 + E2E-V4-01..06，9 REQ）
+- [x] Phase 55: e2e 重构 + 同容器安全断言（SEC-01..03 + E2E-V4-01..06，9 REQ）
 - [ ] Phase 56: CI paths 扩面 + Makefile 入口（CI-01..03，3 REQ）
 
 ---
