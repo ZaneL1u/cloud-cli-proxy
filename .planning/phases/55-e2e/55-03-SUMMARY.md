@@ -1,6 +1,7 @@
 ---
 phase: 55-e2e
 plan: "03"
+requirements-completed: [E2E-V4-03]
 subsystem: test-infra
 tags: [e2e, killswitch, migration, single-container, v4.0]
 

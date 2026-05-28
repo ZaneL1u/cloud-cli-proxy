@@ -1,6 +1,7 @@
 ---
 phase: 55-e2e
 plan: "05"
+requirements-completed: [SEC-01, SEC-02, SEC-03, E2E-V4-06]
 subsystem: test-infra
 tags: [e2e, security, assertions, single-container, v4.0]
 

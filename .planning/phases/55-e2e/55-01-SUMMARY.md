@@ -1,6 +1,7 @@
 ---
 phase: 55-e2e
 plan: "01"
+requirements-completed: [E2E-V4-01, E2E-V4-05]
 subsystem: test-infra
 tags: [e2e, refactor, single-container, v4.0, scenario-builder]
 

@@ -257,7 +257,6 @@ func (a *App) Run(ctx context.Context) error {
 
 	cphttp.CleanupOrphanProbes(a.logger)
 
-	a.rejoinHostNetworks()
 
 	if a.sshProxy != nil {
 		go func() {
@@ -304,56 +303,6 @@ func (a *App) Run(ctx context.Context) error {
 	}
 }
 
-func (a *App) rejoinHostNetworks() {
-	cpID, _ := os.Hostname()
-	if cpID == "" {
-		a.logger.Warn("rejoin-networks: cannot determine hostname, skipping")
-		return
-	}
-
-	// 探测控制面是否跑在 docker 容器内（hostname = 容器名）。
-	// 非容器环境（如 macOS 宿主机直跑）直接跳过，避免 "No such container" 误报。
-	inspectCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	if out, err := exec.CommandContext(inspectCtx, "docker", "inspect", "--format", "{{.Id}}", cpID).Output(); err != nil || len(strings.TrimSpace(string(out))) == 0 {
-		cancel()
-		return
-	}
-	cancel()
-
-	cmd := exec.CommandContext(context.Background(), "docker", "network", "ls",
-		"--filter", "name=cloudproxy-net-", "--format", "{{.Name}}")
-	out, err := cmd.Output()
-	if err != nil {
-		a.logger.Warn("rejoin-networks: list networks failed", "error", err)
-		return
-	}
-
-	networks := strings.Fields(strings.TrimSpace(string(out)))
-	if len(networks) == 0 {
-		return
-	}
-
-	joined := 0
-	alreadyConnected := 0
-	for _, net := range networks {
-		connectCmd := exec.CommandContext(context.Background(), "docker", "network", "connect", net, cpID)
-		if connectOut, err := connectCmd.CombinedOutput(); err != nil {
-			msg := strings.TrimSpace(string(connectOut))
-			if strings.Contains(msg, "already exists") {
-				alreadyConnected++
-			} else {
-				a.logger.Warn("rejoin-networks: connect failed", "network", net, "error", msg)
-			}
-		} else {
-			joined++
-		}
-	}
-
-	a.logger.Info("rejoin-networks: host network status",
-		"joined", joined,
-		"already_connected", alreadyConnected,
-		"total", len(networks))
-}
 
 // dockerInspector 在 embedded 模式下直接调用 docker container inspect，
 // 替代通过 host-agent socket 通信的 agentapi.Client。

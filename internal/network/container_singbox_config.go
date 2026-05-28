@@ -18,9 +18,8 @@ import (
 //   - v4.0 不引入 v3.5 whitelist rule-set（bypass 白名单是 v3.5 网络架构特有，
 //     v4.0 同容器先不带，待 v4.1 评估）。
 //
-// helper 复用：buildGatewayProxyOutbound / buildGatewayDirectOutbound /
-// buildGatewayDNS 来自 gateway_singbox_config.go（54-CONTEXT D-54-7 dead-code
-// 留待 v4.1 一次性清理；本 plan 直接复用以减少 diff 面积）。
+// buildGatewayProxyOutbound / buildGatewayDirectOutbound 从已退役的
+// gateway_singbox_config.go 迁移至此，是 container config 的直接依赖。
 func buildContainerSingBoxConfig(outboundRaw json.RawMessage, dnsServer, proxyServerIP string) ([]byte, error) {
 	_ = dnsServer
 	proxyOut, err := buildGatewayProxyOutbound(outboundRaw, proxyServerIP)
@@ -125,4 +124,43 @@ func buildContainerRouteRules(proxyServerIP string) []map[string]any {
 		{"ip_cidr": []string{proxyServerIP + "/32"}, "action": "route", "outbound": "direct"},
 		{"ip_is_private": true, "action": "route", "outbound": "direct"},
 	}
+}
+
+// buildGatewayProxyOutbound 从已退役的 gateway_singbox_config.go 迁移至此。
+func buildGatewayProxyOutbound(userConfig json.RawMessage, resolvedIP string) (json.RawMessage, error) {
+	var m map[string]any
+	if err := json.Unmarshal(userConfig, &m); err != nil {
+		return nil, fmt.Errorf("parse outbound config: %w", err)
+	}
+	delete(m, "dns_server")
+	delete(m, "bind_interface")
+	m["tag"] = "proxy-out"
+	if resolvedIP != "" {
+		m["server"] = resolvedIP
+	}
+
+	if tls, ok := m["tls"].(map[string]any); ok {
+		if reality, ok := tls["reality"].(map[string]any); ok {
+			if enabled, _ := reality["enabled"].(bool); enabled {
+				if _, hasUtls := tls["utls"]; !hasUtls {
+					tls["utls"] = map[string]any{"enabled": true, "fingerprint": "chrome"}
+				}
+			}
+		}
+	}
+
+	return json.Marshal(m)
+}
+
+// buildGatewayDirectOutbound 从已退役的 gateway_singbox_config.go 迁移至此。
+func buildGatewayDirectOutbound() (json.RawMessage, error) {
+	raw, err := json.Marshal(map[string]any{
+		"type":           "direct",
+		"tag":            "direct",
+		"bind_interface": "eth0",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal direct outbound: %w", err)
+	}
+	return raw, nil
 }

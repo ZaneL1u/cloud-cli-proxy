@@ -1,6 +1,7 @@
 ---
 phase: 55-e2e
 plan: "02"
+requirements-completed: [E2E-V4-02]
 subsystem: test-infra
 tags: [e2e, leak, migration, single-container, v4.0]
 

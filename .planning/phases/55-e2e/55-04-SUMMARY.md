@@ -1,6 +1,7 @@
 ---
 phase: 55-e2e
 plan: "04"
+requirements-completed: [E2E-V4-04]
 subsystem: test-infra
 tags: [e2e, mvs, golden-path, migration, single-container, v4.0]
 

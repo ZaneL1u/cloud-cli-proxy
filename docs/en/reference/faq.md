@@ -216,7 +216,7 @@ A: Rebuilding a host preserves the home directory. Deleting a host destroys all 
 
 ### Q: Can I develop on macOS / Windows?
 
-A: Yes. When using `make dev`, host-agent runs in `embedded` mode. Build the sing-box gateway sidecar first: `make gateway-image`.
+A: Yes. When using `make dev`, host-agent runs in `embedded` mode. No additional build steps required.
 
 ### Q: How do I update the user container image?
 

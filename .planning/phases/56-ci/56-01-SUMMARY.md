@@ -1,6 +1,7 @@
 ---
 phase: 56-ci
 plan: "01"
+requirements-completed: [CI-01, CI-02, CI-03]
 subsystem: ci
 tags: [ci, makefile, e2e, v4.0]
 

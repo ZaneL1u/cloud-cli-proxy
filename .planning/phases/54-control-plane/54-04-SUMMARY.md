@@ -1,6 +1,7 @@
 ---
 phase: 54-control-plane
 plan: "04"
+requirements-completed: [CTRL-05]
 subsystem: infra
 tags: [cleanup, sing-box-gateway, build, ci, docker-compose, single-container, v4.0]
 

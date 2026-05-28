@@ -1,6 +1,7 @@
 ---
 phase: 54-control-plane
 plan: "02"
+requirements-completed: [CTRL-03]
 subsystem: infra
 tags: [docker, sing-box, networking, config, single-container, v4.0]
 

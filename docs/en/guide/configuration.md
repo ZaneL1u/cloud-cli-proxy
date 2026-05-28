@@ -158,7 +158,6 @@ All images are built via GitHub Actions for `linux/amd64` and `linux/arm64`.
 | control-plane | `ghcr.io/zanel1u/cloud-cli-proxy/control-plane` | Control plane API server |
 | admin | `ghcr.io/zanel1u/cloud-cli-proxy/admin` | Admin dashboard frontend (Nginx) |
 | managed-user | `ghcr.io/zanel1u/cloud-cli-proxy/managed-user` | User container image |
-| sing-box-gateway | `ghcr.io/zanel1u/cloud-cli-proxy/sing-box-gateway` | sing-box gateway sidecar |
 
 **Tag convention:**
 

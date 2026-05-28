@@ -358,12 +358,8 @@ func (h *AdminHostsHandler) Delete() nethttp.Handler {
 		}
 
 		containerName := "cloudproxy-" + hostID
-		gwName := "cloudproxy-gw-" + hostID
-		netName := "cloudproxy-net-" + hostID
 
 		_ = dockerRm(containerName)
-		_ = dockerRm(gwName)
-		_ = dockerNetworkRm(netName)
 
 		if err := h.store.DeleteHost(r.Context(), hostID); err != nil {
 			h.logger.Error("delete host failed", "host_id", hostID, "error", err)
@@ -1097,15 +1093,6 @@ func dockerRm(containerName string) error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		slog.Warn("docker rm failed (may not exist)", "container", containerName, "output", string(output), "error", err)
-	}
-	return err
-}
-
-func dockerNetworkRm(networkName string) error {
-	cmd := exec.CommandContext(context.Background(), "docker", "network", "rm", networkName)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		slog.Warn("docker network rm failed (may not exist)", "network", networkName, "output", string(output), "error", err)
 	}
 	return err
 }

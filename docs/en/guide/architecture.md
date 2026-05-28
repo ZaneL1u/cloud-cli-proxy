@@ -233,7 +233,6 @@ cloud-cli-proxy/
 │   │   ├── control-plane/      # Control plane image
 │   │   ├── admin/              # Admin dashboard image
 │   │   ├── managed-user/       # User container image
-│   │   └── sing-box-gateway/   # sing-box gateway sidecar
 │   ├── compose/                # Dev Compose files
 │   ├── bootstrap/              # User curl bootstrap script
 │   ├── scripts/                # setup-env.sh, deploy.sh, backup.sh

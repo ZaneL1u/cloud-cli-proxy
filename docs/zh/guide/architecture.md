@@ -233,7 +233,6 @@ cloud-cli-proxy/
 │   │   ├── control-plane/      # 控制面镜像
 │   │   ├── admin/              # 管理后台镜像
 │   │   ├── managed-user/       # 用户容器镜像
-│   │   └── sing-box-gateway/   # sing-box 网关 sidecar
 │   ├── compose/                # 开发用 Compose 文件
 │   ├── bootstrap/              # 用户 curl 引导脚本
 │   ├── scripts/                # setup-env.sh、deploy.sh、backup.sh

@@ -158,7 +158,6 @@ nft add rule inet filter input tcp dport 2222 accept   # SSH 代理
 | control-plane | `ghcr.io/zanel1u/cloud-cli-proxy/control-plane` | 控制面 API 服务 |
 | admin | `ghcr.io/zanel1u/cloud-cli-proxy/admin` | 管理后台前端（Nginx） |
 | managed-user | `ghcr.io/zanel1u/cloud-cli-proxy/managed-user` | 用户容器镜像 |
-| sing-box-gateway | `ghcr.io/zanel1u/cloud-cli-proxy/sing-box-gateway` | sing-box 网关 sidecar |
 
 **镜像标签规则：**
 
