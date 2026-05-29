@@ -45,10 +45,6 @@ func StartStressGolden(t *testing.T) (*e2e.GoldenPath, bool) {
 		t.Skipf("golden path host not yet populated (scenario step 7 未实现)")
 		return g, true
 	}
-	if g.Gateway == nil || (g.Gateway.ContainerID == "" && g.Gateway.HostID == "") {
-		t.Skipf("golden path gateway not yet populated (scenario step 4..6 未实现)")
-		return g, true
-	}
 	return g, false
 }
 

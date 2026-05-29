@@ -65,15 +65,8 @@ func TestKillSwitch_04_NetworkDisconnect(t *testing.T) {
 		t.Skipf("worker container ipv4 not available: %v", err)
 		return
 	}
-	gatewayIP := g.Gateway.GatewayIP
-	if gatewayIP == "" {
-		var ipErr error
-		gatewayIP, ipErr = g.InspectContainerIPv4(ctx, gatewayName, "")
-		if ipErr != nil {
-			t.Skipf("gateway ipv4 not available: %v", ipErr)
-			return
-		}
-	}
+	// Phase 55: 单容器架构，gateway 内嵌于 worker，gatewayIP = workerIP
+	gatewayIP := workerIP
 
 	bpf := "src host " + workerIP + " and not dst host " + gatewayIP
 
