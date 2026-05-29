@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.0.1 - 2026-05-29
+## What's Changed
+
+### Backend (Go / API)
+- fix(test): withFakeNsenterRunner 加 mutex 消除 DATA RACE (fad8ec3)
+- fix(v4.0.1): macOS dev 环境兼容 + bypass reload 平台拆分 + sing-box DNS 修复 (06d2a6d)
+- chore(v4.0): tech debt cleanup + milestone close artifacts (92867a7)
+
+### Runtime & Deployment
+- fix(ci): ci.yml L31 YAML 语法错误 — step name 冒号需加引号 (6e8f2a1)
+- fix(ci): 移除不完整的 bypass fixture 脚本，让 uat job 正确 SKIP (1aaec90)
+- fix(ci): 修复 uat-bypass lint 失败 + build 多包 -o 报错 (26cb5c7)
+- fix(v4.0.1): macOS dev 环境兼容 + bypass reload 平台拆分 + sing-box DNS 修复 (06d2a6d)
+- fix(entrypoint): macOS dev 环境 sing-box config 权限修复 (2d8fedf)
+
+### Docs
+- chore(v4.0): tech debt cleanup + milestone close artifacts (92867a7)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.0...v4.0.1
+
+
 ## v3.5.4 - 2026-05-13
 ## What's Changed
 
