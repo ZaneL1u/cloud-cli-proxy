@@ -28,7 +28,6 @@ on:
       - "internal/runtime/tasks/**"
       - "internal/controlplane/http/admin_bypass*"
       - "scripts/uat-bypass.sh"
-      - "scripts/uat-bypass-fixture-up.sh"
       - ".github/workflows/uat-bypass.yml"
   push:
     branches: [main]
