@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -537,10 +538,13 @@ type fakeNsenterCall struct {
 func withFakeNsenterRunner(t *testing.T, fake func(call fakeNsenterCall) ([]byte, error)) *[]fakeNsenterCall {
 	t.Helper()
 	calls := make([]fakeNsenterCall, 0, 4)
+	var mu sync.Mutex
 	prev := nsenterRunner
 	nsenterRunner = func(_ context.Context, args ...string) ([]byte, error) {
 		c := fakeNsenterCall{args: append([]string{}, args...)}
+		mu.Lock()
 		calls = append(calls, c)
+		mu.Unlock()
 		return fake(c)
 	}
 	t.Cleanup(func() { nsenterRunner = prev })
