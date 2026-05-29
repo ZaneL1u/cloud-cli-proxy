@@ -113,9 +113,11 @@ func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest
 	}
 
 	if err != nil {
-		// 失败路径：先停止容器，避免 DB=failed 但 docker=running 的分裂
-		containerName := firstNonEmpty(request.ContainerName, containerNameForHost(request.HostID))
-		_ = w.runDocker(ctx, "stop", containerName)
+		// 失败路径：reload_host_bypass 失败不杀容器（bypass 失败不影响主业务）。
+		if request.Action != agentapi.ActionReloadHostBypass {
+			containerName := firstNonEmpty(request.ContainerName, containerNameForHost(request.HostID))
+			_ = w.runDocker(ctx, "stop", containerName)
+		}
 
 		errorCode := "host_action_failed"
 		if strings.HasPrefix(err.Error(), "volume_in_use:") {
@@ -151,8 +153,11 @@ func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest
 				errorCode = "network_error"
 			}
 		}
-		_ = w.repo.UpdateHostStatus(ctx, request.HostID, "failed")
-		broadcast.Broadcast("hosts", "update", request.HostID)
+		// bypass reload 失败不翻 host 状态（非致命，容器仍在运行）。
+		if request.Action != agentapi.ActionReloadHostBypass {
+			_ = w.repo.UpdateHostStatus(ctx, request.HostID, "failed")
+			broadcast.Broadcast("hosts", "update", request.HostID)
+		}
 		broadcast.Broadcast("events", "update", "")
 		return agentapi.TaskStatusUpdate{
 			TaskID:           request.TaskID,
@@ -164,8 +169,10 @@ func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest
 	}
 
 	hostStatus := actionToHostStatus(request.Action)
-	_ = w.repo.UpdateHostStatus(ctx, request.HostID, hostStatus)
-	broadcast.Broadcast("hosts", "update", request.HostID)
+	if hostStatus != "" {
+		_ = w.repo.UpdateHostStatus(ctx, request.HostID, hostStatus)
+		broadcast.Broadcast("hosts", "update", request.HostID)
+	}
 	broadcast.Broadcast("events", "update", "")
 
 	return agentapi.TaskStatusUpdate{
@@ -202,6 +209,8 @@ func actionToHostStatus(action agentapi.HostAction) string {
 		return "stopped"
 	case agentapi.ActionRebuildHost:
 		return "running"
+	case agentapi.ActionReloadHostBypass:
+		return "" // 不改变 host 状态
 	default:
 		return "stopped"
 	}

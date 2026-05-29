@@ -33,6 +33,8 @@ interface ApplyProgressDialogProps {
   onOpenChange: (open: boolean) => void;
   /** PreviewSheet 计算出来的 risky_count，仅用于打点；不参与状态机 */
   riskyCount?: number;
+  /** 应用成功后回调，用于刷新基线 */
+  onApplied?: () => void;
 }
 
 /**
@@ -52,6 +54,7 @@ export function ApplyProgressDialog({
   hostId,
   open,
   onOpenChange,
+  onApplied,
 }: ApplyProgressDialogProps) {
   const applyMutation = useApplyBypass(hostId);
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -152,6 +155,7 @@ export function ApplyProgressDialog({
   useEffect(() => {
     if (isDone && !autoCloseScheduled) {
       setAutoCloseScheduled(true);
+      onApplied?.();
       autoCloseTimerRef.current = setTimeout(() => {
         onOpenChange(false);
         toast.success(

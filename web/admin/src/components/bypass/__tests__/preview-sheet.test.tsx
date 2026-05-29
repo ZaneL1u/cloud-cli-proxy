@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PreviewSheet } from "../preview-sheet";
 import type { BypassPreviewResponse } from "@/lib/api/types/bypass";
@@ -44,12 +43,7 @@ describe("PreviewSheet", () => {
   it("打开 Sheet 自动调 preview mutation，加载完成后渲染版本号摘要", async () => {
     apiFetchMock.mockResolvedValueOnce(makePreview());
     renderWithClient(
-      <PreviewSheet
-        hostId="h-1"
-        open={true}
-        onOpenChange={() => {}}
-        onApply={() => {}}
-      />,
+      <PreviewSheet hostId="h-1" open={true} onOpenChange={() => {}} />,
     );
 
     expect(await screen.findByText("预览生效配置")).toBeInTheDocument();
@@ -67,75 +61,11 @@ describe("PreviewSheet", () => {
   it("双 Tab 「sing-box JSON」/「nft set diff」均渲染", async () => {
     apiFetchMock.mockResolvedValueOnce(makePreview());
     renderWithClient(
-      <PreviewSheet
-        hostId="h-1"
-        open={true}
-        onOpenChange={() => {}}
-        onApply={() => {}}
-      />,
+      <PreviewSheet hostId="h-1" open={true} onOpenChange={() => {}} />,
     );
 
     expect(await screen.findByText("sing-box JSON")).toBeInTheDocument();
     expect(screen.getByText("nft set diff")).toBeInTheDocument();
-  });
-
-  it("risky_count > 5 时主按钮变 warning 色 + 文案变 「应用此配置（含 N 条高风险）」", async () => {
-    apiFetchMock.mockResolvedValueOnce(makePreview({ risky_count: 7 }));
-    renderWithClient(
-      <PreviewSheet
-        hostId="h-1"
-        open={true}
-        onOpenChange={() => {}}
-        onApply={() => {}}
-      />,
-    );
-
-    const btn = await screen.findByTestId("preview-apply-button");
-    expect(btn).toHaveTextContent("应用此配置（含 7 条高风险）");
-    expect(btn.className).toMatch(/bg-warning/);
-  });
-
-  it("risky_count = 0 时主按钮文案为「应用此配置」，无 warning 类", async () => {
-    apiFetchMock.mockResolvedValueOnce(makePreview({ risky_count: 0 }));
-    renderWithClient(
-      <PreviewSheet
-        hostId="h-1"
-        open={true}
-        onOpenChange={() => {}}
-        onApply={() => {}}
-      />,
-    );
-
-    const btn = await screen.findByTestId("preview-apply-button");
-    expect(btn).toHaveTextContent("应用此配置");
-    expect(btn.className).not.toMatch(/bg-warning/);
-    expect(screen.getByTestId("preview-risk-summary")).toHaveTextContent(
-      "无风险项",
-    );
-  });
-
-  it("点击「应用此配置」回调 onApply(preview)", async () => {
-    const user = userEvent.setup();
-    apiFetchMock.mockResolvedValueOnce(makePreview({ risky_count: 2 }));
-    const onApply = vi.fn();
-    renderWithClient(
-      <PreviewSheet
-        hostId="h-1"
-        open={true}
-        onOpenChange={() => {}}
-        onApply={onApply}
-      />,
-    );
-
-    const btn = await screen.findByTestId("preview-apply-button");
-    await user.click(btn);
-
-    expect(onApply).toHaveBeenCalledTimes(1);
-    expect(onApply.mock.calls[0][0]).toMatchObject({
-      version_current: 23,
-      version_next: 24,
-      risky_count: 2,
-    });
   });
 
   it("preview 失败显示错误占位 + toast.error 被触发", async () => {
@@ -144,12 +74,7 @@ describe("PreviewSheet", () => {
       new Error(JSON.stringify({ code: "BYPASS_HOST_UNREACHABLE", message: "x" })),
     );
     renderWithClient(
-      <PreviewSheet
-        hostId="h-1"
-        open={true}
-        onOpenChange={() => {}}
-        onApply={() => {}}
-      />,
+      <PreviewSheet hostId="h-1" open={true} onOpenChange={() => {}} />,
     );
 
     await waitFor(() => {

@@ -48,28 +48,15 @@ describe("CustomRulesTable", () => {
     apiFetchMock.mockReset();
   });
 
-  it("空状态展示「暂无自定义规则」+ 主 CTA", async () => {
+  it("空状态展示「暂无规则」+ 添加按钮", async () => {
     apiFetchMock.mockResolvedValue({ rules: [] });
     renderWithClient(<CustomRulesTable hostId="h-1" />);
 
     expect(
-      await screen.findByText("暂无自定义规则"),
+      await screen.findByText("暂无规则"),
     ).toBeInTheDocument();
-    // EmptyState 的 action 按钮 + 顶部「添加自定义规则」按钮各 1 个
-    const addButtons = screen.getAllByText("添加自定义规则");
+    const addButtons = screen.getAllByText("添加规则");
     expect(addButtons.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("高风险规则行展示「高风险」徽章并带左侧警告色边框", async () => {
-    apiFetchMock.mockResolvedValue({ rules });
-    renderWithClient(<CustomRulesTable hostId="h-1" />);
-
-    const riskyBadge = await screen.findByTestId("risky-badge");
-    expect(riskyBadge).toBeInTheDocument();
-    expect(riskyBadge.textContent).toBe("高风险");
-
-    const row2 = screen.getByTestId("rules-row-r-2");
-    expect(row2.className).toContain("border-l-warning");
   });
 
   it("点击删除按钮弹出二次确认 AlertDialog", async () => {
@@ -85,7 +72,7 @@ describe("CustomRulesTable", () => {
 
     expect(await screen.findByText("删除该规则？")).toBeInTheDocument();
     expect(
-      screen.getByText(/删除后白名单立即收紧/i),
+      screen.getByText(/删除后需点击/i),
     ).toBeInTheDocument();
   });
 

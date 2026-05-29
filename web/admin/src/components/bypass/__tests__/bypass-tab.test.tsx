@@ -23,13 +23,11 @@ describe("BypassTab", () => {
     apiFetchMock.mockReset();
   });
 
-  it("渲染标题 + 预设规则集 + 自定义规则区", async () => {
+  it("渲染标题 + 警告 + 规则表 + 应用与查看配置按钮", async () => {
     apiFetchMock.mockImplementation(async (path: string) => {
       if (path === "/bypass/presets") return { presets: [] };
-      // CR-04：bindings list 改走 /hosts/{hostId}/bypass
       if (path.startsWith("/hosts/") && path.endsWith("/bypass"))
         return { bindings: [] };
-      // CR-01：rules list 改走 /bypass/rules?host_id=...
       if (path.startsWith("/bypass/rules")) return { rules: [] };
       return {};
     });
@@ -37,11 +35,11 @@ describe("BypassTab", () => {
     renderWithClient(<BypassTab hostId="h-1" />);
 
     expect(await screen.findByText("代理白名单")).toBeInTheDocument();
-    expect(screen.getByText("预设规则集")).toBeInTheDocument();
-    expect(screen.getByText("自定义规则")).toBeInTheDocument();
+    expect(screen.getByText("应用")).toBeInTheDocument();
+    expect(screen.getByText("查看配置")).toBeInTheDocument();
   });
 
-  it("有规则时显示「N 条规则」徽章", async () => {
+  it("有规则时显示规则总数", async () => {
     apiFetchMock.mockImplementation(async (path: string) => {
       if (path === "/bypass/presets") return { presets: [] };
       if (path.startsWith("/hosts/") && path.endsWith("/bypass"))
@@ -50,14 +48,8 @@ describe("BypassTab", () => {
         return {
           rules: [
             {
-              id: "r1",
-              host_id: "h-1",
-              rule_type: "ip",
-              value: "1.2.3.4",
-              is_risky: false,
-              note: null,
-              created_at: "",
-              updated_at: "",
+              id: "r1", host_id: "h-1", rule_type: "ip", value: "1.2.3.4",
+              is_risky: false, note: null, created_at: "", updated_at: "",
             },
           ],
         };
@@ -65,6 +57,6 @@ describe("BypassTab", () => {
     });
 
     renderWithClient(<BypassTab hostId="h-1" />);
-    expect(await screen.findByText("1 条规则")).toBeInTheDocument();
+    expect(await screen.findByText("1 条")).toBeInTheDocument();
   });
 });

@@ -163,8 +163,19 @@ assert_tmux_version() {
 SING_BOX_CONFIG="/etc/sing-box/config.json"
 SING_BOX_USER="singbox"
 NFT_RULESET="/etc/cloud-claude/default-deny.nft"
+BYPASS_DIR="/etc/cloud-claude/bypass"
 TUN_READY_TIMEOUT_S=30
 SING_BOX_PID=""
+
+prepare_bypass_rule_sets() {
+  # v4.1: sing-box rule_set 引用白名单文件，必须预先存在。
+  # 每次启动都覆盖写入空规则，防止旧磁盘残留导致 bypass 状态不干净。
+  mkdir -p "$BYPASS_DIR"
+  echo '{"version":3,"rules":[]}' > "$BYPASS_DIR/whitelist-cidrs.json"
+  echo '{"version":3,"rules":[]}' > "$BYPASS_DIR/whitelist-domains.json"
+  chown -R root:root "$BYPASS_DIR" 2>/dev/null || true
+  echo "[entrypoint] bypass rule_set files ready"
+}
 
 start_singbox_or_die() {
   if [ ! -f "$SING_BOX_CONFIG" ]; then
@@ -381,6 +392,7 @@ fi
 
 # ===== v4.0: sing-box 启动序列（所有 MODE 都跑，fail-fast）=====
 # 顺序固定，任一步失败 entrypoint 非 0 退出 → tini 关停容器（EP-01 / D-V4-4）
+prepare_bypass_rule_sets
 start_singbox_or_die
 lock_resolv_conf
 apply_nft_or_die

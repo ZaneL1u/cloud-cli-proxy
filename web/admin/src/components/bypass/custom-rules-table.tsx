@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Pencil, Trash2, Plus, ShieldCheck, Search } from "lucide-react";
+import { Pencil, Trash2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   useBypassRules,
@@ -10,6 +10,7 @@ import type {
   BypassRule,
   BypassRuleType,
 } from "@/lib/api/types/bypass";
+import type { PresetRuleRow } from "./bypass-tab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +40,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { BypassRuleDrawer } from "./bypass-rule-drawer";
-import { EmptyState } from "@/components/layout/empty-state";
 
 const TYPE_LABELS: Record<BypassRuleType, string> = {
   ip: "IP",
@@ -51,9 +51,11 @@ const TYPE_LABELS: Record<BypassRuleType, string> = {
 
 interface CustomRulesTableProps {
   hostId: string;
+  presetRows?: PresetRuleRow[];
+  onDeletePreset?: (presetId: string) => void;
 }
 
-export function CustomRulesTable({ hostId }: CustomRulesTableProps) {
+export function CustomRulesTable({ hostId, presetRows, onDeletePreset }: CustomRulesTableProps) {
   const rulesQuery = useBypassRules(hostId);
   const deleteMutation = useDeleteBypassRule(hostId);
 
@@ -63,10 +65,12 @@ export function CustomRulesTable({ hostId }: CustomRulesTableProps) {
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("create");
   const [editingRule, setEditingRule] = useState<BypassRule | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BypassRule | null>(null);
+  const [deletePresetTarget, setDeletePresetTarget] = useState<PresetRuleRow | null>(null);
 
-  const rules = rulesQuery.data?.rules ?? [];
+  const customRules = rulesQuery.data?.rules ?? [];
+
   const filtered = useMemo(() => {
-    return rules.filter((r) => {
+    const all = customRules.filter((r) => {
       if (typeFilter !== "all" && r.rule_type !== typeFilter) return false;
       if (search) {
         const q = search.toLowerCase();
@@ -79,7 +83,25 @@ export function CustomRulesTable({ hostId }: CustomRulesTableProps) {
       }
       return true;
     });
-  }, [rules, typeFilter, search]);
+    return all;
+  }, [customRules, typeFilter, search]);
+
+  const filteredPresets = useMemo(() => {
+    if (!presetRows) return [];
+    return presetRows.filter((pr) => {
+      if (typeFilter !== "all" && pr.rule_type !== typeFilter) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        if (
+          !pr.value.toLowerCase().includes(q) &&
+          !(pr.note ?? "").toLowerCase().includes(q)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [presetRows, typeFilter, search]);
 
   function openCreate() {
     setDrawerMode("create");
@@ -108,15 +130,24 @@ export function CustomRulesTable({ hostId }: CustomRulesTableProps) {
     });
   }
 
+  function confirmDeletePreset(pr: PresetRuleRow) {
+    setDeletePresetTarget(pr);
+  }
+
+  function executeDeletePreset() {
+    if (!deletePresetTarget) return;
+    onDeletePreset?.(deletePresetTarget.preset_id);
+    toast.success("预设规则已移除");
+    setDeletePresetTarget(null);
+  }
+
+  const hasAny = (presetRows?.length ?? 0) + customRules.length > 0;
+  const filteredTotal = filteredPresets.length + filtered.length;
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-base font-semibold">自定义规则</h3>
-          <p className="text-xs text-muted-foreground">
-            最多 1000 条，支持 IP / CIDR / 域名 / 域名后缀 / 域名关键词 5 种类型
-          </p>
-        </div>
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-semibold">规则</h3>
         <Button
           size="sm"
           className="gap-1.5"
@@ -124,12 +155,12 @@ export function CustomRulesTable({ hostId }: CustomRulesTableProps) {
           data-testid="add-custom-rule"
         >
           <Plus className="size-4" />
-          添加自定义规则
+          添加规则
         </Button>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="sm:w-40">
+      <div className="flex items-center gap-2">
+        <div className="w-32">
           <Select
             value={typeFilter}
             onValueChange={(v) => setTypeFilter(v as BypassRuleType | "all")}
@@ -176,89 +207,88 @@ export function CustomRulesTable({ hostId }: CustomRulesTableProps) {
             />
           ))}
         </div>
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={ShieldCheck}
-          title={
-            rules.length === 0 ? "暂无自定义规则" : "没有匹配的规则"
-          }
-          description={
-            rules.length === 0
-              ? "当前 host 仅启用了预设规则，点击「添加自定义规则」补充域名或 IP"
-              : "调整筛选条件以查看其他规则"
-          }
-          action={
-            rules.length === 0 ? (
-              <Button size="sm" onClick={openCreate} className="gap-1.5">
-                <Plus className="size-4" />
-                添加自定义规则
-              </Button>
-            ) : null
-          }
-        />
+      ) : !hasAny ? (
+        <div className="flex flex-col items-center gap-3 py-10 text-center">
+          <p className="text-sm text-muted-foreground">暂无规则</p>
+          <Button size="sm" onClick={openCreate} className="gap-1.5">
+            <Plus className="size-4" />
+            添加规则
+          </Button>
+        </div>
+      ) : filteredTotal === 0 ? (
+        <div className="py-8 text-center text-sm text-muted-foreground">
+          没有匹配的规则，调整筛选条件
+        </div>
       ) : (
-        <Table>
+        <Table className="text-sm">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-28">类型</TableHead>
-              <TableHead>值</TableHead>
-              <TableHead className="w-24">风险</TableHead>
-              <TableHead>备注</TableHead>
-              <TableHead className="w-32 text-right">操作</TableHead>
+              <TableHead className="h-8 w-24">类型</TableHead>
+              <TableHead className="h-8">值</TableHead>
+              <TableHead className="h-8">备注</TableHead>
+              <TableHead className="h-8 w-24 text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
+            {filteredPresets.map((pr) => (
+              <TableRow key={pr._key} className="h-8 hover:bg-muted/50">
+                <TableCell className="py-1">
+                  <Badge variant="secondary" className="px-1.5 py-0 text-[11px] font-normal">
+                    {TYPE_LABELS[pr.rule_type]}
+                  </Badge>
+                </TableCell>
+                <TableCell className="py-1 font-mono text-[13px]">{pr.value}</TableCell>
+                <TableCell className="py-1 max-w-xs truncate text-[12px] text-muted-foreground">
+                  {pr.note || "—"}
+                </TableCell>
+                <TableCell className="py-1 text-right">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => confirmDeletePreset(pr)}
+                    aria-label="移除预设规则"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
             {filtered.map((rule) => (
               <TableRow
                 key={rule.id}
                 data-testid={`rules-row-${rule.id}`}
-                className={
-                  rule.is_risky
-                    ? "border-l-2 border-l-warning hover:bg-muted/50"
-                    : "hover:bg-muted/50"
-                }
+                className="h-8 hover:bg-muted/50"
               >
-                <TableCell>
-                  <Badge variant="secondary" className="font-normal">
+                <TableCell className="py-1">
+                  <Badge variant="secondary" className="px-1.5 py-0 text-[11px] font-normal">
                     {TYPE_LABELS[rule.rule_type]}
                   </Badge>
                 </TableCell>
-                <TableCell className="font-mono text-sm">
+                <TableCell className="py-1 font-mono text-[13px]">
                   {rule.value}
                 </TableCell>
-                <TableCell>
-                  {rule.is_risky ? (
-                    <Badge
-                      data-testid="risky-badge"
-                      className="bg-warning/15 text-warning-foreground hover:bg-warning/20"
-                    >
-                      高风险
-                    </Badge>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell className="max-w-xs truncate text-xs text-muted-foreground">
+                <TableCell className="py-1 max-w-xs truncate text-[12px] text-muted-foreground">
                   {rule.note || "—"}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="py-1 text-right">
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-8 w-8 p-0"
+                    className="h-6 w-6 p-0"
                     onClick={() => openEdit(rule)}
                     aria-label="编辑规则"
                   >
-                    <Pencil className="size-4" />
+                    <Pencil className="size-3.5" />
                   </Button>
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
                     onClick={() => confirmDelete(rule)}
                     aria-label="删除规则"
                   >
-                    <Trash2 className="size-4" />
+                    <Trash2 className="size-3.5" />
                   </Button>
                 </TableCell>
               </TableRow>
@@ -283,7 +313,7 @@ export function CustomRulesTable({ hostId }: CustomRulesTableProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>删除该规则？</AlertDialogTitle>
             <AlertDialogDescription>
-              删除后白名单立即收紧。需要保存后通过「应用此配置」生效。
+              删除后需点击「应用」使变更生效。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -293,6 +323,29 @@ export function CustomRulesTable({ hostId }: CustomRulesTableProps) {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!deletePresetTarget}
+        onOpenChange={(o) => !o && setDeletePresetTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>移除预设规则？</AlertDialogTitle>
+            <AlertDialogDescription>
+              移除后可通过「恢复默认」重新添加。移除后需点击「应用」使变更生效。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeDeletePreset}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              移除
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

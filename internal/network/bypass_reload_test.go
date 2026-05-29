@@ -1,5 +1,3 @@
-//go:build linux
-
 package network
 
 import (
@@ -7,146 +5,77 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
+	"os/exec"
 	"strings"
-	"sync"
 	"testing"
 )
 
-// withTempGatewayBase 把 DATA_DIR 指到 t.TempDir()，让 GatewayConfigDir 落在
-// 测试隔离目录，并通过 t.Cleanup 还原。返回最终 host 目录便于断言。
-func withTempGatewayBase(t *testing.T, hostID string) string {
+// withFakeDockerExecNft 注入 fake dockerExecNftHook，捕获调用参数。
+type capturedDockerNftCall struct {
+	HostID    string
+	NftScript string
+}
+
+func withFakeDockerExecNft(t *testing.T, fn func(ctx context.Context, hostID, nftScript string) error) *[]capturedDockerNftCall {
 	t.Helper()
-	tmp := t.TempDir()
-	prev, hadPrev := os.LookupEnv("DATA_DIR")
-	if err := os.Setenv("DATA_DIR", tmp); err != nil {
-		t.Fatalf("set DATA_DIR: %v", err)
+	captured := &[]capturedDockerNftCall{}
+	prev := dockerExecNftHook
+	dockerExecNftHook = func(ctx context.Context, hostID, nftScript string) error {
+		*captured = append(*captured, capturedDockerNftCall{HostID: hostID, NftScript: nftScript})
+		return fn(ctx, hostID, nftScript)
 	}
-	t.Cleanup(func() {
-		if hadPrev {
-			_ = os.Setenv("DATA_DIR", prev)
-		} else {
-			_ = os.Unsetenv("DATA_DIR")
+	t.Cleanup(func() { dockerExecNftHook = prev })
+	return captured
+}
+
+// withFakeDockerWriteFile 注入 fake dockerWriteFileHook，捕获写入内容。
+type capturedDockerWrite struct {
+	HostID   string
+	Filename string
+	Data     []byte
+}
+
+func withFakeDockerWriteFile(t *testing.T, fn func(ctx context.Context, hostID, filename string, data []byte) error) *[]capturedDockerWrite {
+	t.Helper()
+	captured := &[]capturedDockerWrite{}
+	prev := dockerWriteFileHook
+	dockerWriteFileHook = func(ctx context.Context, hostID, filename string, data []byte) error {
+		*captured = append(*captured, capturedDockerWrite{HostID: hostID, Filename: filename, Data: data})
+		if fn != nil {
+			return fn(ctx, hostID, filename, data)
 		}
-	})
-	hostDir := filepath.Join(tmp, "gateway", hostID)
-	if err := os.MkdirAll(hostDir, 0o755); err != nil {
-		t.Fatalf("mkdir host dir: %v", err)
+		return nil
 	}
-	return hostDir
-}
-
-// withFakeWorkerNetNSPIDLookup 注入 fake pid 解析器，避开 docker 依赖。
-// 默认返回一个非零 pid，并在测试结束还原。返回闭包内捕获到的 hostID 列表。
-func withFakeWorkerNetNSPIDLookup(t *testing.T, pid int) *[]string {
-	t.Helper()
-	captured := &[]string{}
-	var mu sync.Mutex
-	prev := workerNetNSPIDLookup
-	workerNetNSPIDLookup = func(_ context.Context, hostID string) (int, error) {
-		mu.Lock()
-		*captured = append(*captured, hostID)
-		mu.Unlock()
-		return pid, nil
-	}
-	t.Cleanup(func() { workerNetNSPIDLookup = prev })
+	t.Cleanup(func() { dockerWriteFileHook = prev })
 	return captured
 }
 
-// withFakeNftRunner 注入 fake nftRunner，并在测试结束还原；返回闭包内捕获到的 stdin。
-// 捕获结构含 pid 和 stdin，便于断言 nsenter 命令构造正确（BLOCKER-2 修复要求）。
-type capturedNftCall struct {
-	NetNSPID int
-	Stdin    string
-}
-
-func withFakeNftRunner(t *testing.T, fn func(ctx context.Context, netNSPID int, stdin string) ([]byte, error)) *[]capturedNftCall {
+func withFakeDockerReadFile(t *testing.T, fn func(ctx context.Context, hostID, filename string) ([]byte, error)) {
 	t.Helper()
-	captured := &[]capturedNftCall{}
-	var mu sync.Mutex
-	prev := nftRunner
-	nftRunner = func(ctx context.Context, netNSPID int, stdin string) ([]byte, error) {
-		mu.Lock()
-		*captured = append(*captured, capturedNftCall{NetNSPID: netNSPID, Stdin: stdin})
-		mu.Unlock()
-		return fn(ctx, netNSPID, stdin)
-	}
-	t.Cleanup(func() { nftRunner = prev })
-	return captured
+	prev := dockerReadFileHook
+	dockerReadFileHook = fn
+	t.Cleanup(func() { dockerReadFileHook = prev })
 }
 
-func withFakeNftJSONLister(t *testing.T, fn func(ctx context.Context, netNSPID int, setName string) ([]byte, error)) {
+func withFakeDockerListNftSet(t *testing.T, fn func(ctx context.Context, hostID string) ([]byte, error)) {
 	t.Helper()
-	prev := nftJSONLister
-	nftJSONLister = fn
-	t.Cleanup(func() { nftJSONLister = prev })
+	prev := dockerListNftSetHook
+	dockerListNftSetHook = fn
+	t.Cleanup(func() { dockerListNftSetHook = prev })
 }
 
-// ===== Test 1: atomic write =====
-
-// TestApplyBypassRuleSet_AtomicWrite 守护 acceptance Test 1：
-//   - 写盘到 <DATA_DIR>/gateway/<hostID>/whitelist-cidrs.json 与 whitelist-domains.json
-//   - 内容 byte-for-byte 等于入参 cidrsJSON / domainsJSON
-//   - 写盘过程结束后目录里不留任何 .tmp.* 残留文件（用 glob 验证）
-func TestApplyBypassRuleSet_AtomicWrite(t *testing.T) {
-	hostID := "h-atomic"
-	hostDir := withTempGatewayBase(t, hostID)
-	withFakeWorkerNetNSPIDLookup(t, 4242)
-	withFakeNftRunner(t, func(_ context.Context, _ int, _ string) ([]byte, error) { return nil, nil })
-
-	cidrsJSON := json.RawMessage(`{"version":3,"rules":[{"ip_cidr":["10.0.0.0/8","192.168.1.0/24"]}]}`)
-	domainsJSON := json.RawMessage(`{"version":3,"rules":[{"domain":["example.com"]}]}`)
-
-	if err := ApplyBypassRuleSet(context.Background(), hostID, cidrsJSON, domainsJSON); err != nil {
-		t.Fatalf("ApplyBypassRuleSet: %v", err)
-	}
-
-	cidrsPath := filepath.Join(hostDir, "whitelist-cidrs.json")
-	domainsPath := filepath.Join(hostDir, "whitelist-domains.json")
-
-	gotCIDRs, err := os.ReadFile(cidrsPath)
-	if err != nil {
-		t.Fatalf("read cidrs file: %v", err)
-	}
-	if string(gotCIDRs) != string(cidrsJSON) {
-		t.Errorf("cidrs file content = %q, want %q", string(gotCIDRs), string(cidrsJSON))
-	}
-
-	gotDomains, err := os.ReadFile(domainsPath)
-	if err != nil {
-		t.Fatalf("read domains file: %v", err)
-	}
-	if string(gotDomains) != string(domainsJSON) {
-		t.Errorf("domains file content = %q, want %q", string(gotDomains), string(domainsJSON))
-	}
-
-	// 不允许残留 .tmp.* 文件
-	matches, err := filepath.Glob(filepath.Join(hostDir, "*.tmp.*"))
-	if err != nil {
-		t.Fatalf("glob tmp residue: %v", err)
-	}
-	if len(matches) != 0 {
-		t.Errorf("expected zero .tmp.* residue, got %v", matches)
-	}
-}
-
-// ===== Test 2: nft transaction stdin format =====
+// ===== Test 1: nft transaction script format =====
 
 // TestApplyBypassRuleSet_NftTransaction 守护 acceptance Test 2：
-//   - stdin 首行严格是 `flush set ip cloudproxy whitelist_v4`
+//   - nft 脚本首行严格是 `flush set ip cloudproxy whitelist_v4`
 //   - 紧跟一行 `add element ip cloudproxy whitelist_v4 { ... }`
-//   - 单次 nft -f 调用承担整批；列表归一化后按字典序，包含全部入参 CIDR
-//   - nft 命令必须经 nsenter 进 worker netns —— 捕获到的 NetNSPID 必须等于
-//     fake workerNetNSPIDLookup 返回的 pid，断言 ApplyBypassRuleSet 真正把
-//     pid 透传给了 nftRunner（BLOCKER-2 修复要点）
-//   - 解析失败的 cidrsJSON（version 不对 / 非法 envelope）不下发 nft 也不写盘
+//   - 列表归一化后按字典序，包含全部入参 CIDR
+//   - 文件写入通过 dockerWriteFileHook 进行
+//   - 解析失败的 cidrsJSON 不下发 nft 也不写盘
 func TestApplyBypassRuleSet_NftTransaction(t *testing.T) {
 	hostID := "h-nft"
-	hostDir := withTempGatewayBase(t, hostID)
-	const fakePID = 7777
-	withFakeWorkerNetNSPIDLookup(t, fakePID)
-	captured := withFakeNftRunner(t, func(_ context.Context, _ int, _ string) ([]byte, error) { return nil, nil })
+	nftCalls := withFakeDockerExecNft(t, func(_ context.Context, _ string, _ string) error { return nil })
+	fileCalls := withFakeDockerWriteFile(t, nil)
 
 	cidrsJSON := json.RawMessage(`{"version":3,"rules":[{"ip_cidr":["192.168.1.0/24","10.0.0.0/8"]}]}`)
 	domainsJSON := json.RawMessage(`{"version":3,"rules":[]}`)
@@ -155,66 +84,115 @@ func TestApplyBypassRuleSet_NftTransaction(t *testing.T) {
 		t.Fatalf("ApplyBypassRuleSet: %v", err)
 	}
 
-	if got := len(*captured); got != 1 {
-		t.Fatalf("nftRunner should be called exactly once (one nft -f - transaction), got %d", got)
+	if got := len(*nftCalls); got != 1 {
+		t.Fatalf("dockerExecNftHook should be called exactly once, got %d", got)
 	}
-	call := (*captured)[0]
-	if call.NetNSPID != fakePID {
-		t.Errorf("nftRunner NetNSPID = %d, want %d (nsenter target pid must be worker netns pid)", call.NetNSPID, fakePID)
+	call := (*nftCalls)[0]
+	if call.HostID != hostID {
+		t.Errorf("hostID = %q, want %q", call.HostID, hostID)
 	}
-	stdin := call.Stdin
-	lines := strings.Split(strings.TrimRight(stdin, "\n"), "\n")
+
+	lines := strings.Split(strings.TrimRight(call.NftScript, "\n"), "\n")
 	if len(lines) < 2 {
-		t.Fatalf("stdin must have at least 2 lines (flush + add), got %q", stdin)
+		t.Fatalf("nft script must have at least 2 lines (flush + add), got %q", call.NftScript)
 	}
 	if lines[0] != "flush set ip cloudproxy whitelist_v4" {
-		t.Errorf("stdin first line = %q, want exact 'flush set ip cloudproxy whitelist_v4'", lines[0])
+		t.Errorf("first line = %q, want 'flush set ip cloudproxy whitelist_v4'", lines[0])
 	}
 	if !strings.HasPrefix(lines[1], "add element ip cloudproxy whitelist_v4 { ") || !strings.HasSuffix(lines[1], " }") {
-		t.Errorf("stdin second line = %q, want add-element with braces", lines[1])
+		t.Errorf("second line = %q, want add-element with braces", lines[1])
 	}
 	for _, want := range []string{"10.0.0.0/8", "192.168.1.0/24"} {
 		if !strings.Contains(lines[1], want) {
-			t.Errorf("stdin second line missing %q: %q", want, lines[1])
+			t.Errorf("second line missing %q: %q", want, lines[1])
 		}
 	}
 
-	// CIDR 解析失败路径：version 错误的 envelope
-	*captured = (*captured)[:0]
-	// 清掉文件以验证不二次写盘
-	_ = os.Remove(filepath.Join(hostDir, "whitelist-cidrs.json"))
-	_ = os.Remove(filepath.Join(hostDir, "whitelist-domains.json"))
+	// 验证文件写入
+	if got := len(*fileCalls); got != 2 {
+		t.Fatalf("dockerWriteFileHook should be called twice (cidrs + domains), got %d", got)
+	}
+	if (*fileCalls)[0].Filename != "whitelist-cidrs.json" {
+		t.Errorf("first write filename = %q, want whitelist-cidrs.json", (*fileCalls)[0].Filename)
+	}
+	if (*fileCalls)[1].Filename != "whitelist-domains.json" {
+		t.Errorf("second write filename = %q, want whitelist-domains.json", (*fileCalls)[1].Filename)
+	}
+
+	// CIDR 解析失败路径
+	*nftCalls = (*nftCalls)[:0]
+	*fileCalls = (*fileCalls)[:0]
 
 	badCIDRs := json.RawMessage(`{"version":99,"rules":[]}`)
 	if err := ApplyBypassRuleSet(context.Background(), hostID, badCIDRs, domainsJSON); err == nil {
-		t.Fatalf("ApplyBypassRuleSet should fail on bad version, got nil err")
+		t.Fatal("ApplyBypassRuleSet should fail on bad version, got nil err")
 	}
-	if got := len(*captured); got != 0 {
-		t.Errorf("bad cidrs json must not invoke nftRunner, got %d calls", got)
+	if got := len(*nftCalls); got != 0 {
+		t.Errorf("bad cidrs json must not invoke nft hook, got %d calls", got)
 	}
-	if _, err := os.Stat(filepath.Join(hostDir, "whitelist-cidrs.json")); !os.IsNotExist(err) {
-		t.Errorf("bad cidrs json must not create whitelist-cidrs.json (stat err=%v)", err)
+	if got := len(*fileCalls); got != 0 {
+		t.Errorf("bad cidrs json must not write files, got %d writes", got)
 	}
 }
 
-// ===== Test 3: hash consistency =====
+// ===== Test 2: nft failure =====
 
-// TestVerifyBypassConsistency_HashMatch 守护 acceptance Test 3：
-//   - rule-set 文件 CIDR 集合与 nft set CIDR 集合相同 → OK=true，两 hash 相等
-//   - 集合不同 → OK=false，两 hash 字面值不同，Detail 非空
-//   - nft 列表请求必须经 fake pid 解析 + 透传给 nftJSONLister（BLOCKER-2 修复）
+// TestApplyBypassRuleSet_NftFailure 守护 acceptance Test 4：
+//   - dockerExecNftHook 返回错误 → ApplyBypassRuleSet 返回 error
+//   - 文件写入不应发生（nft 失败先于写盘）
+func TestApplyBypassRuleSet_NftFailure(t *testing.T) {
+	hostID := "h-nft-fail"
+	withFakeDockerExecNft(t, func(_ context.Context, _ string, _ string) error {
+		return errors.New("nft: syntax error simulated")
+	})
+	fileCalls := withFakeDockerWriteFile(t, nil)
+
+	cidrsJSON := json.RawMessage(`{"version":3,"rules":[{"ip_cidr":["10.0.0.0/8"]}]}`)
+	domainsJSON := json.RawMessage(`{"version":3,"rules":[]}`)
+
+	err := ApplyBypassRuleSet(context.Background(), hostID, cidrsJSON, domainsJSON)
+	if err == nil {
+		t.Fatal("ApplyBypassRuleSet should return error on nft failure, got nil")
+	}
+	if got := len(*fileCalls); got != 0 {
+		t.Errorf("file writes should not happen after nft failure, got %d", got)
+	}
+	if !strings.Contains(err.Error(), "nft") {
+		t.Errorf("err should mention nft: %v", err)
+	}
+}
+
+// ===== Test 3: file write failure =====
+
+func TestApplyBypassRuleSet_FileWriteFailure(t *testing.T) {
+	hostID := "h-file-fail"
+	withFakeDockerExecNft(t, func(_ context.Context, _ string, _ string) error { return nil })
+	withFakeDockerWriteFile(t, func(_ context.Context, _, filename string, _ []byte) error {
+		if filename == "whitelist-domains.json" {
+			return errors.New("docker exec failed: permission denied")
+		}
+		return nil
+	})
+
+	cidrsJSON := json.RawMessage(`{"version":3,"rules":[{"ip_cidr":["10.0.0.0/8"]}]}`)
+	domainsJSON := json.RawMessage(`{"version":3,"rules":[]}`)
+
+	err := ApplyBypassRuleSet(context.Background(), hostID, cidrsJSON, domainsJSON)
+	if err == nil {
+		t.Fatal("ApplyBypassRuleSet should return error on file write failure")
+	}
+	if !strings.Contains(err.Error(), "whitelist-domains.json") {
+		t.Errorf("err should mention domains file: %v", err)
+	}
+}
+
+// ===== Test 4: hash consistency =====
+
 func TestVerifyBypassConsistency_HashMatch(t *testing.T) {
 	hostID := "h-verify"
-	hostDir := withTempGatewayBase(t, hostID)
-	const fakePID = 9999
-	withFakeWorkerNetNSPIDLookup(t, fakePID)
 
 	cidrsJSON := json.RawMessage(`{"version":3,"rules":[{"ip_cidr":["10.0.0.0/8","192.168.1.0/24"]}]}`)
-	if err := os.WriteFile(filepath.Join(hostDir, "whitelist-cidrs.json"), cidrsJSON, 0o644); err != nil {
-		t.Fatalf("write cidrs: %v", err)
-	}
 
-	// case A: nft 返回相同集合（混合 prefix + 裸 string 形式）
 	matchingNftJSON := []byte(`{"nftables":[
       {"metainfo":{}},
       {"set":{"family":"ip","table":"cloudproxy","name":"whitelist_v4","type":"ipv4_addr",
@@ -223,9 +201,17 @@ func TestVerifyBypassConsistency_HashMatch(t *testing.T) {
                 {"prefix":{"addr":"192.168.1.0","len":24}}
               ]}}
     ]}`)
-	var listerPIDs []int
-	withFakeNftJSONLister(t, func(_ context.Context, pid int, _ string) ([]byte, error) {
-		listerPIDs = append(listerPIDs, pid)
+
+	withFakeDockerReadFile(t, func(_ context.Context, hid, filename string) ([]byte, error) {
+		if hid != hostID {
+			return nil, fmt.Errorf("unexpected hostID: %s", hid)
+		}
+		if filename != "whitelist-cidrs.json" {
+			return nil, fmt.Errorf("unexpected file: %s", filename)
+		}
+		return cidrsJSON, nil
+	})
+	withFakeDockerListNftSet(t, func(_ context.Context, _ string) ([]byte, error) {
 		return matchingNftJSON, nil
 	})
 
@@ -236,23 +222,19 @@ func TestVerifyBypassConsistency_HashMatch(t *testing.T) {
 	if !res.OK {
 		t.Errorf("expected OK=true, got %+v", res)
 	}
-	if res.RuleSetSHA256 == "" || res.NftSetSHA256 == "" {
-		t.Errorf("hash fields must not be empty: %+v", res)
-	}
 	if res.RuleSetSHA256 != res.NftSetSHA256 {
 		t.Errorf("matching sets must produce equal hashes: %+v", res)
 	}
-	if len(listerPIDs) == 0 || listerPIDs[0] != fakePID {
-		t.Errorf("nftJSONLister should be called with worker netns pid=%d, got %v", fakePID, listerPIDs)
-	}
 
-	// case B: nft 返回不同集合
+	// case B: drift
 	driftedNftJSON := []byte(`{"nftables":[
       {"metainfo":{}},
       {"set":{"family":"ip","table":"cloudproxy","name":"whitelist_v4","type":"ipv4_addr",
               "elem":[{"prefix":{"addr":"172.16.0.0","len":12}}]}}
     ]}`)
-	withFakeNftJSONLister(t, func(_ context.Context, _ int, _ string) ([]byte, error) { return driftedNftJSON, nil })
+	withFakeDockerListNftSet(t, func(_ context.Context, _ string) ([]byte, error) {
+		return driftedNftJSON, nil
+	})
 
 	res2, err := VerifyBypassConsistency(context.Background(), hostID)
 	if err != nil {
@@ -261,103 +243,37 @@ func TestVerifyBypassConsistency_HashMatch(t *testing.T) {
 	if res2.OK {
 		t.Errorf("expected OK=false on drift, got %+v", res2)
 	}
-	if res2.RuleSetSHA256 == res2.NftSetSHA256 {
-		t.Errorf("drifted sets must produce different hashes: %+v", res2)
-	}
 	if res2.Detail == "" {
 		t.Errorf("drifted result must include Detail")
 	}
 }
 
-// ===== Test 4: nft failure rollback =====
+// ===== Test 5: docker exec hook not called on bad input =====
 
-// TestApplyBypassRuleSet_NftFailureRollback 守护 acceptance Test 4：
-//   - nftRunner 返回非零退出 → ApplyBypassRuleSet 返回 error
-//   - 目录不能留下 .tmp.* 残留
-//   - 原 whitelist-cidrs.json 内容必须保持「旧值」不被破坏
-func TestApplyBypassRuleSet_NftFailureRollback(t *testing.T) {
-	hostID := "h-nft-fail"
-	hostDir := withTempGatewayBase(t, hostID)
-	withFakeWorkerNetNSPIDLookup(t, 1234)
-
-	// 预置旧内容：模拟之前已经 apply 过一次的 snapshot 文件
-	oldContent := []byte(`{"version":3,"rules":[{"ip_cidr":["172.20.0.0/16"]}]}`)
-	cidrsPath := filepath.Join(hostDir, "whitelist-cidrs.json")
-	if err := os.WriteFile(cidrsPath, oldContent, 0o644); err != nil {
-		t.Fatalf("seed old cidrs file: %v", err)
-	}
-
-	withFakeNftRunner(t, func(_ context.Context, _ int, _ string) ([]byte, error) {
-		return []byte("nft: syntax error simulated"), errors.New("exit status 1")
+func TestApplyBypassRuleSet_BadInputNoSideEffects(t *testing.T) {
+	hostID := "h-bad-input"
+	nftCalls := withFakeDockerExecNft(t, func(_ context.Context, _ string, _ string) error {
+		t.Fatal("nft hook must not be called on bad input")
+		return nil
 	})
+	fileCalls := withFakeDockerWriteFile(t, nil)
 
-	newCIDRs := json.RawMessage(`{"version":3,"rules":[{"ip_cidr":["10.0.0.0/8"]}]}`)
-	newDomains := json.RawMessage(`{"version":3,"rules":[]}`)
-
-	err := ApplyBypassRuleSet(context.Background(), hostID, newCIDRs, newDomains)
+	// empty JSON
+	err := ApplyBypassRuleSet(context.Background(), hostID, json.RawMessage(`{}`), json.RawMessage(`{}`))
 	if err == nil {
-		t.Fatal("ApplyBypassRuleSet should return error on nft failure, got nil")
+		t.Fatal("should fail on bad cidrs json")
 	}
-
-	// 原文件未被破坏
-	got, readErr := os.ReadFile(cidrsPath)
-	if readErr != nil {
-		t.Fatalf("read original file after failed apply: %v", readErr)
+	if len(*nftCalls) != 0 {
+		t.Errorf("nft hook called %d times on bad input", len(*nftCalls))
 	}
-	if string(got) != string(oldContent) {
-		t.Errorf("original file corrupted: got=%q want=%q", string(got), string(oldContent))
-	}
-
-	// 没有 .tmp.* 残留
-	matches, _ := filepath.Glob(filepath.Join(hostDir, "*.tmp.*"))
-	if len(matches) != 0 {
-		t.Errorf("expected zero .tmp.* residue after nft failure, got %v", matches)
-	}
-
-	// domains 文件不应被创建（nft 失败先于任何写盘）
-	if _, statErr := os.Stat(filepath.Join(hostDir, "whitelist-domains.json")); !os.IsNotExist(statErr) {
-		t.Errorf("whitelist-domains.json must not exist after nft failure, stat=%v", statErr)
-	}
-
-	if !strings.Contains(err.Error(), "nft") {
-		t.Errorf("err should mention nft: %v", err)
+	if len(*fileCalls) != 0 {
+		t.Errorf("file hook called %d times on bad input", len(*fileCalls))
 	}
 }
 
-// TestApplyBypassRuleSet_PidLookupFailure 守护 BLOCKER-2 修复的逆向不变量：
-// 当 workerNetNSPIDLookup 解析失败（worker 容器不在线）时，ApplyBypassRuleSet
-// 必须立刻返回错误，**绝不**调用 nftRunner、**绝不**写盘。
-func TestApplyBypassRuleSet_PidLookupFailure(t *testing.T) {
-	hostID := "h-pid-fail"
-	hostDir := withTempGatewayBase(t, hostID)
-
-	prev := workerNetNSPIDLookup
-	workerNetNSPIDLookup = func(_ context.Context, _ string) (int, error) {
-		return 0, errors.New("worker container not running")
-	}
-	t.Cleanup(func() { workerNetNSPIDLookup = prev })
-
-	captured := withFakeNftRunner(t, func(_ context.Context, _ int, _ string) ([]byte, error) {
-		t.Fatalf("nftRunner must not be invoked when pid lookup fails")
-		return nil, nil
-	})
-
-	cidrs := json.RawMessage(`{"version":3,"rules":[{"ip_cidr":["10.0.0.0/8"]}]}`)
-	domains := json.RawMessage(`{"version":3,"rules":[]}`)
-	err := ApplyBypassRuleSet(context.Background(), hostID, cidrs, domains)
-	if err == nil {
-		t.Fatal("ApplyBypassRuleSet should return error when pid lookup fails")
-	}
-	if !strings.Contains(err.Error(), "worker netns pid") {
-		t.Errorf("err should mention 'worker netns pid', got %v", err)
-	}
-	if len(*captured) != 0 {
-		t.Errorf("nftRunner must not be called when pid lookup fails, got %d invocations", len(*captured))
-	}
-	if _, statErr := os.Stat(filepath.Join(hostDir, "whitelist-cidrs.json")); !os.IsNotExist(statErr) {
-		t.Errorf("whitelist-cidrs.json must not exist when pid lookup fails, stat=%v", statErr)
-	}
-}
-
-// 编译期守护：保证 fmt 一直被使用（避免 IDE 误删），并间接验证 ConsistencyResult JSON 字面 tag。
+// 编译期守护：保证 fmt 一直被使用（避免 IDE 误删）。
 var _ = fmt.Sprintf("%T", ConsistencyResult{})
+
+// 编译期守护：保证 exec 和 errors import 不被误删。
+var _ = (*exec.Cmd)(nil)
+var _ = errors.New

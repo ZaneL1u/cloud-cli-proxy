@@ -48,17 +48,20 @@ func TestBuildContainerSingBoxConfig_DirectForProxyServerIP(t *testing.T) {
 	}
 }
 
-// TestBuildContainerSingBoxConfig_NoWhitelistRuleSet 锁 v4.0 单容器 config 不
-// 携带 v3.5 whitelist rule-set 引用 —— 这是 D-54-* 的精简决策。
-func TestBuildContainerSingBoxConfig_NoWhitelistRuleSet(t *testing.T) {
+// TestBuildContainerSingBoxConfig_BypassRuleSets 验证 v4.x config 始终
+// 包含 bypass-cidrs / bypass-domains 两个 rule_set 引用及对应 route/DNS 规则。
+func TestBuildContainerSingBoxConfig_BypassRuleSets(t *testing.T) {
 	outbound := json.RawMessage(`{"type":"socks","server":"1.2.3.4","server_port":1080}`)
 	cfg, err := buildContainerSingBoxConfig(outbound, "1.1.1.1", "1.2.3.4")
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(cfg)
-	if strings.Contains(s, "whitelist-cidrs") || strings.Contains(s, "whitelist-domains") {
-		t.Errorf("container config must NOT reference v3.5 whitelist rule-sets:\n%s", s)
+	if !strings.Contains(s, "bypass-cidrs") || !strings.Contains(s, "bypass-domains") {
+		t.Errorf("container config must include bypass rule_set references:\n%s", s)
+	}
+	if !strings.Contains(s, "whitelist-cidrs.json") || !strings.Contains(s, "whitelist-domains.json") {
+		t.Errorf("container config must reference whitelist rule-set files:\n%s", s)
 	}
 }
 

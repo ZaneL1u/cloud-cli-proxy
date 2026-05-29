@@ -230,6 +230,10 @@ func buildNftWhitelistUpdateScript(cidrs []string) string {
 		if c == "" {
 			continue
 		}
+		// whitelist_v4 只接受 IPv4，IPv6 地址暂跳过（后续 whitelist_v6 set 落地）
+		if strings.Contains(c, ":") {
+			continue
+		}
 		if _, dup := uniq[c]; dup {
 			continue
 		}

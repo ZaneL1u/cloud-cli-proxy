@@ -5,23 +5,20 @@ import (
 	"fmt"
 )
 
-// buildContainerSingBoxConfig 渲染 v4.0 (Phase 54) 单容器架构下，user 容器内自跑
-// sing-box 的 config JSON。
+// bypassRuleSetDir 容器内白名单 rule-set 文件目录，与 bypass_reload_apply.go::bypassContainerDir 对齐。
+const bypassRuleSetDir = "/etc/cloud-claude/bypass"
+
+// buildContainerSingBoxConfig 渲染 v4.0 单容器架构 sing-box config JSON。
 //
-// 与 v3.5 buildGatewaySingBoxConfig 的差异：
-//   - v3.5 sing-box 跑在 sidecar gateway 容器（隔离 bridge 网络），address
-//     172.19.0.1/30 是 gateway tun0 IP；
-//   - v4.0 sing-box 跑在 user 容器自身 netns，tun0 仍可保留同一 address（仅容器
-//     内可见，不与 docker bridge 网段冲突）；
-//   - v4.0 容器内 entrypoint lock_resolv_conf 已写死 nameserver 127.0.0.1，
-//     sing-box DNS 模块通过 hijack-dns route 规则接管；
-//   - v4.0 不引入 v3.5 whitelist rule-set（bypass 白名单是 v3.5 网络架构特有，
-//     v4.0 同容器先不带，待 v4.1 评估）。
+// bypass 白名单通过 route.rule_set (type=local) 引用容器内文件：
+//   - /etc/cloud-claude/bypass/whitelist-cidrs.json   → rule_set "bypass-cidrs"
+//   - /etc/cloud-claude/bypass/whitelist-domains.json → rule_set "bypass-domains"
 //
-// buildGatewayProxyOutbound / buildGatewayDirectOutbound 从已退役的
-// gateway_singbox_config.go 迁移至此，是 container config 的直接依赖。
-func buildContainerSingBoxConfig(outboundRaw json.RawMessage, dnsServer, proxyServerIP string) ([]byte, error) {
-	_ = dnsServer
+// DNS 和 route 规则均引用这些 rule_set。sing-box 1.12+ 支持 rule_set 在 route 块内
+// 定义 + DNS/route 规则引用，文件 watcher 自动热加载。
+//
+// 文件由 ApplyBypassRuleSet 通过 docker exec 写入。
+func buildContainerSingBoxConfig(outboundRaw json.RawMessage, _ /*dnsServer*/, proxyServerIP string) ([]byte, error) {
 	proxyOut, err := buildGatewayProxyOutbound(outboundRaw, proxyServerIP)
 	if err != nil {
 		return nil, err
@@ -34,85 +31,35 @@ func buildContainerSingBoxConfig(outboundRaw json.RawMessage, dnsServer, proxySe
 	if err != nil {
 		return nil, err
 	}
-	// direct inbound 监听 127.0.0.1:53 作为本地 DNS 转发器。
-	// resolv.conf 指向 127.0.0.1，应用 DNS 查询经此 inbound 进入 sing-box，
-	// 由 hijack-dns route 规则交给 DNS 模块处理。
-	// 不能用 tun0 IP (172.19.0.1) —— 内核本地处理该地址的包，tun 设备收不到。
-	dnsDirect, err := buildContainerDNSDirectInbound()
+	dnsDirectIn, err := buildContainerDNSDirectInbound()
 	if err != nil {
 		return nil, err
 	}
 
 	cfg := map[string]any{
-		"log":       map[string]any{"level": "info"},
-		"dns":       buildContainerDNS(),
-		"inbounds":  []json.RawMessage{tunIn, dnsDirect},
+		"log":      map[string]any{"level": "info"},
+		"dns":      buildContainerDNS(),
+		"inbounds": []json.RawMessage{tunIn, dnsDirectIn},
 		"outbounds": []json.RawMessage{proxyOut, directOut},
-		"route": map[string]any{
-			"default_interface":       "eth0",
-			"default_domain_resolver": map[string]any{"server": "dns-local"},
-			"rules":                   buildContainerRouteRules(proxyServerIP),
-			"final":                   "proxy-out",
-		},
+		"route":    buildContainerRoute(proxyServerIP),
 	}
 	return json.MarshalIndent(cfg, "", "  ")
 }
 
-// buildContainerDNSDirectInbound 渲染 direct inbound 监听 127.0.0.1:53。
-// 作为本地 DNS 转发器：resolv.conf 指向 127.0.0.1，应用 DNS 查询经此
-// inbound 进入 sing-box，由 hijack-dns route 规则交给 DNS 模块处理。
-// 不能用 tun0 IP (172.19.0.1) 作为 DNS 地址 —— 内核本地处理该地址的包，
-// tun 设备收不到，DNS 查询会 connection refused。
-func buildContainerDNSDirectInbound() (json.RawMessage, error) {
-	raw, err := json.Marshal(map[string]any{
-		"type":        "direct",
-		"tag":         "dns-direct",
-		"listen":      "127.0.0.1",
-		"listen_port": 53,
-		"sniff":       true,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal container dns direct inbound: %w", err)
-	}
-	return raw, nil
-}
-
-// buildContainerTunInbound 渲染容器内 tun inbound。
-//
-// 与 buildGatewayTunInbound 的关键差异：v4.0 同容器架构下不需要
-// endpoint_independent_nat —— 流量走向是 user 进程 → tun0 → sing-box → eth0
-// 单向链路，无回程 NAT 需求；strict_route + auto_route 与 v3.5 对齐。
-// stack 使用 gvisor（用户态 TCP/IP 栈），避免依赖 iptables REDIRECT。
-// Ubuntu 24.04 最小镜像不含 iptables，system 栈的 NAT 无法工作。
-func buildContainerTunInbound() (json.RawMessage, error) {
-	raw, err := json.Marshal(map[string]any{
-		"type":          "tun",
-		"tag":           "tun-in",
-		"address":       []string{"172.19.0.1/30"},
-		"auto_route":    true,
-		"strict_route":  true,
-		"stack":         "gvisor",
-		"sniff":         true,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal container tun inbound: %w", err)
-	}
-	return raw, nil
-}
-
-// buildContainerDNS 渲染容器内 sing-box dns 模块（精简版）：
-//   - dns-local（type=local）解析内网 .lan / .local / .internal 等后缀
-//   - dns-proxy（type=https，server=1.1.1.1，detour=proxy-out）走 DoH 解析公网
-//
-// 与 buildGatewayDNS 的差异：v4.0 删除 v3.5 whitelist-domains rule-set 引用；
-// 仅保留按域名后缀直连内网的 1 条规则；其余流量经 final=dns-proxy 走代理 DoH。
-// dns.strategy 仍 ipv4_only —— 容器内全禁 IPv6 与 entrypoint nft 规则配套。
+// buildContainerDNS 渲染 DNS 模块。
+// dns-direct (UDP 8.8.8.8 detour=direct) 用于 bypass 域名的直连解析。
 func buildContainerDNS() map[string]any {
 	return map[string]any{
 		"servers": []map[string]any{
 			{
 				"tag":  "dns-local",
 				"type": "local",
+			},
+			{
+				"tag":    "dns-direct",
+				"type":   "udp",
+				"server": "8.8.8.8",
+				"detour": "direct",
 			},
 			{
 				"tag":             "dns-proxy",
@@ -128,33 +75,81 @@ func buildContainerDNS() map[string]any {
 				"action":        "route",
 				"server":        "dns-local",
 			},
+			{
+				"rule_set": "bypass-domains",
+				"action":   "route",
+				"server":   "dns-direct",
+			},
 		},
 		"final":    "dns-proxy",
 		"strategy": "ipv4_only",
 	}
 }
 
-// buildContainerRouteRules 渲染容器内 sing-box route.rules（精简版，无 v3.5
-// whitelist rule-set 引用 —— bypass 白名单是 v3.5 网络架构特有，v4.0 同容器
-// 待 v4.1 评估）。
-//
-// 4 条规则（顺序必须保留）：
-//  1. action=sniff（嗅探 tls/http/quic/dns）
-//  2. protocol=dns + action=hijack-dns（让所有 DNS 流量经 sing-box DNS 模块）
-//  3. ip_cidr=<proxy_ip>/32 → direct（避免 sing-box 回环访问自身代理服务器）
-//  4. ip_is_private=true → direct（RFC1918 / CGNAT / 链路本地 / ULA）
-//
-// route.final=proxy-out 在调用方设置兜底。
-func buildContainerRouteRules(proxyServerIP string) []map[string]any {
-	return []map[string]any{
-		{"action": "sniff", "sniffer": []string{"tls", "http", "quic", "dns"}},
-		{"protocol": "dns", "action": "hijack-dns"},
-		{"ip_cidr": []string{proxyServerIP + "/32"}, "action": "route", "outbound": "direct"},
-		{"ip_is_private": true, "action": "route", "outbound": "direct"},
+// buildContainerRoute 渲染 route 块（含 rule_set 定义和引用）。
+func buildContainerRoute(proxyServerIP string) map[string]any {
+	return map[string]any{
+		"default_interface":       "eth0",
+		"default_domain_resolver": map[string]any{"server": "dns-local"},
+		"rules": []map[string]any{
+			{"action": "sniff", "sniffer": []string{"tls", "http", "quic", "dns"}},
+			{"protocol": "dns", "action": "hijack-dns"},
+			{"ip_cidr": []string{proxyServerIP + "/32"}, "action": "route", "outbound": "direct"},
+			{"ip_is_private": true, "action": "route", "outbound": "direct"},
+			{"rule_set": "bypass-cidrs", "action": "route", "outbound": "direct"},
+			{"rule_set": "bypass-domains", "action": "route", "outbound": "direct"},
+		},
+		"final": "proxy-out",
+		"rule_set": []map[string]any{
+			{
+				"type":   "local",
+				"tag":    "bypass-cidrs",
+				"format": "source",
+				"path":   bypassRuleSetDir + "/whitelist-cidrs.json",
+			},
+			{
+				"type":   "local",
+				"tag":    "bypass-domains",
+				"format": "source",
+				"path":   bypassRuleSetDir + "/whitelist-domains.json",
+			},
+		},
 	}
 }
 
-// buildGatewayProxyOutbound 从已退役的 gateway_singbox_config.go 迁移至此。
+// buildContainerDNSDirectInbound 渲染 direct inbound 监听 127.0.0.1:53。
+func buildContainerDNSDirectInbound() (json.RawMessage, error) {
+	raw, err := json.Marshal(map[string]any{
+		"type":        "direct",
+		"tag":         "dns-direct",
+		"listen":      "127.0.0.1",
+		"listen_port": 53,
+		"sniff":       true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal container dns direct inbound: %w", err)
+	}
+	return raw, nil
+}
+
+// buildContainerTunInbound 渲染容器内 tun inbound。
+func buildContainerTunInbound() (json.RawMessage, error) {
+	raw, err := json.Marshal(map[string]any{
+		"type":         "tun",
+		"tag":          "tun-in",
+		"address":      []string{"172.19.0.1/30"},
+		"auto_route":   true,
+		"strict_route": true,
+		"stack":        "gvisor",
+		"sniff":        true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal container tun inbound: %w", err)
+	}
+	return raw, nil
+}
+
+// buildGatewayProxyOutbound 渲染 proxy outbound。
 func buildGatewayProxyOutbound(userConfig json.RawMessage, resolvedIP string) (json.RawMessage, error) {
 	var m map[string]any
 	if err := json.Unmarshal(userConfig, &m); err != nil {
@@ -166,7 +161,6 @@ func buildGatewayProxyOutbound(userConfig json.RawMessage, resolvedIP string) (j
 	if resolvedIP != "" {
 		m["server"] = resolvedIP
 	}
-
 	if tls, ok := m["tls"].(map[string]any); ok {
 		if reality, ok := tls["reality"].(map[string]any); ok {
 			if enabled, _ := reality["enabled"].(bool); enabled {
@@ -176,11 +170,10 @@ func buildGatewayProxyOutbound(userConfig json.RawMessage, resolvedIP string) (j
 			}
 		}
 	}
-
 	return json.Marshal(m)
 }
 
-// buildGatewayDirectOutbound 从已退役的 gateway_singbox_config.go 迁移至此。
+// buildGatewayDirectOutbound 渲染 direct outbound (bind eth0)。
 func buildGatewayDirectOutbound() (json.RawMessage, error) {
 	raw, err := json.Marshal(map[string]any{
 		"type":           "direct",

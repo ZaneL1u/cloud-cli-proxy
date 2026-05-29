@@ -20,8 +20,8 @@ interface PreviewSheetProps {
   hostId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 用户点击「应用此配置」时调用；外层负责打开 ApplyProgressDialog */
-  onApply: (preview: BypassPreviewResponse) => void;
+  /** 用户点击「应用此配置」时调用；未传则仅展示查看 */
+  onApply?: (preview: BypassPreviewResponse) => void;
 }
 
 /**
@@ -64,7 +64,6 @@ export function PreviewSheet({
   }, [open]);
 
   const preview = previewMutation.data;
-  const isHighRisk = (preview?.risky_count ?? 0) > 5;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -103,16 +102,16 @@ export function PreviewSheet({
             预览生成失败，请关闭重试
           </div>
         ) : preview ? (
-          <div className="flex flex-1 flex-col gap-4 overflow-hidden p-6">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-6">
             <Tabs
               defaultValue="json"
-              className="flex flex-1 flex-col overflow-hidden"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
             >
               <TabsList>
                 <TabsTrigger value="json">sing-box JSON</TabsTrigger>
                 <TabsTrigger value="nft">nft set diff</TabsTrigger>
               </TabsList>
-              <TabsContent value="json" className="mt-3 flex-1">
+              <TabsContent value="json" className="mt-3 min-h-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col">
                 <JSONViewer
                   value={{
                     "whitelist-cidrs.json": preview.whitelist_cidrs_rendered,
@@ -121,39 +120,14 @@ export function PreviewSheet({
                   }}
                 />
               </TabsContent>
-              <TabsContent value="nft" className="mt-3 flex-1">
+              <TabsContent value="nft" className="mt-3 min-h-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col">
                 <NftDiffViewer diff={preview.nft_diff} />
               </TabsContent>
             </Tabs>
 
-            <div
-              data-testid="preview-risk-summary"
-              className="rounded-md border bg-muted/30 p-3"
-            >
-              <p className="mb-1 text-sm font-semibold">风险报告</p>
-              <p className="text-xs text-muted-foreground">
-                {preview.risky_count === 0
-                  ? "无风险项"
-                  : `含 ${preview.risky_count} 条高风险规则`}
-              </p>
-            </div>
-
-            <div className="flex justify-end gap-2 border-t pt-3">
+            <div className="flex justify-end border-t pt-3">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
-                取消
-              </Button>
-              <Button
-                data-testid="preview-apply-button"
-                className={
-                  isHighRisk
-                    ? "bg-warning text-warning-foreground hover:bg-warning/90"
-                    : ""
-                }
-                onClick={() => onApply(preview)}
-              >
-                {isHighRisk
-                  ? `应用此配置（含 ${preview.risky_count} 条高风险）`
-                  : "应用此配置"}
+                关闭
               </Button>
             </div>
           </div>

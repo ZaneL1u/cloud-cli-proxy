@@ -58,3 +58,42 @@ table inet cloud_proxy_v4 {
         counter drop comment "default-deny-input-tail"
     }
 }
+
+# ===== Bypass 白名单表 =====
+# Phase 54 迁移遗留：ApplyBypassRuleSet（bypass_reload_linux.go）通过
+#   nsenter -t <pid> -n -- nft -f -
+# 下发 flush set ip cloudproxy whitelist_v4 + add element … 事务。
+# 必须在 entrypoint 阶段预建表 + 空 set，否则 reload 时 nft 找不到目标 set。
+# 规则与 bypass_firewall.go::ConfigureBypassFirewall 输出对齐。
+
+table ip cloudproxy
+delete table ip cloudproxy
+
+table ip cloudproxy {
+    set whitelist_v4 {
+        type ipv4_addr
+        flags interval
+    }
+
+    chain output {
+        type filter hook output priority filter; policy drop;
+
+        oifname "lo" counter accept
+        oifname "tun0" counter accept
+        ct state established,related counter accept
+
+        # sing-box 直连代理（uid=9000）
+        meta skuid 9000 oifname "eth0" counter accept comment "singbox-direct-egress"
+
+        # mDNS / LLMNR / NetBIOS 显式 drop（防止白名单误放行）
+        meta l4proto udp udp dport 5353 counter drop comment "mdns-drop"
+        meta l4proto udp udp dport 5355 counter drop comment "llmnr-drop"
+        meta l4proto udp udp dport 137 counter drop comment "netbios-ns-drop"
+        meta l4proto udp udp dport 138 counter drop comment "netbios-dgm-drop"
+
+        # 白名单 set：ApplyBypassRuleSet 动态填充
+        oifname "eth0" ip daddr @whitelist_v4 counter accept comment "bypass-whitelist"
+
+        counter log prefix "[bypass-drop] " drop comment "bypass-default-deny"
+    }
+}

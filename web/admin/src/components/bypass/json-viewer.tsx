@@ -39,7 +39,7 @@ export function JSONViewer({ value }: JSONViewerProps) {
   return (
     <ScrollArea
       data-testid="json-viewer"
-      className="h-[60vh] rounded-md border bg-slate-950"
+      className="min-h-0 flex-1 rounded-md border bg-slate-950"
     >
       <pre className="whitespace-pre p-4 font-mono text-xs leading-relaxed text-slate-100">
         {text}
