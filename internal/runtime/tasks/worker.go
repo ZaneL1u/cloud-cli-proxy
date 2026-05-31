@@ -50,6 +50,7 @@ type WorkerRepo interface {
 	GetBypassSnapshotByID(ctx context.Context, id string) (repository.BypassSnapshot, error)
 	UpdateBypassSnapshotStatus(ctx context.Context, id string, status string) (repository.BypassSnapshot, error)
 	GetLatestAppliedBypassSnapshot(ctx context.Context, hostID string) (repository.BypassSnapshot, error)
+	UpdateEgressIPAddress(ctx context.Context, egressIPID string, newIP string) error
 }
 
 type Worker struct {
@@ -223,12 +224,10 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 		"create",
 		"--name", containerName,
 		"--network", "bridge",
-		// Phase 54 D-54-4：单容器架构下 user 容器即出口，sing-box 在容器内自起
-		// tun0；容器进程异常退出时希望由 docker 自动拉起恢复服务（user 在 SSH
-		// 内 `exit` 不会触发 restart，因为 OpenSSH 是前台 PID 1 ≠ exit-code 0 的
-		// fail）。"no" 在 v3.x sidecar 模式下是合理的（gateway 与 user 容器解耦），
-		// 单容器下改 on-failure 让 sing-box 崩溃 / nft apply 失败 → 容器异常退出
-		// 时由 docker 兜底重启。
+		// 容器进程异常退出时由 docker 自动拉起恢复服务（user 在 SSH 内 `exit`
+		// 不会触发 restart，因为 OpenSSH 是前台 PID 1 ≠ exit-code 0）。
+		// on-failure 让 sing-box 崩溃 / nft apply 失败 → 容器异常退出时由 docker
+		// 兜底重启。
 		// 注意：on-failure 仅在容器进程以非零退出码退出时重启，Docker daemon
 		// 重启后容器变为 exited 状态不会自动恢复，需由外层 reconcile 逻辑兜底。
 		"--restart", "on-failure",
@@ -273,13 +272,12 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 
 	if request.MemoryLimitMB > 0 {
 		args = append(args, "--memory", fmt.Sprintf("%dm", request.MemoryLimitMB))
-	} else {
-		args = append(args, "--memory", "4096m")
 	}
 	if request.CPULimit > 0 {
 		args = append(args, "--cpus", fmt.Sprintf("%.1f", request.CPULimit))
-	} else {
-		args = append(args, "--cpus", "2.0")
+	}
+	if request.DiskLimitGB > 0 {
+		args = append(args, "--storage-opt", fmt.Sprintf("size=%dG", request.DiskLimitGB))
 	}
 
 	if request.EntryPassword == "" {
@@ -329,17 +327,11 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 		args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
 	}
 
-	// Phase 54 (54-01)：单容器架构下 host-agent 把 sing-box config.json 以 ro
-	// bind mount 注入到 user 容器内 /etc/sing-box/config.json。entrypoint
-	// start_singbox_or_die 读取后即刻 shred -u 删除（D-V4-2 防 PoLP 泄漏）。
+	// 单容器架构下 host-agent 把 sing-box config.json 以 ro bind mount 注入到
+	// user 容器内 /etc/sing-box/config.json。entrypoint start_singbox_or_die
+	// 读取后即刻 shred -u 删除（D-V4-2 防 PoLP 泄漏）。
 	//
 	// 必须在 PrepareGateway 之后、docker create 之前注入（call-order 测试守护）。
-	// Phase 54-01 stub 阶段 writeContainerSingBoxConfig 返回 nil 不写盘，docker
-	// create 会因 source file 不存在立即失败 — 这是 fail fast 设计意图，54-02
-	// 实现真正写盘逻辑后整链才打通。
-	//
-	// 旧 v3.5 容器 DNS 入口锁的 /etc/resolv.conf / /etc/nsswitch.conf bind mount
-	// 已删除（D-54-5）：容器内 sing-box 自接管 DNS 入口，无需 host 端预写。
 	if egressCfg != nil && egressCfg.Proxy != nil {
 		cfgPath := filepath.Join(network.SingBoxConfigDir(request.HostID), "config.json")
 		args = append(args, "-v", cfgPath+":/etc/sing-box/config.json:ro")
@@ -434,12 +426,10 @@ func (w *Worker) createHost(ctx context.Context, request agentapi.HostActionRequ
 	if err != nil {
 		return err
 	}
-	// Phase 45 CR-02（语义保留，Phase 54-01 单容器化更新）：PrepareGateway 一旦
-	// 写盘成功（host 端 SingBoxConfigDir 已存在 config.json 源文件），任何后续
-	// 失败（buildCreateArgs / docker create / docker start / PrepareHost /
-	// waitForSSH）都必须把 host 端残留清干净，否则下次 createHost 之前 host
-	// 端遗留旧 config.json 可能让 docker create 用错配置启动 sing-box（资源
-	// 泄漏 + 出口 IP 错绑 + 攻击面）。
+	// PrepareGateway 一旦写盘成功，任何后续失败（buildCreateArgs / docker create /
+	// docker start / PrepareHost / waitForSSH）都必须把 host 端残留清干净，否则
+	// 下次 createHost 之前 host 端遗留旧 config.json 可能让 docker create 用错
+	// 配置启动 sing-box（资源泄漏 + 出口 IP 错绑 + 攻击面）。
 	//
 	// 用 gatewayPrepared 旗标 + defer 守护：成功路径末尾置 false 关闭 defer。
 	// defer 内用 context.Background() 而非 ctx，避免 task ctx 已超时取消时
@@ -649,6 +639,10 @@ func (w *Worker) buildEgressConfig(ctx context.Context, hostID string) (*network
 	if err != nil {
 		w.recordNetworkError(ctx, hostID, err)
 		return nil, err
+	}
+	// 出口 IP 自动纠正回调：验证阶段探测到真实出口 IP 与数据库不一致时自动更新。
+	cfg.UpdateExpectedIP = func(ctx context.Context, newIP string) error {
+		return w.repo.UpdateEgressIPAddress(ctx, cfg.EgressIPID, newIP)
 	}
 	return &cfg, nil
 }
@@ -953,6 +947,10 @@ func (rv *repoValidator) GetEgressIPByHost(ctx context.Context, hostID string) (
 		TunnelType:  network.TunnelTypeProxy,
 		ProxyConfig: eip.ProxyConfig,
 	}, nil
+}
+
+func (rv *repoValidator) UpdateEgressIPAddress(ctx context.Context, egressIPID string, newIP string) error {
+	return rv.repo.UpdateEgressIPAddress(ctx, egressIPID, newIP)
 }
 
 // execInContainer 在目标容器中以 `docker exec -i <container> bash -c <script>` 执行，
