@@ -32,6 +32,7 @@ import {
   useHostLogs,
   useHostAction,
   useDeleteHost,
+  usePatchHostResources,
 } from "@/hooks/use-hosts";
 import { useTaskPolling } from "@/hooks/use-tasks";
 import { useSSE } from "@/hooks/use-sse";
@@ -55,6 +56,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { BindingManager } from "@/components/hosts/binding-manager";
 import { MountManager } from "@/components/hosts/mount-manager";
+import { ResourceLimitsSelector, type ResourceLimitsValue } from "@/components/hosts/resource-limits-selector";
 import { RotatePasswordDialog } from "@/components/users/rotate-password-dialog";
 import { ChangeRootPasswordDialog } from "@/components/hosts/change-root-password-dialog";
 import { ClaudeSettingsDialog } from "@/components/hosts/claude-settings-dialog";
@@ -98,6 +100,7 @@ function HostDetailPage() {
   const importConfigMutation = useImportHostConfig();
   const actionMutation = useHostAction();
   const deleteMutation = useDeleteHost();
+  const patchResourcesMutation = usePatchHostResources(hostId);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<ConnTab>("ssh");
@@ -112,6 +115,12 @@ function HostDetailPage() {
   const [upgradeTaskId, setUpgradeTaskId] = useState<string | null>(null);
   const [progressLayers, setProgressLayers] = useState<Record<string, string>>({});
   const [showLayers, setShowLayers] = useState(false);
+  const [editingResources, setEditingResources] = useState(false);
+  const [editResourcesValue, setEditResourcesValue] = useState<ResourceLimitsValue>({
+    memory_limit_mb: null,
+    cpu_limit: null,
+    disk_limit_gb: null,
+  });
 
   const { data: task } = useTaskPolling(upgradeTaskId);
 
@@ -409,6 +418,103 @@ function HostDetailPage() {
                 <h3 className="mb-1 text-sm font-semibold">挂载路径</h3>
                 <p className="mb-4 text-xs text-muted-foreground">{isRunning ? "运行中不可编辑" : "停止中，可以编辑"}</p>
                 <MountManager hostId={hostId} hostStatus={host.status} mounts={host.host_mounts ?? []} />
+              </div>
+              <div className="px-2 py-2 lg:px-4">
+                <h3 className="mb-1 text-sm font-semibold">资源限制</h3>
+                <p className="mb-4 text-xs text-muted-foreground">
+                  {isRunning ? "运行中不可编辑" : "停止中，可以编辑"}
+                </p>
+
+                {!editingResources ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                      <span className="text-sm">内存</span>
+                      <span className="font-mono text-sm font-medium">
+                        {host.memory_limit_mb != null
+                          ? host.memory_limit_mb === 0
+                            ? "无限制"
+                            : host.memory_limit_mb >= 1024
+                              ? `${host.memory_limit_mb / 1024} GB`
+                              : `${host.memory_limit_mb} MB`
+                          : "默认 (4 GB)"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                      <span className="text-sm">CPU</span>
+                      <span className="font-mono text-sm font-medium">
+                        {host.cpu_limit != null
+                          ? host.cpu_limit === 0
+                            ? "无限制"
+                            : `${host.cpu_limit} 核`
+                          : "默认 (2 核)"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                      <span className="text-sm">磁盘</span>
+                      <span className="font-mono text-sm font-medium">
+                        {host.disk_limit_gb != null
+                          ? host.disk_limit_gb === 0
+                            ? "无限制"
+                            : `${host.disk_limit_gb} GB`
+                          : "默认 (20 GB)"}
+                      </span>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 w-full"
+                      disabled={isRunning}
+                      title={isRunning ? "请先停止主机" : undefined}
+                      onClick={() => {
+                        setEditResourcesValue({
+                          memory_limit_mb: host.memory_limit_mb,
+                          cpu_limit: host.cpu_limit,
+                          disk_limit_gb: host.disk_limit_gb,
+                        });
+                        setEditingResources(true);
+                      }}
+                    >
+                      编辑
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <ResourceLimitsSelector
+                      value={editResourcesValue}
+                      onChange={setEditResourcesValue}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setEditingResources(false)}
+                      >
+                        取消
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        disabled={patchResourcesMutation.isPending}
+                        onClick={() => {
+                          patchResourcesMutation.mutate(
+                            {
+                              memory_limit_mb: editResourcesValue.memory_limit_mb,
+                              cpu_limit: editResourcesValue.cpu_limit,
+                              disk_limit_gb: editResourcesValue.disk_limit_gb,
+                            },
+                            {
+                              onSuccess: () => setEditingResources(false),
+                            },
+                          );
+                        }}
+                      >
+                        {patchResourcesMutation.isPending ? "保存中..." : "保存"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
