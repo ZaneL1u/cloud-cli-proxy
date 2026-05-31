@@ -63,6 +63,10 @@ func (r *mockWorkerRepo) GetLatestAppliedBypassSnapshot(_ context.Context, _ str
 	return repository.BypassSnapshot{}, nil
 }
 
+func (r *mockWorkerRepo) UpdateEgressIPAddress(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
 func TestServer_POSTHandler_PanicRecovered(t *testing.T) {
 	// 注入 testPanicTrigger，让 worker.Execute panic
 	origTrigger := runtimetasks.TestPanicTrigger
