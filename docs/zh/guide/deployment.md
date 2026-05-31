@@ -59,38 +59,17 @@ curl http://127.0.0.1:8080/healthz
 
 ## 中国大陆用户
 
-### 方案一：使用 docker-compose.cn.yml（推荐）
+中国大陆访问 `ghcr.io` 可能较慢或不可达。`setup-env.sh` 会自动检测连通性，如果不可达会提示你是否切换到 `ghcr.1ms.run`（毫秒镜像），同意后自动写入 `.env`。直接 `docker compose pull && docker compose up -d` 即可。
 
-项目提供了 `docker-compose.cn.yml`，已将 compose 镜像替换为 `ghcr.1ms.run`（毫秒镜像），同时设置了 `CONTAINER_REGISTRY` 环境变量，确保运行时动态拉取的镜像（`managed-user`、`sing-box` 探针）也走同一镜像源。直接通过覆盖文件启动：
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.cn.yml pull
-docker compose -f docker-compose.yml -f docker-compose.cn.yml up -d
-```
-
-systemd 裸机部署的用户，在 `/etc/cloud-cli-proxy/env` 中加上：
+如果已经生成了 `.env`，手动加上一行：
 
 ```bash
 CONTAINER_REGISTRY=ghcr.1ms.run
 ```
 
-重启控制面后生效。所有 `docker pull` 操作都会自动走镜像源。
+这个变量同时控制 compose 镜像拉取和运行时 `docker pull`（`managed-user` 更新、`sing-box` 探针），所有 `ghcr.io` 引用都会自动替换。
 
-源码构建（兜底）：
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.cn.yml -f docker-compose.build.yaml --profile build-only build --no-cache
-docker compose -f docker-compose.yml -f docker-compose.cn.yml -f docker-compose.build.yaml up -d --force-recreate
-```
-
-### 方案二：走本地代理拉取
-
-本机已开 TUN 模式或全局代理，镜像走代理出站，直接用默认 compose 文件即可：
-
-```bash
-docker compose pull
-docker compose up -d
-```
+systemd 裸机部署同理，在 `/etc/cloud-cli-proxy/env` 中加上这一行后重启控制面。
 
 ## 环境变量
 

@@ -98,6 +98,29 @@ else
   log "将使用外部 PostgreSQL"
 fi
 
+# ── 镜像源检测 ──────────────────────────────────────────────
+
+CONTAINER_REGISTRY=""
+if command -v curl &>/dev/null; then
+  echo ""
+  log "正在检测 ghcr.io 连通性..."
+  if curl -sSf --connect-timeout 5 --max-time 10 "https://ghcr.io" >/dev/null 2>&1; then
+    log "ghcr.io 直接可达"
+  else
+    warn "ghcr.io 不可达（可能在防火墙后），建议使用镜像源 ghcr.1ms.run"
+    echo ""
+    printf "是否将镜像源切换为 ghcr.1ms.run（毫秒镜像）? [Y/n]: "
+    read -r USE_MIRROR
+    USE_MIRROR="${USE_MIRROR:-y}"
+    if [[ "$USE_MIRROR" == "y" || "$USE_MIRROR" == "Y" ]]; then
+      CONTAINER_REGISTRY="ghcr.1ms.run"
+      log "将使用中国大陆镜像源"
+    fi
+  fi
+else
+  warn "未检测到 curl，跳过镜像源检测"
+fi
+
 # ── 控制面和管理员 ──────────────────────────────────────────
 
 echo ""
@@ -147,6 +170,9 @@ ADMIN_PORT=${ADMIN_PORT}
 ADMIN_USERNAME=${ADMIN_USER}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
+
+# Container Registry
+CONTAINER_REGISTRY=${CONTAINER_REGISTRY}
 
 # Logging
 LOG_FORMAT=json

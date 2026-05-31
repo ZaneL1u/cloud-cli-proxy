@@ -59,38 +59,17 @@ curl http://127.0.0.1:8080/healthz
 
 ## Users in Mainland China
 
-### Option 1: Use docker-compose.cn.yml (recommended)
+`ghcr.io` may be slow or unreachable from within mainland China. `setup-env.sh` auto-detects connectivity and prompts whether to switch to `ghcr.1ms.run` mirror. Accept and it writes the setting to `.env`. Then just `docker compose pull && docker compose up -d`.
 
-The repo includes `docker-compose.cn.yml`, which pre-configures `ghcr.1ms.run` mirror for compose images and sets the `CONTAINER_REGISTRY` environment variable so that runtime image pulls (`managed-user`, `sing-box` probe) also go through the mirror. Start with the override file:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.cn.yml pull
-docker compose -f docker-compose.yml -f docker-compose.cn.yml up -d
-```
-
-For bare-metal systemd deployments, add to `/etc/cloud-cli-proxy/env`:
+If you already generated `.env`, add this line manually:
 
 ```bash
 CONTAINER_REGISTRY=ghcr.1ms.run
 ```
 
-Restart the control plane. All `docker pull` operations will use the mirror.
+This variable controls both compose image pulls and runtime `docker pull` operations (`managed-user` updates, `sing-box` probes). Every `ghcr.io` reference is replaced.
 
-Building from source (fallback):
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.cn.yml -f docker-compose.build.yaml --profile build-only build --no-cache
-docker compose -f docker-compose.yml -f docker-compose.cn.yml -f docker-compose.build.yaml up -d --force-recreate
-```
-
-### Option 2: Pull through a local proxy
-
-If your machine already has a TUN-mode proxy or global proxy, the default compose file works:
-
-```bash
-docker compose pull
-docker compose up -d
-```
+For bare-metal systemd deployments, add the same line to `/etc/cloud-cli-proxy/env` and restart the control plane.
 
 ## Environment Variables
 
