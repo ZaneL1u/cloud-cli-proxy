@@ -107,6 +107,10 @@ func (r *fakeWorkerRepo) GetLatestAppliedBypassSnapshot(_ context.Context, _ str
 	return repository.BypassSnapshot{}, nil
 }
 
+func (r *fakeWorkerRepo) UpdateEgressIPAddress(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
 // setupInjectTest 装配 fake 容器、fake repo、代理公钥与 execInContainer 注入点，
 // 返回 worker + 容器 + repo，供测试断言。
 func setupInjectTest(t *testing.T, proxyPub string) (*Worker, *fakeContainer, *fakeWorkerRepo) {

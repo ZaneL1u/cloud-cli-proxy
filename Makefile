@@ -20,8 +20,7 @@ dev: ## Start backend + frontend (auto-starts PostgreSQL if needed)
 	@# Auto-start PostgreSQL if not running
 	@nc -z 127.0.0.1 $(POSTGRES_PORT) > /dev/null 2>&1 || \
 		{ echo "PostgreSQL not running, starting it now..."; $(MAKE) db; }
-	@# v4.0 (Phase 54): sing-box 同容器化后不再需要 sidecar gateway image；
-	@# managed-user 镜像内置 sing-box（Phase 53），非 Linux host 直接跑无需 build。
+	@# managed-user 镜像内置 sing-box，非 Linux host 直接跑无需 build。
 	@trap 'kill $$CP_PID $$VITE_PID 2>/dev/null; wait' INT EXIT; \
 		bash scripts/dev-backend.sh & CP_PID=$$!; \
 		cd web/admin && pnpm dev & VITE_PID=$$!; \

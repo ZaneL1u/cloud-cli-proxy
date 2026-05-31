@@ -179,6 +179,12 @@ func VerifyNetworkIntegrityDocker(ctx context.Context, containerName string, exp
 		result.BypassEgressOK = true
 		result.NonBypassEgressOK = true
 
+		if result.ActualEgressIP != "" && result.ActualEgressIP != expected.ExpectedIP && expected.UpdateExpectedIP != nil {
+			if err := expected.UpdateExpectedIP(ctx, result.ActualEgressIP); err == nil {
+				expected.ExpectedIP = result.ActualEgressIP
+				verifyEgressIPMultiSOCKS(ctx, prefix, expected.ExpectedIP, egressIPSources, &result)
+			}
+		}
 		lastErr = firstNetworkError(expected, result)
 		if result.AllPassed() {
 			return result, nil

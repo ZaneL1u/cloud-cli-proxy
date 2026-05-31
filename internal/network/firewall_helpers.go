@@ -169,7 +169,7 @@ func addIifTCPDportAcceptRule(conn *nftables.Conn, table *nftables.Table, chain 
 	})
 }
 
-// ----- Phase 47 Plan 02: v3.5 bypass-firewall helpers ----------------------
+// ----- bypass-firewall helpers ---------------------------------------------
 //
 // 这一组 helper 把 4 类新规则的 expr 序列构造抽成纯函数（buildXxxExprs），
 // 再由配套的 addXxxRule wrapper 负责 conn.AddRule(...) 真实下发。

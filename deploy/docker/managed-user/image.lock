@@ -8,7 +8,7 @@ default_user: workspace
 rebuild_mode_default: preserve-home
 factory_reset_mode: wipe-/workspace
 # v3.0 baseline — Phase 29 追加
-image_version: v3.3.0
+image_version: v4.0.0
 mergerfs_version: 2.41.1
 tmux_version_min: "3.4"
 supports_mergerfs: true

@@ -229,10 +229,11 @@ export function EgressIPDrawer({
   }, [mode, ipData, form]);
 
   function onSubmit(values: FormValues) {
+    // ip_address 仅当用户显式填写时使用；空值时用 0.0.0.0 占位，
+    // 后端验证阶段会通过 SOCKS5 探测自动纠正为真实出口 IP。
     let ipAddress = values.ip_address;
     if (!ipAddress) {
-      const server = values.proxy_server || "";
-      ipAddress = IPV4_RE.test(server) ? server : "0.0.0.0";
+      ipAddress = "0.0.0.0";
     }
 
     let proxyConfig: Record<string, unknown>;

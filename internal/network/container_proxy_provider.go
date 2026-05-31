@@ -38,7 +38,7 @@ func NewContainerProxyProvider(logger *slog.Logger, verifier NetworkVerifier) *C
 // v4.0 (Phase 54) 改造（54-01）：
 //   - 不再创建 cloudproxy-net-* 自定义 bridge（删除 dockerNetworkCreate 调用）
 //   - 不再启动 sidecar gateway 容器（删除 dockerRunGateway / waitGatewayHealthy）
-//   - 不再写 v3.5 容器 DNS 入口锁占位（resolv.conf / nsswitch.conf 由容器内 sing-box
+//   - 不再写容器 DNS 入口锁占位（resolv.conf / nsswitch.conf 由容器内 sing-box
 //     接管，删除 WriteContainerDNSConfig 调用）
 //   - 不再写 v4 sing-box 路径下的 cidrs / domains placeholder（由 sing-box config
 //     的 route.rule_set 直接拉取，54-02 决定具体格式）

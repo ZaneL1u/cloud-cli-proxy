@@ -22,8 +22,7 @@ import (
 	"golang.org/x/net/proxy"
 )
 
-// probeImage 固定 sing-box 版本，与项目自建 gateway 镜像保持一致（v1.13.3），
-// 避免 latest 版本配置格式不兼容导致探针失败。
+// probeImage 固定 sing-box 版本（v1.13.3），避免 latest 版本配置格式不兼容导致探针失败。
 const probeImage = "ghcr.io/sagernet/sing-box:v1.13.3"
 
 type ProbeResult struct {

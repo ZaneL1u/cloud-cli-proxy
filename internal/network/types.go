@@ -1,6 +1,7 @@
 package network
 
 import (
+	"context"
 	"encoding/json"
 )
 
@@ -20,6 +21,11 @@ type EgressConfig struct {
 	ExpectedIP string     // expected egress IP address (e.g. "1.2.3.4")
 	TunnelType string     // "proxy"
 	Proxy      *ProxySpec // proxy config
+
+	// UpdateExpectedIP 为可选的出口 IP 自动纠正回调。
+	// 当 SOCKS5 探测一致返回与 ExpectedIP 不同的 IP 时，verifier 调用此回调
+	// 更新 egress_ips.ip_address，避免因用户填错代理服务器 IP 导致创建失败。
+	UpdateExpectedIP func(ctx context.Context, newIP string) error
 }
 
 // HostNetworkSpec carries everything the network Provider needs to wire a container.
@@ -29,13 +35,9 @@ type HostNetworkSpec struct {
 	Egress       *EgressConfig // nil when Provider should skip network setup
 }
 
-// BypassSingboxUID 是 gateway 容器内 sing-box 进程的 uid（与 sing-gateway Dockerfile 对齐）。
-// 在 worker netns 的 nft output 链做 uid 锁：仅该 uid 能 TCP 连到代理服务器 IP:443。
-// 注意：worker netns 与 gateway netns 是两个 namespace，meta skuid 匹配的是
-// worker 容器内的进程 uid。v3.5 设计下 sing-box 跑在 gateway 容器，worker 容器内
-// 没有 sing-box，故 uid 锁实际作用是：worker 容器内任何 uid 都不能直连代理服务器
-// （除非通过 sb-tun0），这是 fail-closed 的最强形态。暴露该常量是为了未来如果切到
-// sidecar 同 netns 模式时保持单点变更。
+// BypassSingboxUID 是容器内 sing-box 进程的 uid（与 Dockerfile 对齐）。
+// uid 锁确保仅 sing-box 能直连代理服务器，其余进程 uid 一律走 tun0。
+// 暴露该常量是为了未来如果切到同 netns 模式时保持单点变更。
 const BypassSingboxUID uint32 = 1000
 
 // BypassNftSetName 是 worker netns nft inet 表内白名单 set 的名字。

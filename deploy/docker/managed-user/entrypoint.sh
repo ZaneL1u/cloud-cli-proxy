@@ -8,13 +8,11 @@ detect_platform() {
   local testfile="/tmp/.dev_mode_test_$$"
   if ! touch "$testfile" 2>/dev/null || ! chattr +i "$testfile" 2>/dev/null; then
     DEV_MODE=true
+    rm -f "$testfile"
   else
     chattr -i "$testfile" 2>/dev/null || true
     rm -f "$testfile"
     DEV_MODE=false
-  fi
-  if [ "$DEV_MODE" = false ] && [ ! -d /sys/class/net/tun0 ] && [ -f /.dockerenv ]; then
-    DEV_MODE=true
   fi
   readonly DEV_MODE
   echo "[entrypoint] platform: DEV_MODE=$DEV_MODE"
@@ -77,11 +75,10 @@ wait_for_x_display() {
   return 1
 }
 
-# ===== v3.0 stages — D-09 / PITFALLS M4 串行快速失败 =====
 
-prepare_v3_dirs() {
-  echo "[entrypoint] v3: chown /home/claude /workspace-hot /workspace-cold /var/lib/claude-persist"
-  chown -R 1000:1000 \
+prepare_workspace_dirs() {
+  echo "[entrypoint] chown workspace dirs"
+  chown -R "${RUN_USER}:${RUN_USER}" \
     /home/claude \
     /workspace-hot \
     /workspace-cold \
@@ -99,16 +96,16 @@ prepare_persistent_state() {
     cp -an /home/claude/.cache/claude/. "$root/.cache/claude/" 2>/dev/null || true
   fi
 
-  chown -R 1000:1000 "$root"
+  chown -R "${RUN_USER}:${RUN_USER}" "$root" 2>/dev/null || true
 
   rm -rf /home/claude/.claude /home/claude/.cache/claude
   ln -sfn "$root/.claude" /home/claude/.claude
   mkdir -p /home/claude/.cache
   ln -sfn "$root/.cache/claude" /home/claude/.cache/claude
 
-  chown -h 1000:1000 /home/claude/.claude /home/claude/.cache/claude
+  chown -h "${RUN_USER}:${RUN_USER}" /home/claude/.claude /home/claude/.cache/claude 2>/dev/null || true
 
-  echo "[entrypoint] v3: persistent state ready (volume=/var/lib/claude-persist)"
+  echo "[entrypoint] persistent state ready (volume=/var/lib/claude-persist)"
 }
 
 prepare_container_disguise() {
@@ -143,18 +140,17 @@ ENVTELEM
 
 prepare_mergerfs_check() {
   if ! command -v mergerfs >/dev/null 2>&1; then
-    echo "[entrypoint] v3: FATAL mergerfs binary missing" >&2
+    echo "[entrypoint] FATAL mergerfs binary missing" >&2
     exit 1
   fi
   local ver
   ver="$(mergerfs --version 2>&1 | head -n1 || true)"
-  echo "[entrypoint] v3: mergerfs available ($ver) — mount deferred to cloud-claude (Phase 31)"
-  # SC1 / C1 / C2 — documented params for Phase 31 (static traceability):
+  echo "[entrypoint] mergerfs available ($ver) — mount deferred to cloud-claude"
+  # mergerfs params (static traceability):
   #   func.readdir=cor:4,cache.attr=30,cache.entry=30,cache.readdir=true,cache.files=off
   #   category.create=ff, inodecalc=path-hash
   #   2-way: /workspace-hot=RW:/workspace-cold=NC,RO
-  # Q10: CLOUD_CLAUDE_MERGERFS_BRANCHES reserved for Phase 31
-  echo "[entrypoint] v3: mergerfs params (Phase 31): func.readdir=cor:4 category.create=ff inodecalc=path-hash"
+  echo "[entrypoint] mergerfs params: func.readdir=cor:4 category.create=ff inodecalc=path-hash"
 }
 
 assert_tmux_version() {
@@ -162,11 +158,11 @@ assert_tmux_version() {
   tmux_ver="$(tmux -V 2>/dev/null | awk '{print $2}' || true)"
   case "$tmux_ver" in
     3.4*|3.5*|3.6*|3.7*|3.8*|3.9*|[4-9].*)
-      echo "[entrypoint] v3: tmux ${tmux_ver} >= 3.4 ok"
+      echo "[entrypoint] tmux ${tmux_ver} >= 3.4 ok"
       echo "$tmux_ver" >/etc/cloud-claude/tmux.version
       ;;
     *)
-      echo "[entrypoint] v3: FATAL tmux ${tmux_ver} < 3.4" >&2
+      echo "[entrypoint] FATAL tmux ${tmux_ver} < 3.4" >&2
       exit 1
       ;;
   esac
@@ -303,7 +299,7 @@ apply_nft_or_die() {
     if [ -n "$SING_BOX_PID" ]; then kill "$SING_BOX_PID" 2>/dev/null || true; fi
     exit 1
   fi
-  # 清理 v3.x 残留的 ip cloudproxy 表，避免双表 shadow 导致规则不生效
+  # TODO(v5): 清理 v3.x 残留的 ip cloudproxy 表。所有 v3.x 部署迁移完毕后移除此行。
   nft delete table ip cloudproxy 2>/dev/null || true
   if ! nft -f "$NFT_RULESET"; then
     echo "[entrypoint] FATAL: nft 应用失败" >&2
@@ -382,14 +378,13 @@ fi
 if [ "$CONTAINER_USER" != "workspace" ] && id workspace >/dev/null 2>&1; then
   usermod -l "$CONTAINER_USER" workspace
   groupmod -n "$CONTAINER_USER" workspace 2>/dev/null || true
-  # v4.0 (D-53-4): 不再 sed sudoers — v4.0 移除了用户 sudo NOPASSWD 路径。
+  # v4.0: 用户无 sudo 权限（安全基线）
 fi
 
 RUN_USER="${CONTAINER_USER:-workspace}"
 
-# v4.0 (D-53-4): 删除 v3.x 的 sudoers NOPASSWD 写入。
-# 用户拿到 shell 后不再有任何 sudo / root 提权路径。
-# 兜底清理（防御历史镜像残留 / volume 挂载的 sudoers.d）：
+# v4.0: 用户无 sudo 权限。兜底清理历史镜像残留的 sudoers.d：
+# TODO(v5): 移除此 v3.x sudoers 兜底清理。
 rm -f /etc/sudoers.d/workspace 2>/dev/null || true
 if [ "${RUN_USER}" != "workspace" ]; then
   rm -f "/etc/sudoers.d/${RUN_USER}" 2>/dev/null || true
@@ -408,7 +403,7 @@ fi
 
 echo "${RUN_USER}:${CONTAINER_PASSWORD}" | chpasswd
 
-# Phase 29.1: 验证密码已被成功设置，避免"密码退化为 workspace"的静默失败复现。
+# 验证密码已被成功设置，避免"密码退化为 workspace"的静默失败复现。
 # passwd -S 第 2 列语义：P / PS = 已设置密码；L / LK = 已锁定；NP = 无密码；UNSET = 读取失败。
 status="$(passwd -S "${RUN_USER}" 2>/dev/null | awk '{print $2}' || echo UNSET)"
 case "$status" in
@@ -575,19 +570,13 @@ su "${RUN_USER}" -c 'DISPLAY=:99 HOME=/workspace pcmanfm --desktop --profile def
 # 预热一遍 Chromium 检测，方便排查图标点击失败。
 su "${RUN_USER}" -c 'HOME=/workspace /usr/local/bin/launch-chromium.sh --version' >>"${CHROMIUM_LOG}" 2>&1 || true
 
-# ===== v3.0 stages (serialized fail-fast, D-09 order) =====
-prepare_v3_dirs
+prepare_workspace_dirs
 prepare_persistent_state
 prepare_container_disguise
 prepare_mergerfs_check
 assert_tmux_version
 
 fi # end MODE != "local"
-
-# v4.0 (Phase 53): 旧的 MODE=local sing-box 分支已删除。
-# 出网现在由顶部 start_singbox_or_die / apply_nft_or_die 序列统一处理，
-# 所有 MODE 都强制走 sing-box tun + nft default-deny，没有 proxy fallback。
-# 用户的 ALL_PROXY / HTTP_PROXY 环境变量也不再注入（应用应直接走 tun）。
 
 # Foreground: sshd
 exec /usr/sbin/sshd -D -e

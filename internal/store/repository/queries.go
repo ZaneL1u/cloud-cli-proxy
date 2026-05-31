@@ -497,6 +497,16 @@ func (r *Repository) CreateEgressIP(ctx context.Context, params CreateEgressIPPa
 	return item, nil
 }
 
+// UpdateEgressIPAddress 仅更新出口 IP 地址字段，不影响 label/provider/status/proxy_config。
+// 用于验证阶段自动纠正用户填写的代理服务器 IP（如 38.246.232.120）为实际出口 IP（如 99.128.19.42）。
+func (r *Repository) UpdateEgressIPAddress(ctx context.Context, egressIPID string, newIP string) error {
+	_, err := r.db.Exec(ctx, `UPDATE egress_ips SET ip_address = $1::inet, updated_at = NOW() WHERE id = $2`, newIP, egressIPID)
+	if err != nil {
+		return fmt.Errorf("update egress ip address: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) UpdateEgressIP(ctx context.Context, egressIPID string, params UpdateEgressIPParams) (EgressIP, error) {
 	var item EgressIP
 	if err := r.db.QueryRow(ctx, `
