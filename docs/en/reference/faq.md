@@ -1,161 +1,89 @@
-# FAQ & Troubleshooting
+# Troubleshooting
 
 ## Common Issues
 
 ### Control Plane Won't Start
 
-**Symptoms:** `systemctl status cloud-cli-proxy-control-plane` shows `failed`, service keeps restarting.
+`systemctl status cloud-cli-proxy-control-plane` shows `failed`.
 
 **Check:**
 
-1. View logs: `journalctl -u cloud-cli-proxy-control-plane --no-pager -n 50`
-2. Verify `DATABASE_URL`: `grep DATABASE_URL /etc/cloud-cli-proxy/env`
-3. Check PostgreSQL: `systemctl status postgresql`
-4. Check port conflict: `ss -tlnp | grep 8080`
-5. Check JWT secret: `grep ADMIN_JWT_SECRET /etc/cloud-cli-proxy/env`
+1. `journalctl -u cloud-cli-proxy-control-plane --no-pager -n 50`
+2. `grep DATABASE_URL /etc/cloud-cli-proxy/env`
+3. `systemctl status postgresql`
+4. `ss -tlnp | grep 8080`
 
-**Fix:**
-- DB connection failure → Fix `DATABASE_URL` or start PostgreSQL
-- Port conflict → Stop conflicting process or change `CONTROL_PLANE_ADDR`
-- Permissions → Verify `cloudproxy` user has DB access
+**Causes and fixes:** If the database is unreachable, check PostgreSQL status and fix the connection string. If the port is in use, stop the conflicting process or change `CONTROL_PLANE_ADDR`. If there are permission issues, verify the `cloudproxy` user has database access.
 
 ### User Can't Log In
 
-**Symptoms:** bootstrap script shows "connection failed" or "auth failed".
+The bootstrap script shows "authentication failed".
 
-**Check:**
+**Check:** Verify the control plane is running (`curl healthz`) → check user status is `active` → check expiration → check client-to-host connectivity on port 8080.
 
-1. Control plane running: `curl -s http://127.0.0.1:8080/healthz`
-2. User status is `active`
-3. User not expired
-4. Network connectivity (client to host port 8080)
-
-**Fix:**
-- Control plane down → `systemctl start cloud-cli-proxy-control-plane`
-- User disabled → Re-enable via Admin API
-- User expired → Update expiry and set status to `active`
+**Fix:** Start the control plane if it is down (`systemctl start`), re-enable the user via Admin API if disabled, update `expires_at` if expired.
 
 ### Host Startup Failure
 
-**Symptoms:** bootstrap shows "startup failed", task status is `failed`.
+Task status is `failed`.
 
-**Check:**
+**Check:** View task details (Admin API) → `docker info` → `docker images | grep managed-user` → `df -h /var/lib/docker` → `journalctl -u cloud-cli-proxy-host-agent`.
 
-1. Task details via Admin API
-2. Docker daemon: `docker info`
-3. Managed image exists: `docker images | grep managed-user`
-4. Disk space: `df -h /var/lib/docker`
-5. Host-agent logs: `journalctl -u cloud-cli-proxy-host-agent --no-pager -n 50`
+**Fix:** Start Docker if it is not running, rebuild the image if missing, `docker system prune` if disk is full.
 
-**Fix:**
-- Docker not running → `systemctl start docker`
-- Image missing → `bash deploy/docker/managed-user/build-managed-image.sh`
-- Disk full → `docker system prune`
+### sing-box Tunnel Failure
 
-### sing-box Proxy Tunnel Failure
+Host cannot reach the internet or the exit IP does not match.
 
-**Symptoms:** Hosts using proxy-type egress IPs can't access the internet or exit IP doesn't match.
+**Check:** `docker exec {container} ps aux | grep sing-box` → view sing-box logs → `nsenter --net=/var/run/netns/cloudproxy-{hostID} ip link show` → verify the proxy server is reachable from the host.
 
-**Check:**
+**Fix:** Rebuild the host if sing-box is not running, check proxy server status and firewall if unreachable, update `proxy_config` and rebuild if configuration is wrong.
 
-1. sing-box process in container: `docker exec {container} ps aux | grep sing-box`
-2. sing-box logs: `docker exec {container} cat /var/log/sing-box.log`
-3. tun device: `nsenter --net=/var/run/netns/cloudproxy-{hostID} ip link show`
-4. Routing table: `nsenter --net=/var/run/netns/cloudproxy-{hostID} ip route show`
-5. Proxy server reachability from host
+### Egress IP Test Failure
 
-**Fix:**
-- sing-box not running → Rebuild host
-- Proxy server unreachable → Check proxy server status and firewall
-- Config error → Update `proxy_config` via Admin API, then rebuild host
-- tun device missing → Restart host-agent and rebuild host
+The admin dashboard test shows failure. Check which specific check failed: connectivity, exit IP match, or DNS leak. Verify the proxy server is working, `ip_address` matches the actual exit IP, and the `proxy_config` address and port are correct.
 
-### Proxy Test Failure
+### Expiry Scanner Not Triggered
 
-**Symptoms:** Egress IP test in admin dashboard shows failure.
-
-**Check:**
-
-1. Review test result details (which check failed: connectivity / IP match / DNS leak)
-2. Connectivity failure → Proxy server may be down or port unreachable
-3. IP mismatch → Proxy server's actual exit IP differs from declared `ip_address`
-4. DNS leak → Proxy config may not properly cover DNS requests
-
-**Fix:**
-- Verify proxy server is running
-- Ensure `ip_address` matches the proxy server's actual exit IP
-- Check server address and port in `proxy_config`
-
-### Expiry Scanner Not Running
-
-**Fix:**
-- Control plane down → Start it
-- Immediate effect needed → `systemctl restart cloud-cli-proxy-control-plane`
-- Manual override → Disable user and stop host via Admin API
+User is expired but status is still `active`. Restart the control plane to trigger a scan, or manually disable the user and stop the host via Admin API.
 
 ### Database Connection Exhaustion
 
-**Symptoms:** Logs show `too many connections`.
-
-**Check:**
+Logs show `too many connections`.
 
 ```bash
 sudo -u postgres psql -c "SELECT count(*) FROM pg_stat_activity WHERE datname='cloudproxy'"
 sudo -u postgres psql -c "SHOW max_connections"
 ```
 
-**Fix:**
-- Temporary → Restart control plane
-- Permanent → Increase `max_connections` in `postgresql.conf`
+Restart the control plane for a temporary fix. Increase `max_connections` for a permanent one.
 
 ### Host Agent Won't Start
 
-**Check:**
-
-1. View logs: `journalctl -u cloud-cli-proxy-host-agent --no-pager -n 50`
-2. Run preflight: `sudo bash deploy/scripts/host-preflight.sh`
-3. Check Docker: `docker info`
-4. Check sing-box binary: `which sing-box`
-5. Check socket directory: `ls -la /run/cloud-cli-proxy/`
+`journalctl -u cloud-cli-proxy-host-agent --no-pager -n 50` → `sudo bash deploy/scripts/host-preflight.sh` → `docker info` → `which sing-box` → `ls -la /run/cloud-cli-proxy/`.
 
 ### SSH Proxy Connection Failure
 
-**Symptoms:** User connects via entry short-link but SSH to `:2222` fails.
+User connects via entry short link but `:2222` is unreachable.
 
-**Check:**
+**Check:** `ss -tlnp | grep 2222` → `docker ps | grep {container}` → `docker exec {container} ss -tlnp | grep 22`.
 
-1. SSH proxy port listening: `ss -tlnp | grep 2222`
-2. Container running: `docker ps | grep {container_name}`
-3. SSH inside container: `docker exec {container} ss -tlnp | grep 22`
-4. Check control plane logs for SSH proxy errors
-
-**Fix:**
-- SSH proxy not listening → Restart control plane
-- Container not running → Start host via Admin API
-- SSH not started in container → Rebuild host
+**Fix:** Restart the control plane if the SSH proxy is not listening, start the host if the container is not running, rebuild if SSH is not running inside the container.
 
 ### KasmVNC Desktop Not Accessible
 
-**Symptoms:** VNC link in admin or user panel doesn't respond.
+**Check:** `docker exec {container} ps aux | grep kasmvnc` → `docker exec {container} ss -tlnp | grep 6901`.
 
-**Check:**
-
-1. KasmVNC process: `docker exec {container} ps aux | grep kasmvnc`
-2. Port 6901 in container: `docker exec {container} ss -tlnp | grep 6901`
-3. Control plane VNC reverse proxy logs
-
-**Fix:**
-- KasmVNC not started → Enter container and start manually, or rebuild host
-- Network issue → Verify control plane can reach container's management network IP
+**Fix:** If KasmVNC is not running, enter the container and start it manually, or rebuild the host.
 
 ## Disaster Recovery
 
 ### Full Recovery
 
-For when the host is completely unavailable and you need to restore on a new machine:
+When the host is unavailable and you need to restore on a new machine:
 
-1. Prepare new host meeting prerequisites
-2. Deploy:
+1. Prepare a new host meeting prerequisites
+2. Deploy services:
    ```bash
    git clone https://github.com/ZaneL1u/cloud-cli-proxy.git /opt/cloud-cli-proxy
    cd /opt/cloud-cli-proxy
@@ -167,11 +95,11 @@ For when the host is completely unavailable and you need to restore on a new mac
    pg_restore --clean -d cloudproxy /path/to/backup.dump
    systemctl start cloud-cli-proxy-control-plane
    ```
-4. Rebuild image: `bash deploy/docker/managed-user/build-managed-image.sh`
+4. Rebuild managed image: `bash deploy/docker/managed-user/build-managed-image.sh`
 5. Verify: `curl -s http://127.0.0.1:8080/healthz`
 
 ::: warning
-After recovery, all user containers need to be recreated and started. User accounts, egress IPs, and bindings from the database are preserved.
+After recovery, user containers must be recreated and started. User accounts, egress IPs, and bindings in the database are preserved.
 :::
 
 ### Database-only Recovery
@@ -180,44 +108,40 @@ After recovery, all user containers need to be recreated and started. User accou
 systemctl stop cloud-cli-proxy-control-plane
 sudo -u postgres psql -c "DROP DATABASE cloudproxy"
 sudo -u postgres psql -c "CREATE DATABASE cloudproxy OWNER cloudproxy"
-pg_restore -d cloudproxy /var/backups/cloud-cli-proxy/latest-backup.dump
+pg_restore -d cloudproxy /var/backups/cloud-cli-proxy/latest.dump
 systemctl start cloud-cli-proxy-control-plane
 ```
 
-## Logs
+## Viewing Logs
 
 ```bash
-# Control plane (follow)
+# Control plane
 journalctl -u cloud-cli-proxy-control-plane -f
 
-# Host-agent (follow)
+# Host agent
 journalctl -u cloud-cli-proxy-host-agent -f
 
-# Last N lines
+# Last 100 lines
 journalctl -u cloud-cli-proxy-control-plane --no-pager -n 100
 
-# Time range
-journalctl -u cloud-cli-proxy-control-plane --since "2026-03-27 00:00:00" --until "2026-03-27 23:59:59"
-
-# Docker Compose deployment
+# Docker Compose
 docker compose logs -f control-plane
-docker compose logs -f admin
 ```
 
 ## FAQ
 
-### Q: What proxy protocols are supported?
+### What proxy protocols are supported?
 
-A: Six protocols: SOCKS5, VMess, VLESS, Shadowsocks, Trojan, and HTTP Proxy. Configuration follows the sing-box outbound format.
+SOCKS5, VMess, VLESS, Shadowsocks, Trojan, HTTP. Six protocols in total. Configuration follows the sing-box outbound format.
 
-### Q: Will user container data be lost?
+### Will user container data be lost?
 
-A: Rebuilding a host preserves the home directory. Deleting a host destroys all data. Back up important data using Git or similar tools.
+Rebuilding a host preserves the home directory. Deleting a host destroys all data. Back up important data with Git.
 
-### Q: Can I develop on macOS / Windows?
+### Can I develop on macOS / Windows?
 
-A: Yes. When using `make dev`, host-agent runs in `embedded` mode. No additional build steps required.
+Yes. When running `make dev`, the host agent operates in `embedded` mode.
 
-### Q: How do I update the user container image?
+### How do I update the user container image?
 
-A: Rebuild the managed image (`make user-image`), then rebuild the hosts that need updating. Rebuilding preserves home directory data.
+Rebuild the managed image (`make user-image`), then rebuild the hosts that need updating. Rebuilding preserves home directory data.

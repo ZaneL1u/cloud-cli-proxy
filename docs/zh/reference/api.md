@@ -1,10 +1,10 @@
 # API 参考
 
-所有 API 以 `http://YOUR_HOST:8080` 为基础路径。
+所有 API 基于 `http://YOUR_HOST:8080`。
 
 ## 认证
 
-### 登录获取 Token
+### 登录
 
 ```bash
 curl -s -X POST http://YOUR_HOST:8080/v1/auth/login \
@@ -12,14 +12,15 @@ curl -s -X POST http://YOUR_HOST:8080/v1/auth/login \
   -d '{"username":"admin","password":"你的密码"}'
 ```
 
-**响应：**
+响应：
+
 ```json
 {"token":"eyJhbGci...","role":"admin"}
 ```
 
-后续所有 Admin API 调用需携带 `Authorization: Bearer $TOKEN` 请求头。
+后续请求携带 `Authorization: Bearer $TOKEN`。
 
-便捷提取 Token：
+提取 Token：
 
 ```bash
 TOKEN=$(curl -s -X POST http://YOUR_HOST:8080/v1/auth/login \
@@ -28,7 +29,7 @@ TOKEN=$(curl -s -X POST http://YOUR_HOST:8080/v1/auth/login \
 ```
 
 ::: tip
-`/v1/admin/login` 是兼容旧路径，功能与 `/v1/auth/login` 相同。
+`/v1/admin/login` 兼容旧路径，功能与 `/v1/auth/login` 相同。
 :::
 
 ## 健康检查
@@ -37,7 +38,8 @@ TOKEN=$(curl -s -X POST http://YOUR_HOST:8080/v1/auth/login \
 curl -s http://YOUR_HOST:8080/healthz
 ```
 
-**响应：**
+响应：
+
 ```json
 {"status":"ok","checks":{"database":"ok","agent":"ok"}}
 ```

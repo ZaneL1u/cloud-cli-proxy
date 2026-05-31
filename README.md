@@ -4,78 +4,83 @@
 
 # Cloud CLI Proxy
 
-**一条命令，一台云主机，所有流量走指定出口。**
-
-为 Claude Code 和开发团队提供开箱即用的隔离云主机环境，预装 AI 编程工具，全流量强制走指定出口 IP，零泄漏。
+在单台宿主机上，为每个用户提供一个独立的 Docker 容器作为云开发环境。容器预装 Claude Code 和常用工具，所有出网流量通过 sing-box 全隧道强制走你指定的出口 IP。
 
 [![CI](https://github.com/ZaneL1u/cloud-cli-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/ZaneL1u/cloud-cli-proxy/actions/workflows/ci.yml)
 [![Images](https://github.com/ZaneL1u/cloud-cli-proxy/actions/workflows/build-images.yml/badge.svg)](https://github.com/ZaneL1u/cloud-cli-proxy/actions/workflows/build-images.yml)
 [![Release](https://img.shields.io/github/v/release/ZaneL1u/cloud-cli-proxy)](https://github.com/ZaneL1u/cloud-cli-proxy/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[English](README.en.md) | [Documentation](https://zanel1u.github.io/cloud-cli-proxy/)
-
-**Go · React · PostgreSQL · Docker · sing-box**
+[English](README.en.md) | [文档](https://zanel1u.github.io/cloud-cli-proxy/)
 
 </div>
 
 ---
 
-## 功能特性
+## 这是什么？
 
-- **一条命令接入** — `curl | bash` 自动认证、创建容器、SSH 接入，用户无需任何配置
-- **cloud-claude 本地 CLI** — `alias claude=cloud-claude`，在本地终端透明运行远端 Claude Code；当前目录经 sshfs 映射到容器内**同名路径**（与本地路径一致），可选将 `git` 等命令代理到本机执行；支持三层映射模式（Auto / Full / SSHFS-Only）与单文件大文件熔断
-- **Claude Code 开箱即用** — 容器预装 Claude Code，进入即可使用，所有 API 请求自动走指定出口
-- **全流量强制出口** — sing-box tun + Linux netns 全隧道，nftables 默认拒绝策略，杜绝 DNS / WebRTC 泄漏
-- **多协议支持** — 出口 IP 支持 6 种代理协议（SOCKS5 / VMess / VLESS / Shadowsocks / Trojan / HTTP）
-- **每用户隔离** — 独立 Docker 容器，预装 KasmVNC 远程桌面 + Chromium 浏览器
-- **管理后台** — React SPA 仪表盘，用户、主机、出口 IP、事件日志一站式管理；支持宿主机路径挂载到容器
-- **到期自动治理** — 过期自动停机、禁止登录
-- **多架构 CI/CD** — GitHub Actions 自动构建 `linux/amd64` + `linux/arm64` 镜像
-- **错误码自解释系统** — `cloud-claude explain <CODE>` 查询任何错误码的详细说明与修复建议
-- **tmux 多端会话管理** — 同一账号可多客户端 attach 同一 tmux 会话，断线不丢失；支持 `--new-session` 独占会话、`--take-over` 接管踢人
-- **网络抖动自动恢复** — 内置 Reconnector，30s 内断线自动重连，输入缓冲不丢失
-- **doctor 五维度自检** — `cloud-claude doctor [network|auth|ssh|mount|disk]` 带 `--fix` 自动修复常见故障
+管理员在后台创建用户、分配容器、绑定出口 IP。用户拿到 `curl` 命令，在终端里跑一下，输入密码，等容器启动后直接 SSH 进去。每个容器是独立的 Ubuntu 24.04 环境，里面已经装好 Claude Code、OpenSSH、KasmVNC 远程桌面。容器的所有出网流量走 sing-box tun 隧道，从指定的出口 IP 出去，DNS 和 WebRTC 也不会漏。
+
+做这个项目主要解决几个实际问题：
+
+- 团队共用 Claude Code，API 请求统一走公司出口 IP，不需要每人自己配代理
+- 出海场景需要特定地区的出口 IP，容器绑上去就行
+- 外包或临时人员需要隔离的开发机，用完可以回收，操作有审计记录
+- 合规要求所有研发流量必须从指定 IP 出去，不能有旁路
 
 ---
 
-## 功能预览
+## 核心能力
 
-### 仪表板
+### 网络与安全
 
-可快速查看活跃用户、运行主机、可用出口 IP 和最近事件。
+- **全流量强制隧道** — sing-box tun + Linux netns 接管容器所有出网流量，nftables 默认拒绝直连，不允许 DNS / WebRTC 泄漏
+- **6 种代理协议** — 出口 IP 支持 SOCKS5、VMess、VLESS、Shadowsocks、Trojan、HTTP
+- **bypass 防火墙** — 按域名、CIDR、端口配置白名单直连，预设规则集（loopback 强制启用、LAN 可选），快照版本化管理，预览→应用→回滚，完整审计日志
+- **出口 IP 自动修正** — 定时探测容器实际出口 IP，与配置不一致时自动更新数据库记录
+- **容器安全加固** — 仅授予 NET_ADMIN，移除 NET_RAW，IPv6 内核级禁用，PID 限制，日志轮转
 
-![仪表板总览](imgs/1.png)
+### 环境伪装
 
-### 主机管理列表
+让容器内的 Claude Code 看起来像在真实物理机上运行，而非云环境。默认伪装成 macOS 或 Windows 桌面环境：
 
-集中查看每台主机状态、所属用户、绑定出口 IP、最近任务与操作入口。
+- **系统指纹** — 替换 Node.js 读取到的 CPU 型号（伪装为 AMD EPYC）、MAC 地址、`/etc/machine-id` 等硬件标识；拦截 `ioreg`、`system_profiler`、`sysctl` 等探测命令的输出
+- **主机名伪装** — 自动生成 `DESKTOP-XXXXXXX` 或 `LAPTOP-XXXXXXX` 风格的主机名
+- **容器检测绕过** — 隐藏 `/.dockerenv`、过滤 cgroup 中的 docker/containerd 字符串，避免被识别为容器环境
+- **时区与语言环境** — 创建容器时可指定时区和 locale，默认 `America/Los_Angeles` / `en_US.UTF-8`
+- **TLS 指纹** — sing-box 出口连接自动启用 uTLS，指纹设为 Chrome，握手特征与普通浏览器一致
+- **遥测屏蔽** — 容器内预置 DNS 级别拦截，阻止 Claude Code 向 `statsig.anthropic.com`、`sentry.io`、`cdn.growthbook.io` 等遥测端点上报数据
 
-![主机管理列表](imgs/2.png)
+### 容器与运行环境
 
-### 主机详情与接入方式
+- **独立 Docker 容器** — 每用户独立 Ubuntu 24.04 容器，CPU / 内存 / 磁盘均可限制
+- **Claude Code 预装** — 进入即用，API 请求自动走出口 IP，无需额外配置
+- **KasmVNC 远程桌面** — 内置 Chromium 浏览器，管理后台一键打开容器桌面；支持通过 VNC 代理在浏览器中直接操作
+- **持久化存储** — Claude 状态经命名卷持久化，容器重建不丢失工作数据
+- **宿主机目录挂载** — 支持将宿主机路径绑定挂载到容器内
 
-主机详情页可直接复制 `curl` 入口、SSH 命令和 VNC 登录入口。
+### 接入体验
 
-![生命周期与网络操作](https://cdn.zaneliu.me/2026/04/4.png)
+- **一条命令接入** — 用户只需 `curl | bash`，自动完成认证、容器创建和 SSH 接入
+- **cloud-claude 本地 CLI** — 在本地终端透明运行远端 Claude Code，当前目录经 sshfs 挂载到容器内同名路径；支持 Auto / Full / SSHFS-Only 三层映射模式，单文件超过阈值自动走冷路径
+- **tmux 多端会话** — 多客户端 attach 同一 tmux 会话，断线工作区不丢失；支持 `--new-session` 独占、`--take-over` 接管
+- **断线自动恢复** — 内置 Reconnector，30s 内自动重连，输入缓冲不丢
+- **doctor 五维度自检** — `cloud-claude doctor [network|auth|ssh|mount|disk]`，带 `--fix` 自动修复
+- **错误码自解释** — `cloud-claude explain <CODE>` 查看详细说明和修复建议
 
-### 生命周期与网络操作
+### 管理后台与治理
 
-支持一站式完成出口 IP 绑定、重建、停机、密码轮换、VNC 打开等日常运维动作。
-
-![主机详情与接入方式](https://cdn.zaneliu.me/2026/04/5.png)
-
-### 浏览器远程桌面（KasmVNC）
-
-无需本地安装 GUI，直接在浏览器中进入云主机桌面环境进行操作。
-
-![浏览器远程桌面](imgs/3.png)
+- **仪表盘** — 活跃用户、运行主机、可用出口 IP、最近事件总览
+- **用户生命周期** — 创建、暂停、过期自动停机、禁止登录、密码轮换
+- **主机生命周期** — 创建、启动、停止、重建（保留或清空 /workspace）、删除
+- **出口 IP 管理** — 增删改查、连通性测试（流式输出）、绑定到主机
+- **事件审计** — 所有操作写入 events 表，可追溯
+- **SSE 实时推送** — 任务进度、主机状态、事件通过 Server-Sent Events 实时更新
+- **用户自助门户** — 用户可查看自己的主机、重建、重启 VNC、管理 SSH 密钥
 
 ---
 
-## 部署
-
-### Docker Compose
+## 快速开始
 
 ```bash
 git clone https://github.com/ZaneL1u/cloud-cli-proxy.git
@@ -83,7 +88,6 @@ cd cloud-cli-proxy
 
 bash deploy/scripts/setup-env.sh
 
-# 推荐：优先使用预构建镜像（latest）
 docker compose pull
 docker compose up -d
 
@@ -91,25 +95,57 @@ curl http://127.0.0.1:8080/healthz
 # {"status":"ok"}
 ```
 
-`setup-env.sh` 交互式生成所有密码和密钥，支持内置 Docker PostgreSQL（零配置）或外部数据库。
+启动后：
 
-启动后管理后台在 `http://YOUR_HOST:3000`，API 在 `:8080`。
+- 管理后台：`http://YOUR_HOST:3000`
+- API：`http://YOUR_HOST:8080`
+- SSH 代理：`YOUR_HOST:2222`
 
-本地源码构建（可选，作为预构建不可用时的兜底）：
+首次使用：登录管理后台 → 添加出口 IP → 创建用户 → 创建主机 → 将接入命令分发给用户。
+
+---
+
+## 安装与部署
+
+### 环境要求
+
+- Docker Engine 28.x+
+- Docker Compose v2
+- PostgreSQL 18.x（也可用内置 Docker PostgreSQL）
+
+### Docker Compose（推荐）
+
+```bash
+bash deploy/scripts/setup-env.sh  # 交互式生成密码和密钥
+docker compose pull               # 拉取预构建镜像
+docker compose up -d              # 启动
+```
+
+`setup-env.sh` 自动生成 JWT 密钥、管理员密码，支持内置 Docker PostgreSQL 或外部数据库。
+
+本地源码构建（预构建镜像不可用时的兜底）：
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yaml --profile build-only build --no-cache
 docker compose -f docker-compose.yml -f docker-compose.build.yaml up -d --force-recreate
 ```
 
+### 宿主机直接部署
+
+```bash
+sudo bash deploy/scripts/deploy.sh
+```
+
+创建 `cloudproxy` 系统用户，构建二进制和镜像，安装 systemd 单元并启动。
+
 ### 环境变量
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `DATABASE_URL` | PostgreSQL 连接字符串（必填） | — |
+| `DATABASE_URL` | PostgreSQL 连接字符串 | 必填 |
 | `ADMIN_USERNAME` | 管理员用户名 | `admin` |
-| `ADMIN_PASSWORD` | 管理员密码（必填） | — |
-| `ADMIN_JWT_SECRET` | JWT 签名密钥（必填） | — |
+| `ADMIN_PASSWORD` | 管理员密码（bcrypt） | 必填 |
+| `ADMIN_JWT_SECRET` | JWT 签名密钥 | 必填 |
 | `ADMIN_PORT` | 管理后台端口 | `3000` |
 | `SSH_PROXY_PORT` | SSH 代理端口 | `2222` |
 | `LOG_FORMAT` | 日志格式 `json` / `text` | `json` |
@@ -117,137 +153,98 @@ docker compose -f docker-compose.yml -f docker-compose.build.yaml up -d --force-
 
 ---
 
-## 使用
+## 使用指南
 
-### 管理员设置
+### 管理员操作
 
-登录管理后台，依次完成：
-
-1. **添加出口 IP** — 支持多种代理协议，可一键测试连通性
+1. **添加出口 IP** — 支持 6 种代理协议，可一键测试连通性
 2. **创建用户** — 设置用户名、密码、到期时间
-3. **创建主机** — 为用户创建容器并绑定出口 IP
-4. **分发接入信息** — 在主机详情页复制 `curl` 命令；若用户使用 `cloud-claude`，另发：**网关 HTTPS 地址**、**主机 Short ID**、**用户密码**
+3. **创建主机** — 为用户创建容器，绑定出口 IP
+4. **分发接入信息** — 复制主机详情页的 `curl` 命令给用户
 
-### 用户接入
-
-用户在终端执行管理员提供的命令即可：
+### 用户接入（curl 方式）
 
 ```bash
 curl -sSf http://YOUR_HOST/entry/abc123 | bash
-# 输入密码 → 等待启动 → 自动 SSH 进入云主机
+# 输入密码 → 等待容器就绪 → 自动 SSH 进入云主机
 ```
 
-### cloud-claude（本地 CLI，推荐）
+进入后直接使用 Claude Code：
 
-管理员在后台**创建主机并绑定出口 IP**、容器就绪后，把下面三样信息发给用户即可连接：
+```bash
+claude
+```
 
-| 信息 | 说明 |
-|------|------|
-| **网关地址** | 对外访问控制面的 HTTPS 地址，例如 `https://gw.example.com`（与浏览器打开管理后台同源，一般不含 `:3000` 管理前端端口） |
-| **Short ID** | 主机详情页上的**主机短 ID**；若配置里填的是**用户短 ID**，则连到该用户的主主机 |
-| **密码** | 该用户在后台的登录密码 |
+### cloud-claude CLI（推荐）
 
-用户在本机安装 CLI、初始化一次后，在**任意项目目录**执行 `cloud-claude` 即可进入远端 Claude Code；当前目录会映射到容器内**相同路径**，便于与本地工具链配合（默认将 `git` 代理到本机，可在 `~/.cloud-claude/config.yaml` 用 `proxy_commands` 调整）。
+安装 CLI 后在本地终端透明使用远端 Claude Code，当前目录自动挂载到容器内同名路径。
 
-#### 安装 cloud-claude
+#### 安装
 
-**Homebrew（macOS / Linux，推荐）：**
+**Homebrew（macOS / Linux）：**
 
 ```bash
 brew tap ZaneL1u/tap
 brew install cloud-claude
 ```
 
-**一行脚本（任意平台）：**
+**一行脚本：**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ZaneL1u/cloud-cli-proxy/main/scripts/install.sh | bash
 ```
 
-也可以从 [Releases](https://github.com/ZaneL1u/cloud-cli-proxy/releases) 手动下载对应平台的 `tar.gz`，或从源码构建：
+也可从 [Releases](https://github.com/ZaneL1u/cloud-cli-proxy/releases) 下载或源码构建：
 
 ```bash
 go build -ldflags "-s -w" -trimpath -o cloud-claude ./cmd/cloud-claude
 ```
 
-#### 初始化（只需一次）
+#### 初始化
+
+管理员提供三样信息：**网关地址**、**主机 Short ID**、**密码**。
 
 ```bash
 cloud-claude init
-# 交互式输入：网关地址、Short ID、密码 → 写入 ~/.cloud-claude/config.yaml
+# 交互式输入 → 写入 ~/.cloud-claude/config.yaml
 ```
 
 或使用 flag / 环境变量：
 
 ```bash
 cloud-claude init --gateway https://gw.example.com --short-id abc123 --password your-password
-
-export CLOUD_CLAUDE_GATEWAY=https://gw.example.com
-export CLOUD_CLAUDE_SHORT_ID=abc123
-export CLOUD_CLAUDE_PASSWORD=your-password
-cloud-claude init
 ```
 
 #### 日常使用
 
 ```bash
-cd ~/你的项目目录   # 希望 Claude Code 打开的工程根目录
+cd ~/your-project
+alias claude=cloud-claude
 
-alias claude=cloud-claude   # 可选：与本地 claude 命令习惯一致
-
-cloud-claude                # 或 claude
-cloud-claude -p "帮我重构这个函数"
-```
-
-**会话管理：** 默认 attach 同一账号的已有 tmux 会话，断线不丢失工作区：
-
-```bash
-cloud-claude                  # 默认：attach 已有会话（多端共享）
-cloud-claude --new-session    # 强制新建独立会话
-cloud-claude --take-over      # 接管主会话并踢掉其他客户端
-
-cloud-claude sessions                  # 列出当前 tmux 会话
-cloud-claude sessions --attach 0       # 接管指定会话
-```
-
-**映射模式：** 默认 Auto 模式自动选择最优挂载策略，也可手动指定：
-
-```bash
-cloud-claude --mount-mode=auto         # 默认：优先 HotSync，失败降级 SSHFS
-cloud-claude --mount-mode=full         # HotSync + SSHFS 双轨（完整功能）
-cloud-claude --mount-mode=sshfs-only   # 纯 SSHFS（兼容性优先）
+cloud-claude            # 默认 attach 已有 tmux 会话
+cloud-claude --new-session    # 新建独立会话
+cloud-claude --take-over      # 接管主会话，踢掉其他客户端
+cloud-claude sessions         # 列出当前会话
 ```
 
 **自检与排障：**
 
 ```bash
-cloud-claude doctor                    # 五维度全面自检（network / auth / ssh / mount / disk）
-cloud-claude doctor mount --fix        # 仅检查挂载维度，并自动修复常见故障
-cloud-claude explain MOUNT_SSHFS_DISCONNECTED   # 查询错误码详细说明与修复建议
-cloud-claude env check                 # 检查远端容器时区、语言、出口 IP、FUSE 等
+cloud-claude doctor                     # 五维度全面自检
+cloud-claude doctor mount --fix         # 检查挂载并自动修复
+cloud-claude explain MOUNT_SSHFS_DISCONNECTED  # 错误码解释
+cloud-claude env check                  # 检查远端时区、出口 IP、FUSE 等
 ```
 
-**环境变量：**
+**配置参考：**
 
-- `CLOUD_CLAUDE_NO_PROMOTION=1` — 禁用冷文件读触发晋升（Linux 默认启用，macOS 自动跳过）
-- 在 `~/.cloud-claude/config.yaml` 中配置 `proxy_commands`（命令名列表），指定在**本机**执行的命令；默认仅 `git`；设为空数组可关闭代理。
-- `hot_sync_max_file_mb` — 单文件熔断阈值（默认 50MB），超过此大小的文件走 cold 路径。
-
-`cloud-claude` 会自动完成：向网关认证 → 等待容器就绪 → sshfs 将当前目录挂到容器内同名路径 → 在远端启动 Claude Code。终端大小、信号、退出码会透传；网络抖动 30s 内自动重连，输入缓冲不丢失。
-
-### Claude Code（SSH 方式）
-
-进入云主机后 Claude Code 已预装，直接使用：
-
-```bash
-claude
-```
-
-所有 Claude API 请求自动通过指定出口 IP 路由，无需额外配置代理。
+- `proxy_commands` — 在本机执行的命令列表（默认仅 `git`），设空数组关闭代理
+- `hot_sync_max_file_mb` — 单文件熔断阈值（默认 50MB）
+- `CLOUD_CLAUDE_NO_PROMOTION=1` — 禁用冷文件读触发晋升
 
 ### KasmVNC 远程桌面
 
-容器内置 KasmVNC + Chromium，可通过管理后台直接访问浏览器桌面环境。
+管理后台可直接打开容器的浏览器桌面环境，无需本地安装 GUI。
 
 ---
 
@@ -255,7 +252,7 @@ claude
 
 ```
                                                     ┌───────────────────────────────────┐
-用户 ──curl──> Control Plane (:8080) ──Docker──>     │ 用户容器                          │
+用户 ──curl──> Control Plane (:8080) ──Docker──>    │ 用户容器                          │
                     │                                │  SSH + Claude Code + VNC          │
                PostgreSQL                            │  sshfs ← 本地 CWD 同名路径映射    │
                     │                                │  sing-box tun 隧道                │
@@ -272,114 +269,38 @@ claude
 | **Control Plane** | Go API，认证、用户管理、任务编排、SSH 代理 |
 | **Host Agent** | 特权代理，管理 Docker 容器、网络命名空间和隧道 |
 | **用户容器** | Ubuntu 24.04，预装 OpenSSH + Claude Code + sshfs + KasmVNC + Chromium |
-| **cloud-claude** | Go CLI，透明替代本地 claude；本地目录经 sshfs 映射到容器内同名路径，支持 Auto/Full/SSHFS-Only 三层映射模式、tmux 多端会话、断线自动重连、doctor 五维度自检与错误码解释 |
-| **PostgreSQL** | 持久化用户、主机、出口 IP、任务和事件 |
+| **cloud-claude** | Go CLI，透明替代本地 claude；sshfs 同名路径映射；Auto/Full/SSHFS-Only 三层映射、tmux 多端会话、断线自动重连、doctor 五维度自检与错误码解释 |
+| **PostgreSQL** | 持久化用户、主机、出口 IP、任务、事件、审计日志 |
 | **Admin SPA** | React 19 + TypeScript + Vite + Tailwind CSS |
 
 ---
 
-## 开发
+## 参与贡献
 
-### 从 clone 到本机启动（推荐流程）
+Bug 报告和功能建议请提交 [Issue](https://github.com/ZaneL1u/cloud-cli-proxy/issues)。
 
-#### 1. 准备依赖
+Pull Request 流程：
 
-- Git
-- Go `1.25.7+`
-- Node.js `20+`（建议启用 `corepack`）
-- pnpm `10+`
-- Docker Engine + Docker Compose v2
-- GNU Make
+1. Fork 仓库，从 `main` 分支创建 feature 分支
+2. 修改代码，确保 `make test` 通过
+3. 提交 PR，描述改了什么、为什么改
 
-#### 2. 克隆仓库
+本地开发环境搭建：
 
 ```bash
-git clone https://github.com/ZaneL1u/cloud-cli-proxy.git
-cd cloud-cli-proxy
-```
-
-#### 3. 初始化开发环境
-
-```bash
-make setup
-```
-
-`make setup` 会安装前端依赖，并在本地不存在 `.env` 时自动从 `.env.example` 复制一份。
-
-#### 4. 启动数据库
-
-```bash
-make db
-```
-
-默认会拉起本地 PostgreSQL（端口 `5433`）。
-
-#### 5. 启动后端 + 前端热重载
-
-```bash
-make dev
-```
-
-启动后可访问：
-
-- Admin 前端：`http://localhost:2568`
-- Control Plane API：`http://127.0.0.1:8090`
-
-#### 6. 验证与测试
-
-```bash
-curl http://127.0.0.1:8090/healthz
-make test
-```
-
-### 常用开发命令
-
-```bash
-make dev-api   # 仅启动后端
-make dev-web   # 仅启动前端
-make db-stop   # 停止本地 PostgreSQL
-make db-reset  # 重建本地数据库
-make help      # 查看所有命令
+make setup    # 安装依赖
+make db       # 启动 PostgreSQL
+make dev      # 后端 + 前端热重载（API :8090，前端 localhost:2568）
+make test     # 运行测试
 ```
 
 更多命令见 `make help`。
 
 ---
 
-## 发布与 Changelog
-
-推送 `v*` 标签会自动触发 `Release` 工作流，完成三件事：
-
-- 先执行 CI 门禁（Go tests + Admin 前端构建）
-- 创建 GitHub Release
-- 触发多架构镜像发布（`semver` + `latest`）
-- 按 monorepo 分组生成发布说明并回写 [CHANGELOG.md](CHANGELOG.md)
-
-当前 changelog 默认按路径分组为：
-
-- Backend（Go / API，`cmd` + `internal`）
-- Frontend（`web/admin`）
-- Runtime & Deployment（`deploy`、compose、workflow）
-- Docs（`docs` + README）
-
-手动发版示例：
-
-```bash
-make release VERSION=1.5.0
-```
-
----
-
 ## 文档
 
-完整文档见 [GitHub Pages](https://zanel1u.github.io/cloud-cli-proxy/)：
-
-- [快速开始](https://zanel1u.github.io/cloud-cli-proxy/zh/guide/quickstart) — 部署和首次使用
-- [部署指南](https://zanel1u.github.io/cloud-cli-proxy/zh/guide/deployment) — systemd 原生部署
-- [配置参考](https://zanel1u.github.io/cloud-cli-proxy/zh/guide/configuration) — 环境变量和出口代理配置
-- [架构说明](https://zanel1u.github.io/cloud-cli-proxy/zh/guide/architecture) — 系统设计和项目结构
-- [API 参考](https://zanel1u.github.io/cloud-cli-proxy/zh/reference/api) — 完整 Admin API
-- [故障排查](https://zanel1u.github.io/cloud-cli-proxy/zh/reference/faq) — 常见问题和灾难恢复
+完整文档见 [GitHub Pages](https://zanel1u.github.io/cloud-cli-proxy/)：快速开始、部署指南、配置参考、架构说明、API 参考、故障排查。
 
 ---
 

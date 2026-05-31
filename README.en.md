@@ -4,78 +4,151 @@
 
 # Cloud CLI Proxy
 
-**One command. One cloud machine. All traffic through your exit IP.**
-
-Out-of-the-box isolated cloud hosts for Claude Code and dev teams. Pre-installed AI coding tools, full-tunnel egress through designated IPs, zero leaks.
+Give each user an isolated Docker container as a cloud dev environment on a single host. Containers come with Claude Code and common tools pre-installed. All outbound traffic goes through a sing-box full tunnel pinned to your designated exit IP.
 
 [![CI](https://github.com/ZaneL1u/cloud-cli-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/ZaneL1u/cloud-cli-proxy/actions/workflows/ci.yml)
 [![Images](https://github.com/ZaneL1u/cloud-cli-proxy/actions/workflows/build-images.yml/badge.svg)](https://github.com/ZaneL1u/cloud-cli-proxy/actions/workflows/build-images.yml)
 [![Release](https://img.shields.io/github/v/release/ZaneL1u/cloud-cli-proxy)](https://github.com/ZaneL1u/cloud-cli-proxy/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[中文](README.md) | [Documentation](https://zanel1u.github.io/cloud-cli-proxy/en/)
-
-**Go · React · PostgreSQL · Docker · sing-box**
+[中文](README.md) | [Docs](https://zanel1u.github.io/cloud-cli-proxy/en/)
 
 </div>
 
 ---
 
-## Features
+## What is this?
 
-- **One-command access** — `curl | bash` to authenticate, create container, and SSH in. Zero user config
-- **cloud-claude local CLI** — `alias claude=cloud-claude` to run remote Claude Code from your terminal; local cwd is sshfs-mounted at the **same path** in the container; optional local exec for commands like `git`; supports Auto/Full/SSHFS-Only mount modes and oversized-file throttling
-- **Claude Code ready** — Pre-installed in every container. All API requests auto-routed through designated exit IP
-- **Full-tunnel egress** — sing-box tun + Linux netns full-tunnel, nftables default-deny, no DNS/WebRTC leaks
-- **Multi-protocol** — 6 proxy protocols (SOCKS5 / VMess / VLESS / Shadowsocks / Trojan / HTTP)
-- **Per-user isolation** — Dedicated Docker containers with KasmVNC remote desktop + Chromium browser
-- **Admin dashboard** — React SPA for users, hosts, egress IPs, events, and stats; supports host bind mounts
-- **Auto expiration** — Auto-stop containers and block login on expiry
-- **Multi-arch CI/CD** — GitHub Actions builds `linux/amd64` + `linux/arm64` images
-- **Self-explanatory error codes** — `cloud-claude explain <CODE>` for detailed description and remediation
-- **tmux multi-client sessions** — Multiple clients can attach the same tmux session; supports `--new-session` for isolation and `--take-over` to detach others
-- **Network resilience** — Built-in Reconnector auto-recovers within 30s on disconnect; buffered input survives reconnections
-- **doctor five-domain checks** — `cloud-claude doctor [network|auth|ssh|mount|disk]` with `--fix` for auto-repair
+Admins create users, assign containers, and bind egress IPs from the dashboard. Users get a `curl` command—paste it in the terminal, enter a password, wait for the container to boot, and SSH straight in. Each container is an isolated Ubuntu 24.04 environment with Claude Code, OpenSSH, and KasmVNC remote desktop already set up. All outbound traffic goes through a sing-box tun tunnel and exits from the designated IP, DNS and WebRTC included.
+
+This exists to solve a few practical problems:
+
+- Teams using Claude Code need a shared exit IP for API calls, without every person configuring their own proxy
+- Global teams need specific regional exit IPs—bind one to a container and that's it
+- Contractors or temporary staff need isolated dev machines that you can audit and tear down when done
+- Compliance requires that all dev traffic exits from a known IP with no possible bypass
 
 ---
 
-## Deployment
+## Key Capabilities
 
-### Docker Compose
+### Networking & Security
+
+- **Full-tunnel egress enforcement** — sing-box tun + Linux netns captures all container outbound traffic; nftables default-deny prevents DNS/WebRTC leaks
+- **6 proxy protocols** — SOCKS5, VMess, VLESS, Shadowsocks, Trojan, HTTP for exit IPs
+- **Bypass firewall** — Whitelist by domain, CIDR, or port with preset rule sets (loopback force-enabled, LAN optional), snapshot versioning with preview → apply → rollback, and full audit logging
+- **Egress IP auto-correction** — Probes actual egress IP and auto-corrects the database when it diverges from configuration
+- **Container hardening** — NET_ADMIN only (no SYS_ADMIN), NET_RAW dropped, IPv6 disabled at kernel level, PID limits, log rotation
+
+### Environment Spoofing
+
+Makes Claude Code inside the container appear to run on a real physical machine rather than a cloud environment. Defaults to mimicking a macOS or Windows desktop:
+
+- **System fingerprint** — Overrides Node.js-readable CPU model (spoofed as AMD EPYC), MAC address, `/etc/machine-id`, and other hardware identifiers; intercepts `ioreg`, `system_profiler`, `sysctl` command output
+- **Hostname spoofing** — Auto-generates `DESKTOP-XXXXXXX` or `LAPTOP-XXXXXXX` style hostnames
+- **Container detection bypass** — Hides `/.dockerenv`, filters docker/containerd strings from cgroup, preventing container environment detection
+- **Timezone & locale** — Configurable timezone and locale per container, defaulting to `America/Los_Angeles` / `en_US.UTF-8`
+- **TLS fingerprint** — sing-box outbound connections enable uTLS with Chrome fingerprint by default, making TLS handshakes indistinguishable from regular browser traffic
+- **Telemetry blocking** — DNS-level blocking inside the container prevents Claude Code from phoning home to `statsig.anthropic.com`, `sentry.io`, `cdn.growthbook.io`, and other telemetry endpoints
+
+### Containers & Runtime
+
+- **Isolated Docker containers** — One Ubuntu 24.04 container per user with configurable CPU, memory, and disk limits
+- **Claude Code pre-installed** — Ready to use immediately; all API requests auto-routed through the designated exit IP
+- **KasmVNC remote desktop** — Built-in Chromium browser with VNC proxy; access the desktop from the admin dashboard with one click
+- **Persistent storage** — Claude state lives on named volumes; rebuilds preserve your work
+- **Host bind mounts** — Mount host directories into containers for shared data access
+
+### Access Experience
+
+- **One-command onboarding** — Users run `curl | bash` to auto-authenticate, create their container, and SSH in. Zero configuration needed
+- **cloud-claude local CLI** — Run remote Claude Code transparently from your local terminal; your working directory is sshfs-mounted at the **same path** inside the container. Three mount modes (Auto / Full / SSHFS-Only) with automatic oversized-file throttling
+- **tmux multi-client sessions** — Multiple clients attach the same tmux session; disconnects never lose your workspace. `--new-session` for isolated sessions, `--take-over` to detach other clients
+- **Network resilience** — Built-in Reconnector auto-recovers within 30s on disconnect; buffered input survives reconnections
+- **doctor five-domain diagnostics** — `cloud-claude doctor [network|auth|ssh|mount|disk]` with `--fix` for automatic repair
+- **Self-explanatory error codes** — `cloud-claude explain <CODE>` for detailed descriptions and remediation steps
+
+### Admin Panel & Governance
+
+- **React SPA dashboard** — At-a-glance view of active users, running hosts, available egress IPs, and recent events
+- **Full user lifecycle** — Create, suspend, auto-expire (auto-stop containers and block login on expiry), rotate passwords
+- **Full host lifecycle** — Create, start, stop, rebuild (preserve or wipe /workspace), delete
+- **Egress IP management** — CRUD, connectivity testing (streaming output), bind to hosts
+- **Event auditing** — All operations recorded to the events table with complete traceability
+- **SSE real-time push** — Task progress, host status, and events via Server-Sent Events
+- **User self-service portal** — Users can view their hosts, rebuild, restart VNC, and manage SSH keys
+
+---
+
+## Quick Start
 
 ```bash
 git clone https://github.com/ZaneL1u/cloud-cli-proxy.git
 cd cloud-cli-proxy
 
+# Interactive password and secret generation
 bash deploy/scripts/setup-env.sh
 
-# Recommended: prefer prebuilt images (latest)
+# Pull prebuilt images and start
 docker compose pull
 docker compose up -d
 
+# Verify
 curl http://127.0.0.1:8080/healthz
 # {"status":"ok"}
 ```
 
-`setup-env.sh` interactively generates all passwords and secrets. Supports built-in Docker PostgreSQL (zero-config) or external database.
+After startup:
 
-Admin dashboard at `http://YOUR_HOST:3000`, API at `:8080`.
+- Admin dashboard: `http://YOUR_HOST:3000`
+- API: `http://YOUR_HOST:8080`
+- SSH proxy: `YOUR_HOST:2222`
 
-Optional local source build (fallback when prebuilt images are unavailable):
+First-time setup: Log into the admin dashboard → add egress IPs → create users → create hosts → share the access command with users.
+
+---
+
+## Deployment
+
+### Requirements
+
+- Docker Engine 28.x+
+- Docker Compose v2
+- PostgreSQL 18.x (or use the built-in Docker PostgreSQL)
+
+### Docker Compose (recommended)
+
+```bash
+bash deploy/scripts/setup-env.sh  # Interactive setup
+docker compose pull               # Pull prebuilt images
+docker compose up -d              # Start
+```
+
+`setup-env.sh` auto-generates JWT secrets, admin passwords, etc. Supports built-in Docker PostgreSQL (zero config) or an external database.
+
+Local source build (fallback when prebuilt images are unavailable):
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yaml --profile build-only build --no-cache
 docker compose -f docker-compose.yml -f docker-compose.build.yaml up -d --force-recreate
 ```
 
+### Bare-metal deployment
+
+```bash
+sudo bash deploy/scripts/deploy.sh
+```
+
+Creates a `cloudproxy` system user, builds Go binaries and container images, installs systemd units, and starts the services.
+
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string (required) | — |
+| `DATABASE_URL` | PostgreSQL connection string | Required |
 | `ADMIN_USERNAME` | Admin username | `admin` |
-| `ADMIN_PASSWORD` | Admin password (required) | — |
-| `ADMIN_JWT_SECRET` | JWT signing secret (required) | — |
+| `ADMIN_PASSWORD` | Admin password (bcrypt) | Required |
+| `ADMIN_JWT_SECRET` | JWT signing secret | Required |
 | `ADMIN_PORT` | Admin dashboard port | `3000` |
 | `SSH_PROXY_PORT` | SSH proxy port | `2222` |
 | `LOG_FORMAT` | Log format `json` / `text` | `json` |
@@ -87,133 +160,94 @@ docker compose -f docker-compose.yml -f docker-compose.build.yaml up -d --force-
 
 ### Admin Setup
 
-Log into the admin dashboard, then:
+1. **Add egress IPs** — Choose from 6 proxy protocols, test connectivity with one click
+2. **Create users** — Set username, password, and expiration
+3. **Create hosts** — Create containers for users and bind egress IPs
+4. **Share access** — Copy the `curl` command from the host detail page for your users
 
-1. **Add egress IPs** — Multiple proxy protocols, with one-click connectivity test
-2. **Create users** — Set username, password, expiration
-3. **Create hosts** — Create container for user and bind egress IP
-4. **Share access info** — Copy the `curl` command from host details; for `cloud-claude` users also share: **gateway HTTPS URL**, **host Short ID**, and **user password**
-
-### User Access
-
-Users run the command provided by admin:
+### User Access (curl)
 
 ```bash
 curl -sSf http://YOUR_HOST/entry/abc123 | bash
-# Enter password → wait for boot → auto SSH into cloud host
+# Enter password → wait for container → auto SSH into cloud host
 ```
 
-### cloud-claude (local CLI, recommended)
+Claude Code is ready to use immediately:
 
-After the admin **creates the host, binds an egress IP**, and the container is ready, give the user three things:
+```bash
+claude
+```
 
-| Field | Meaning |
-|-------|---------|
-| **Gateway URL** | Public HTTPS base URL of the control plane, e.g. `https://gw.example.com` (same origin you use for the admin UI in the browser; usually **not** the `:3000` admin dev port) |
-| **Short ID** | **Host** short ID from the host detail page. If the user configures a **user** short ID instead, they connect to that user’s primary host |
-| **Password** | The user’s password from the admin dashboard |
+### cloud-claude CLI (recommended)
 
-Install the CLI once, run `init`, then from **any project directory** run `cloud-claude` — the cwd is mounted at the **same path** in the container. By default `git` runs locally (tune with `proxy_commands` in `~/.cloud-claude/config.yaml`).
+Install the CLI to run remote Claude Code from your local terminal. Your working directory is automatically mounted at the same path inside the container.
 
-#### Install cloud-claude
+#### Install
 
-**Homebrew (macOS / Linux, recommended):**
+**Homebrew (macOS / Linux):**
 
 ```bash
 brew tap ZaneL1u/tap
 brew install cloud-claude
 ```
 
-**One-liner (any platform):**
+**One-liner:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ZaneL1u/cloud-cli-proxy/main/scripts/install.sh | bash
 ```
 
-Or download the matching `tar.gz` from [Releases](https://github.com/ZaneL1u/cloud-cli-proxy/releases), or build from source:
+Or download from [Releases](https://github.com/ZaneL1u/cloud-cli-proxy/releases), or build from source:
 
 ```bash
 go build -ldflags "-s -w" -trimpath -o cloud-claude ./cmd/cloud-claude
 ```
 
-#### First-time setup
+#### Initial Setup
+
+The admin provides three pieces of info: **gateway URL**, **host Short ID**, and **password**.
 
 ```bash
 cloud-claude init
-# Prompts: gateway, Short ID, password → ~/.cloud-claude/config.yaml
+# Interactive prompts → writes ~/.cloud-claude/config.yaml
 ```
 
-Flags or environment variables:
+Or use flags / environment variables:
 
 ```bash
 cloud-claude init --gateway https://gw.example.com --short-id abc123 --password your-password
-
-export CLOUD_CLAUDE_GATEWAY=https://gw.example.com
-export CLOUD_CLAUDE_SHORT_ID=abc123
-export CLOUD_CLAUDE_PASSWORD=your-password
-cloud-claude init
 ```
 
-#### Daily use
+#### Daily Use
 
 ```bash
-cd ~/your/project   # repo root you want Claude Code to see
+cd ~/your-project
+alias claude=cloud-claude
 
-alias claude=cloud-claude   # optional
-
-cloud-claude
-cloud-claude -p "refactor this function"
-```
-
-**Session management:** By default attaches the existing tmux session for the same account; disconnects do not lose the workspace:
-
-```bash
-cloud-claude                  # default: attach existing session (multi-client)
+cloud-claude            # default: attach existing tmux session
 cloud-claude --new-session    # force a new isolated session
-cloud-claude --take-over      # take over the primary session and detach others
-
-cloud-claude sessions                  # list current tmux sessions
-cloud-claude sessions --attach 0       # attach a specific session
+cloud-claude --take-over      # take over the primary session, detach others
+cloud-claude sessions         # list current sessions
 ```
 
-**Mount modes:** Auto mode picks the best strategy; you can also specify manually:
+**Diagnostics:**
 
 ```bash
-cloud-claude --mount-mode=auto         # default: HotSync preferred, falls back to SSHFS
-cloud-claude --mount-mode=full         # HotSync + SSHFS dual-track (full features)
-cloud-claude --mount-mode=sshfs-only   # SSHFS only (compatibility first)
+cloud-claude doctor                     # full five-domain check
+cloud-claude doctor mount --fix         # mount check with auto-repair
+cloud-claude explain MOUNT_SSHFS_DISCONNECTED  # error code details
+cloud-claude env check                  # verify timezone, egress IP, FUSE, etc.
 ```
 
-**Self-checks and troubleshooting:**
+**Configuration:**
 
-```bash
-cloud-claude doctor                    # full five-domain check (network / auth / ssh / mount / disk)
-cloud-claude doctor mount --fix        # mount-only check with auto-repair
-cloud-claude explain MOUNT_SSHFS_DISCONNECTED   # query error code details and remediation
-cloud-claude env check                 # verify remote timezone, locale, egress IP, FUSE, etc.
-```
-
-**Environment variables:**
-
-- `CLOUD_CLAUDE_NO_PROMOTION=1` — disable cold-file read promotion (enabled by default on Linux; skipped on macOS)
-- Set `proxy_commands` in `~/.cloud-claude/config.yaml` (list of command names to run on the host). Default is `git` only; use an empty list to disable.
-- `hot_sync_max_file_mb` — per-file throttling threshold (default 50MB); files larger than this fall back to the cold path.
-
-`cloud-claude` does: gateway auth → wait for container → sshfs mount at the same path → start Claude Code remotely. Terminal size, signals, and exit codes are forwarded; network jitters auto-recover within 30s with buffered input surviving reconnections.
-
-### Claude Code (via SSH)
-
-Claude Code is pre-installed. Just use it:
-
-```bash
-claude
-```
-
-All Claude API requests are automatically routed through the designated exit IP. No proxy configuration needed.
+- `proxy_commands` — Commands to run locally (default: `git` only); set to `[]` to disable
+- `hot_sync_max_file_mb` — Per-file throttling threshold (default 50MB)
+- `CLOUD_CLAUDE_NO_PROMOTION=1` — Disable cold-file read promotion
 
 ### KasmVNC Remote Desktop
 
-Containers include KasmVNC + Chromium. Access the browser desktop via the admin dashboard.
+Access the container's browser desktop directly from the admin dashboard — no local GUI required.
 
 ---
 
@@ -224,7 +258,7 @@ Containers include KasmVNC + Chromium. Access the browser desktop via the admin 
 User ──curl──> Control Plane (:8080) ──Docker──>    │ User Container                    │
                     │                                │  SSH + Claude Code + VNC          │
                PostgreSQL                            │  sshfs ← same path as local cwd  │
-                    │                                │  sing-box tun Tunnel              │
+                    │                                │  sing-box tun tunnel              │
               Admin SPA (:3000)                      │       ↓                           │
                     │                                │  Designated Exit IP               │
               SSH Proxy (:2222)                      └───────────────────────────────────┘
@@ -235,21 +269,31 @@ User ──cloud-claude──> auth + SSH + sshfs ──────────
 
 | Component | Description |
 |-----------|-------------|
-| **Control Plane** | Go API — auth, user management, task orchestration, SSH proxy |
-| **Host Agent** | Privileged agent — Docker containers, network namespaces, tunnels |
+| **Control Plane** | Go API — authentication, user management, task orchestration, SSH proxy |
+| **Host Agent** | Privileged agent — manages Docker containers, network namespaces, and tunnels |
 | **User Container** | Ubuntu 24.04 — OpenSSH + Claude Code + sshfs + KasmVNC + Chromium |
-| **cloud-claude** | Go CLI — transparent `claude`; sshfs same-path mount; supports Auto/Full/SSHFS-Only mount modes, tmux multi-client sessions, auto-reconnect, doctor five-domain checks, and error code explanations |
-| **PostgreSQL** | Persists users, hosts, egress IPs, tasks, and events |
+| **cloud-claude** | Go CLI — transparent `claude` replacement; sshfs same-path mount; Auto/Full/SSHFS-Only mount modes, tmux multi-client sessions, auto-reconnect, doctor five-domain diagnostics, and error code explanations |
+| **PostgreSQL** | Persists users, hosts, egress IPs, tasks, events, and audit logs |
 | **Admin SPA** | React 19 + TypeScript + Vite + Tailwind CSS |
 
 ---
 
-## Development
+## Contributing
+
+Bug reports and feature requests: open an [Issue](https://github.com/ZaneL1u/cloud-cli-proxy/issues).
+
+Pull request process:
+
+1. Fork the repo, create a feature branch from `main`
+2. Make your changes, ensure `make test` passes
+3. Open a PR describing what you changed and why
+
+Local dev environment:
 
 ```bash
-make setup    # Install deps
+make setup    # Install dependencies
 make db       # Start PostgreSQL
-make dev      # Backend + frontend hot reload
+make dev      # Backend + frontend hot-reload (API :8090, frontend localhost:2568)
 make test     # Run tests
 ```
 
@@ -257,40 +301,9 @@ See `make help` for all commands.
 
 ---
 
-## Release And Changelog
-
-Pushing a `v*` tag triggers the `Release` workflow automatically and does three things:
-
-- Runs CI quality gates first (Go tests + admin web build)
-- Creates a GitHub Release
-- Publishes multi-arch images (`semver` + `latest`)
-- Generates monorepo-grouped release notes and writes them to [CHANGELOG.md](CHANGELOG.md)
-
-The default changelog groups are path-based:
-
-- Backend (Go / API, `cmd` + `internal`)
-- Frontend (`web/admin`)
-- Runtime & Deployment (`deploy`, compose files, workflows)
-- Docs (`docs` + READMEs)
-
-Manual release example:
-
-```bash
-make release VERSION=1.5.0
-```
-
----
-
 ## Documentation
 
-Full docs on [GitHub Pages](https://zanel1u.github.io/cloud-cli-proxy/en/):
-
-- [Quick Start](https://zanel1u.github.io/cloud-cli-proxy/en/guide/quickstart) — Deploy and first use
-- [Deployment](https://zanel1u.github.io/cloud-cli-proxy/en/guide/deployment) — systemd native deployment
-- [Configuration](https://zanel1u.github.io/cloud-cli-proxy/en/guide/configuration) — Environment variables and egress proxy setup
-- [Architecture](https://zanel1u.github.io/cloud-cli-proxy/en/guide/architecture) — System design and project structure
-- [API Reference](https://zanel1u.github.io/cloud-cli-proxy/en/reference/api) — Full Admin API
-- [FAQ & Recovery](https://zanel1u.github.io/cloud-cli-proxy/en/reference/faq) — Troubleshooting and disaster recovery
+Full documentation on [GitHub Pages](https://zanel1u.github.io/cloud-cli-proxy/en/): quick start, deployment, configuration, architecture, API reference, and troubleshooting.
 
 ---
 

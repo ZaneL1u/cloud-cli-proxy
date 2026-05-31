@@ -1,60 +1,116 @@
-# 配置参考
+# 参数参考
 
-## 环境变量
+## 命令
 
-创建 `/etc/cloud-cli-proxy/env`（systemd 部署）或 `.env`（Docker Compose 部署）。
 
-使用 `setup-env.sh` 可以交互式生成配置：
+
+### doctor — 五维度自检
+
+诊断五个维度的问题，可聚焦单项，也可自动修复。
+
+| 维度 | 检查内容 |
+|------|----------|
+| network | 容器网络连通性，出口 IP 可达性 |
+| auth | 认证凭据有效性，Token 可用性 |
+| ssh | SSH 连接稳定性，密钥配置 |
+| mount | sshfs 挂载状态，FUSE 兼容性 |
+| disk | 磁盘空间，inode 使用率 |
 
 ```bash
-bash deploy/scripts/setup-env.sh
+cloud-claude doctor                  # 五项全检
+cloud-claude doctor network          # 仅检查网络
+cloud-claude doctor mount --fix      # 检查挂载并自动修复
 ```
 
-### 控制面
+### env check — 远端环境检查
+
+```bash
+cloud-claude env check
+```
+
+输出远端容器的时区、语言环境、出口 IP、FUSE 状态、工具链版本等信息。
+
+### explain — 错误码解释
+
+```bash
+cloud-claude explain MOUNT_SSHFS_DISCONNECTED
+```
+
+输出该错误码的含义、可能原因和修复建议。
+
+
+
+## 配置参考
+
+### 环境变量
+
+创建 `/etc/cloud-cli-proxy/env`（systemd 部署）或 `.env`（Docker Compose 部署）。推荐使用 `setup-env.sh` 交互式生成。
+
+#### 控制面
 
 | 变量 | 必需 | 默认值 | 说明 |
 |------|------|--------|------|
-| `DATABASE_URL` | 是 | — | PostgreSQL 连接字符串，格式：`postgres://user:pass@host:5432/db?sslmode=disable` |
-| `CONTROL_PLANE_ADDR` | 否 | `:8080` | 控制面 HTTP API 监听地址 |
+| `DATABASE_URL` | 是 | — | PostgreSQL 连接字符串 |
+| `CONTROL_PLANE_ADDR` | 否 | `:8080` | HTTP API 监听地址 |
 | `ADMIN_USERNAME` | 否 | `admin` | 管理员用户名 |
-| `ADMIN_PASSWORD` | 是 | — | 管理员密码，首次启动时作为种子密码 |
-| `ADMIN_JWT_SECRET` | 是 | — | JWT 签名密钥（至少 32 字符），未设置则禁用管理后台 API |
-| `HOST_AGENT_MODE` | 否 | `socket` | host-agent 模式。`socket` = 通过 Unix socket 连接独立进程，`embedded` = 嵌入控制面进程内运行 |
-| `HOST_AGENT_SOCKET` | 否 | `/run/cloud-cli-proxy/host-agent.sock` | host-agent Unix socket 路径（仅 socket 模式） |
-| `DATA_DIR` | 否 | `/var/lib/cloud-cli-proxy` | 数据目录，存放运行时文件 |
+| `ADMIN_PASSWORD` | 是 | — | 管理员密码（首次启动种子） |
+| `ADMIN_JWT_SECRET` | 是 | — | JWT 签名密钥（至少 32 字符） |
+| `HOST_AGENT_MODE` | 否 | `socket` | `socket` 独立进程 / `embedded` 嵌入控制面 |
+| `HOST_AGENT_SOCKET` | 否 | `/run/cloud-cli-proxy/host-agent.sock` | Agent socket 路径 |
+| `DATA_DIR` | 否 | `/var/lib/cloud-cli-proxy` | 数据目录 |
 | `SSH_PROXY_ADDR` | 否 | `:2222` | SSH 代理监听地址 |
-| `LOG_FORMAT` | 否 | `json` | 日志格式，`json` 或 `text` |
-| `LOG_LEVEL` | 否 | `info` | 日志级别，`debug` / `info` / `warn` / `error` |
+| `LOG_FORMAT` | 否 | `json` | 日志格式：`json` / `text` |
+| `LOG_LEVEL` | 否 | `info` | 日志级别：`debug` / `info` / `warn` / `error` |
 
-### 数据库（Docker Compose 内置 PostgreSQL）
+#### 数据库（Docker Compose 内置 PostgreSQL）
 
 | 变量 | 必需 | 默认值 | 说明 |
 |------|------|--------|------|
-| `DB_MODE` | 否 | `docker` | 数据库模式，`docker` = 内置，`external` = 外部 |
+| `DB_MODE` | 否 | `docker` | `docker` 内置 / `external` 外部 |
 | `POSTGRES_DB` | 否 | `cloudproxy` | 数据库名 |
-| `POSTGRES_USER` | 否 | `cloudproxy` | 数据库用户名 |
-| `POSTGRES_PASSWORD` | 是（docker 模式） | — | 数据库密码 |
+| `POSTGRES_USER` | 否 | `cloudproxy` | 数据库用户 |
+| `POSTGRES_PASSWORD` | 是（docker） | — | 数据库密码 |
 
-### 管理后台
-
-| 变量 | 必需 | 默认值 | 说明 |
-|------|------|--------|------|
-| `ADMIN_PORT` | 否 | `3000` | 管理后台前端端口（映射到容器 80 端口） |
-
-### Docker Compose 服务端口
+#### 管理后台与服务端口
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `SSH_PROXY_PORT` | `2222` | 宿主机上的 SSH 代理端口 |
-| `ADMIN_PORT` | `3000` | 宿主机上的管理后台端口 |
+| `ADMIN_PORT` | `3000` | 管理后台端口 |
+| `SSH_PROXY_PORT` | `2222` | SSH 代理端口 |
 
-## 代理协议配置
+### cloud-claude 配置
 
-对于 `proxy` 类型的出口 IP，需要提供 `proxy_config` JSON 字段。该字段遵循 [sing-box outbound](https://sing-box.sagernet.org/configuration/outbound/) 格式。
+`~/.cloud-claude/config.yaml`：
 
-### 支持的协议
+```yaml
+gateway: https://gw.example.com
+short_id: abc123
+proxy_commands:
+  - git
+hot_sync_max_file_mb: 50
+```
 
-#### SOCKS5
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `gateway` | 控制面 HTTPS 地址 | — |
+| `short_id` | 主机短 ID | — |
+| `proxy_commands` | 在本机执行的命令列表 | `["git"]` |
+| `hot_sync_max_file_mb` | 单文件熔断阈值 | `50` |
+
+环境变量：
+
+- `CLOUD_CLAUDE_GATEWAY` — 同 `gateway`
+- `CLOUD_CLAUDE_SHORT_ID` — 同 `short_id`
+- `CLOUD_CLAUDE_PASSWORD` — 登录密码
+- `CLOUD_CLAUDE_NO_PROMOTION=1` — 禁用冷文件晋升
+
+## 代理协议
+
+`proxy` 类型的出口 IP 需要填写 `proxy_config`，格式遵循 [sing-box outbound](https://sing-box.sagernet.org/configuration/outbound/)。
+
+支持 SOCKS5、Shadowsocks、VMess、VLESS、Trojan、HTTP 六种协议。
+
+### SOCKS5
 
 ```json
 {
@@ -66,7 +122,7 @@ bash deploy/scripts/setup-env.sh
 }
 ```
 
-#### Shadowsocks
+### Shadowsocks
 
 ```json
 {
@@ -78,9 +134,9 @@ bash deploy/scripts/setup-env.sh
 }
 ```
 
-支持的加密方法：`aes-128-gcm`、`aes-256-gcm`、`chacha20-ietf-poly1305` 等。
+支持的加密方法：`aes-128-gcm`、`aes-256-gcm`、`chacha20-ietf-poly1305`。
 
-#### VMess
+### VMess
 
 ```json
 {
@@ -93,7 +149,7 @@ bash deploy/scripts/setup-env.sh
 }
 ```
 
-#### Trojan
+### Trojan
 
 ```json
 {
@@ -108,7 +164,7 @@ bash deploy/scripts/setup-env.sh
 }
 ```
 
-#### HTTP
+### HTTP
 
 ```json
 {
@@ -120,19 +176,13 @@ bash deploy/scripts/setup-env.sh
 }
 ```
 
-### 在管理后台中配置
+管理后台的出口 IP 表单提供协议选择器和对应字段，也支持直接编辑 JSON。
 
-管理后台的出口 IP 创建/编辑表单提供协议选择器和对应的配置字段，也支持直接编辑 JSON。
-
-## 防火墙规则
+## 防火墙
 
 ### 容器级别
 
-host-agent 使用 nftables 为每个容器的网络命名空间设置默认拒绝策略：
-
-- **Proxy 模式**：仅允许到代理服务器的连接，禁止其他所有出站流量
-
-规则由 host-agent 自动管理，无需手动配置。
+Host Agent 用 nftables 为每个容器的 netns 设置默认拒绝策略。规则由 agent 自动管理，无需手动配置。
 
 ### 宿主机级别
 
@@ -143,49 +193,40 @@ nft add table inet filter
 nft add chain inet filter input '{ type filter hook input priority 0; policy drop; }'
 nft add rule inet filter input ct state established,related accept
 nft add rule inet filter input iif lo accept
-nft add rule inet filter input tcp dport 22 accept     # 宿主机 SSH
-nft add rule inet filter input tcp dport 8080 accept   # API
-nft add rule inet filter input tcp dport 3000 accept   # 管理后台
-nft add rule inet filter input tcp dport 2222 accept   # SSH 代理
+nft add rule inet filter input tcp dport 22 accept
+nft add rule inet filter input tcp dport 8080 accept
+nft add rule inet filter input tcp dport 3000 accept
+nft add rule inet filter input tcp dport 2222 accept
 ```
 
 ## Docker 镜像
 
-所有镜像通过 GitHub Actions 自动构建，支持 `linux/amd64` 和 `linux/arm64`。
+所有镜像通过 GitHub Actions 构建，支持 `linux/amd64` 和 `linux/arm64`。
 
-| 镜像 | 地址 | 说明 |
-|------|------|------|
-| control-plane | `ghcr.io/zanel1u/cloud-cli-proxy/control-plane` | 控制面 API 服务 |
-| admin | `ghcr.io/zanel1u/cloud-cli-proxy/admin` | 管理后台前端（Nginx） |
-| managed-user | `ghcr.io/zanel1u/cloud-cli-proxy/managed-user` | 用户容器镜像 |
+| 镜像 | 地址 |
+|------|------|
+| control-plane | `ghcr.io/zanel1u/cloud-cli-proxy/control-plane` |
+| admin | `ghcr.io/zanel1u/cloud-cli-proxy/admin` |
+| managed-user | `ghcr.io/zanel1u/cloud-cli-proxy/managed-user` |
 
-**镜像标签规则：**
+标签规则：
 
 | 标签 | 说明 |
 |------|------|
-| `latest` | main 分支最新构建 |
-| `1.2.3` | 发布版本，对应 GitHub Release |
-| `1.2` | 自动跟随最新 patch |
-| `1` | 自动跟随最新 minor |
-| `a1b2c3d` | 精确到提交 |
+| `latest` | main 分支最新 |
+| `1.2.3` | 发布版本 |
+| `1.2` | 跟随最新 patch |
+| `1` | 跟随最新 minor |
 
-**生产环境建议锁定版本：**
+生产环境建议锁定版本号。
 
-```bash
-docker pull ghcr.io/zanel1u/cloud-cli-proxy/control-plane:1.2.3
-```
+### 用户容器预装软件
 
-## 用户容器预装软件
-
-受管用户镜像基于 Ubuntu 24.04，预装：
-
-| 软件 | 版本 | 说明 |
-|------|------|------|
-| OpenSSH Server | 10.2p1 | SSH 接入 |
-| Claude Code | 最新 | AI 编程助手 |
-| KasmVNC | 1.4.0 | 远程桌面服务 |
-| Chromium | 最新 | 浏览器（配合 KasmVNC） |
-| Fluxbox | — | 轻量窗口管理器 |
-| sing-box | 1.13.3 | 代理模式隧道客户端 |
-| Git, tmux, zsh | — | 常用开发工具 |
-| Node.js | LTS | JavaScript 运行时 |
+| 软件 | 说明 |
+|------|------|
+| OpenSSH Server | SSH 接入 |
+| Claude Code | AI 编程助手 |
+| KasmVNC + Chromium | 远程桌面 |
+| sing-box | 隧道客户端 |
+| Git, tmux, zsh | 开发工具 |
+| Node.js | JavaScript 运行时 |

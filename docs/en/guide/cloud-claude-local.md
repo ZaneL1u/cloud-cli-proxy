@@ -1,49 +1,38 @@
 # cloud-claude local — Local Dev Containers
 
-`cloud-claude local` allows users to launch a locally-managed container that is isomorphic to the cloud-hosted ones, for local development, debugging, and offline scenarios.
+`cloud-claude local` launches a container in local Docker that is isomorphic to the cloud-hosted ones, for development, debugging, and offline use.
 
-## Quick Start
+## Usage
 
-### 1. Initialize Config
+### Initialize
 
 ```bash
 cloud-claude local init
 ```
 
-Generates `~/.cloud-claude/local.yaml` with default local container parameters.
+Generates `~/.cloud-claude/local.yaml`.
 
-### 2. Start Local Container
+### Start
 
 ```bash
 cloud-claude local up
 ```
 
-This command:
-- Pulls the managed image (if not present locally)
-- Creates a `--network=none` container (same as cloud)
-- Injects sing-box outbound config (supports tun/proxy dual mode)
-- Skips KasmVNC and heartbeat, keeps only sshd + sing-box
-- Auto-mounts local SSH keys
+Pulls the image, creates a `--network=none` container, and injects sing-box config. Skips KasmVNC and heartbeat, keeps only sshd + sing-box.
 
-### 3. Check Status
+### Check Status
 
 ```bash
 cloud-claude local status
 ```
 
-Shows local container status, SSH port mapping, and sing-box tunnel state.
-
-### 4. Stop Container
+### Stop
 
 ```bash
 cloud-claude local down
 ```
 
-Stops and optionally removes the local container.
-
 ## Egress IP Configuration
-
-Use `--egress-config` to inject sing-box outbound JSON:
 
 ```bash
 cloud-claude local up --egress-config '{
@@ -55,11 +44,11 @@ cloud-claude local up --egress-config '{
 }'
 ```
 
-Supported protocols: Shadowsocks, VMess, SOCKS5, Trojan, HTTP.
+Supports Shadowsocks, VMess, SOCKS5, Trojan, HTTP.
 
 ## VS Code Dev Containers Integration
 
-The project root provides a `.devcontainer/devcontainer.json` template for VS Code Remote-Containers:
+A `.devcontainer/devcontainer.json` template is provided in the project root:
 
 ```json
 {
@@ -72,34 +61,34 @@ The project root provides a `.devcontainer/devcontainer.json` template for VS Co
 
 ## Differences from Cloud Containers
 
-| Feature | Cloud Container | Local Container |
-|---------|-----------------|-----------------|
-| Network isolation | `--network=none` + sing-box tun | `--network=none` + sing-box tun/proxy |
-| Desktop env | KasmVNC + Fluxbox + Chromium | None (terminal-only) |
+| Feature | Cloud | Local |
+|---------|-------|-------|
+| Network | `--network=none` + sing-box tun | Same |
+| Desktop | KasmVNC + Chromium | None |
 | Heartbeat | Yes | No |
 | Expiry governance | Admin-controlled | User-managed |
-| Persistent volume | Docker named volume | Docker named volume |
+| Persistent volume | Docker named volume | Same |
 
 ## Typical Use Cases
 
-- **Offline development**: Work locally when network is unavailable
-- **Local debugging**: Reproduce cloud environment issues locally
-- **Quick experiments**: Test configurations without waiting for cloud container startup
-- **CI/CD baseline**: Validate container image behavior locally before deployment
+- Offline development: work locally without network
+- Local debugging: reproduce cloud environment issues
+- Quick experiments: test configs without waiting for cloud container startup
+- CI/CD baseline: validate container image behavior before deployment
 
 ## Command Reference
 
 ```
 cloud-claude local up [flags]
   --egress-config string   sing-box outbound JSON
-  --image string           Custom image (defaults to managed image)
+  --image string           Custom image
   --name string            Container name
-  --rm                     Auto-remove container after stop
+  --rm                     Auto-remove after stop
 
 cloud-claude local down [flags]
-  --name string            Target container name
+  --name string            Target container
   --volumes                Also remove associated volumes
 
 cloud-claude local status
-  Show all local containers and their status
+  Show all local containers and status
 ```

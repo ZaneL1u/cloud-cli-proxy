@@ -1,60 +1,116 @@
 # Configuration
 
-## Environment Variables
+## Commands
 
-Create `/etc/cloud-cli-proxy/env` (systemd deployment) or `.env` (Docker Compose deployment).
 
-Use `setup-env.sh` for interactive generation:
+
+### doctor — Five-Domain Self-Check
+
+Diagnoses issues across five domains. Can target a single domain or auto-repair.
+
+| Domain | What it checks |
+|--------|---------------|
+| network | Container network connectivity, egress IP reachability |
+| auth | Credential validity, token availability |
+| ssh | SSH connection stability, key configuration |
+| mount | sshfs mount state, FUSE compatibility |
+| disk | Disk space, inode usage |
 
 ```bash
-bash deploy/scripts/setup-env.sh
+cloud-claude doctor                  # run all five checks
+cloud-claude doctor network          # check network only
+cloud-claude doctor mount --fix      # check mount and auto-repair
 ```
 
-### Control Plane
+### env check — Remote Environment Check
+
+```bash
+cloud-claude env check
+```
+
+Outputs the remote container's timezone, locale, egress IP, FUSE status, toolchain versions, and more.
+
+### explain — Error Code Lookup
+
+```bash
+cloud-claude explain MOUNT_SSHFS_DISCONNECTED
+```
+
+Outputs the error code's meaning, possible causes, and suggested fixes.
+
+
+
+## Configuration Reference
+
+### Environment Variables
+
+Create `/etc/cloud-cli-proxy/env` (systemd deployment) or `.env` (Docker Compose deployment). Use `setup-env.sh` for interactive generation.
+
+#### Control Plane
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DATABASE_URL` | Yes | — | PostgreSQL connection string, e.g. `postgres://user:pass@host:5432/db?sslmode=disable` |
-| `CONTROL_PLANE_ADDR` | No | `:8080` | Control plane HTTP API listen address |
+| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
+| `CONTROL_PLANE_ADDR` | No | `:8080` | HTTP API listen address |
 | `ADMIN_USERNAME` | No | `admin` | Admin username |
-| `ADMIN_PASSWORD` | Yes | — | Admin password, used as seed on first startup |
-| `ADMIN_JWT_SECRET` | Yes | — | JWT signing key (32+ chars), disables admin API if unset |
-| `HOST_AGENT_MODE` | No | `socket` | Host-agent mode. `socket` = connect to standalone process via Unix socket, `embedded` = run inside control plane process |
-| `HOST_AGENT_SOCKET` | No | `/run/cloud-cli-proxy/host-agent.sock` | Host-agent Unix socket path (socket mode only) |
-| `DATA_DIR` | No | `/var/lib/cloud-cli-proxy` | Data directory for runtime files |
+| `ADMIN_PASSWORD` | Yes | — | Admin password (seed on first startup) |
+| `ADMIN_JWT_SECRET` | Yes | — | JWT signing key (32+ characters) |
+| `HOST_AGENT_MODE` | No | `socket` | `socket` standalone process / `embedded` inside control plane |
+| `HOST_AGENT_SOCKET` | No | `/run/cloud-cli-proxy/host-agent.sock` | Agent socket path |
+| `DATA_DIR` | No | `/var/lib/cloud-cli-proxy` | Data directory |
 | `SSH_PROXY_ADDR` | No | `:2222` | SSH proxy listen address |
-| `LOG_FORMAT` | No | `json` | Log format, `json` or `text` |
+| `LOG_FORMAT` | No | `json` | Log format: `json` / `text` |
 | `LOG_LEVEL` | No | `info` | Log level: `debug` / `info` / `warn` / `error` |
 
-### Database (Docker Compose built-in PostgreSQL)
+#### Database (Docker Compose built-in PostgreSQL)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DB_MODE` | No | `docker` | Database mode: `docker` = built-in, `external` = external |
+| `DB_MODE` | No | `docker` | `docker` built-in / `external` |
 | `POSTGRES_DB` | No | `cloudproxy` | Database name |
 | `POSTGRES_USER` | No | `cloudproxy` | Database user |
-| `POSTGRES_PASSWORD` | Yes (docker mode) | — | Database password |
+| `POSTGRES_PASSWORD` | Yes (docker) | — | Database password |
 
-### Admin Dashboard
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `ADMIN_PORT` | No | `3000` | Admin frontend port (maps to container port 80) |
-
-### Docker Compose Port Mappings
+#### Admin Dashboard & Service Ports
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SSH_PROXY_PORT` | `2222` | Host SSH proxy port |
-| `ADMIN_PORT` | `3000` | Host admin dashboard port |
+| `ADMIN_PORT` | `3000` | Admin dashboard port |
+| `SSH_PROXY_PORT` | `2222` | SSH proxy port |
 
-## Proxy Protocol Configuration
+### cloud-claude Config
 
-For `proxy`-type egress IPs, provide a `proxy_config` JSON field following the [sing-box outbound](https://sing-box.sagernet.org/configuration/outbound/) format.
+`~/.cloud-claude/config.yaml`:
 
-### Supported Protocols
+```yaml
+gateway: https://gw.example.com
+short_id: abc123
+proxy_commands:
+  - git
+hot_sync_max_file_mb: 50
+```
 
-#### SOCKS5
+| Key | Description | Default |
+|-----|-------------|---------|
+| `gateway` | Control plane HTTPS address | — |
+| `short_id` | Host short ID | — |
+| `proxy_commands` | Commands to run on the host | `["git"]` |
+| `hot_sync_max_file_mb` | Per-file throttling threshold | `50` |
+
+Environment variables:
+
+- `CLOUD_CLAUDE_GATEWAY` — same as `gateway`
+- `CLOUD_CLAUDE_SHORT_ID` — same as `short_id`
+- `CLOUD_CLAUDE_PASSWORD` — login password
+- `CLOUD_CLAUDE_NO_PROMOTION=1` — disable cold-file promotion
+
+## Proxy Protocols
+
+For `proxy`-type egress IPs, fill in `proxy_config` following the [sing-box outbound](https://sing-box.sagernet.org/configuration/outbound/) format.
+
+Supports six protocols: SOCKS5, Shadowsocks, VMess, VLESS, Trojan, HTTP.
+
+### SOCKS5
 
 ```json
 {
@@ -66,7 +122,7 @@ For `proxy`-type egress IPs, provide a `proxy_config` JSON field following the [
 }
 ```
 
-#### Shadowsocks
+### Shadowsocks
 
 ```json
 {
@@ -78,9 +134,9 @@ For `proxy`-type egress IPs, provide a `proxy_config` JSON field following the [
 }
 ```
 
-Supported methods: `aes-128-gcm`, `aes-256-gcm`, `chacha20-ietf-poly1305`, etc.
+Supported methods: `aes-128-gcm`, `aes-256-gcm`, `chacha20-ietf-poly1305`.
 
-#### VMess
+### VMess
 
 ```json
 {
@@ -93,7 +149,7 @@ Supported methods: `aes-128-gcm`, `aes-256-gcm`, `chacha20-ietf-poly1305`, etc.
 }
 ```
 
-#### Trojan
+### Trojan
 
 ```json
 {
@@ -108,7 +164,7 @@ Supported methods: `aes-128-gcm`, `aes-256-gcm`, `chacha20-ietf-poly1305`, etc.
 }
 ```
 
-#### HTTP
+### HTTP
 
 ```json
 {
@@ -120,72 +176,57 @@ Supported methods: `aes-128-gcm`, `aes-256-gcm`, `chacha20-ietf-poly1305`, etc.
 }
 ```
 
-### Admin Dashboard Configuration
+The egress IP form in the admin dashboard provides a protocol selector with corresponding fields, plus a JSON editor mode.
 
-The egress IP form provides a protocol selector with corresponding fields, plus a JSON editor mode.
-
-## Firewall Rules
+## Firewall
 
 ### Container Level
 
-Host-agent uses nftables to set default-deny policy for each container namespace:
-
-- **Proxy mode**: Only allows connections to the proxy server
-
-Rules are managed automatically by host-agent.
+The host agent uses nftables to set default-deny policies for each container's netns. Rules are managed automatically; no manual configuration is needed.
 
 ### Host Level
 
-Recommended host firewall:
+A basic host firewall is recommended:
 
 ```bash
 nft add table inet filter
 nft add chain inet filter input '{ type filter hook input priority 0; policy drop; }'
 nft add rule inet filter input ct state established,related accept
 nft add rule inet filter input iif lo accept
-nft add rule inet filter input tcp dport 22 accept     # Host SSH
-nft add rule inet filter input tcp dport 8080 accept   # API
-nft add rule inet filter input tcp dport 3000 accept   # Admin dashboard
-nft add rule inet filter input tcp dport 2222 accept   # SSH proxy
+nft add rule inet filter input tcp dport 22 accept
+nft add rule inet filter input tcp dport 8080 accept
+nft add rule inet filter input tcp dport 3000 accept
+nft add rule inet filter input tcp dport 2222 accept
 ```
 
 ## Docker Images
 
 All images are built via GitHub Actions for `linux/amd64` and `linux/arm64`.
 
-| Image | Registry | Description |
-|-------|----------|-------------|
-| control-plane | `ghcr.io/zanel1u/cloud-cli-proxy/control-plane` | Control plane API server |
-| admin | `ghcr.io/zanel1u/cloud-cli-proxy/admin` | Admin dashboard frontend (Nginx) |
-| managed-user | `ghcr.io/zanel1u/cloud-cli-proxy/managed-user` | User container image |
+| Image | Registry |
+|-------|----------|
+| control-plane | `ghcr.io/zanel1u/cloud-cli-proxy/control-plane` |
+| admin | `ghcr.io/zanel1u/cloud-cli-proxy/admin` |
+| managed-user | `ghcr.io/zanel1u/cloud-cli-proxy/managed-user` |
 
-**Tag convention:**
+Tag convention:
 
 | Tag | Description |
 |-----|-------------|
-| `latest` | Latest build from main |
-| `1.2.3` | Release version, corresponds to GitHub Release |
-| `1.2` | Auto-follows latest patch |
-| `1` | Auto-follows latest minor |
-| `a1b2c3d` | Pinned to exact commit |
+| `latest` | Latest from main |
+| `1.2.3` | Release version |
+| `1.2` | Follows latest patch |
+| `1` | Follows latest minor |
 
-**Pin versions in production:**
+Pin to a specific version in production.
 
-```bash
-docker pull ghcr.io/zanel1u/cloud-cli-proxy/control-plane:1.2.3
-```
+### User Container Pre-installed Software
 
-## User Container Pre-installed Software
-
-The managed user image is based on Ubuntu 24.04 with:
-
-| Software | Version | Description |
-|----------|---------|-------------|
-| OpenSSH Server | 10.2p1 | SSH access |
-| Claude Code | Latest | AI coding assistant |
-| KasmVNC | 1.4.0 | Remote desktop server |
-| Chromium | Latest | Browser (with KasmVNC) |
-| Fluxbox | — | Lightweight window manager |
-| sing-box | 1.13.3 | Proxy mode tunnel client |
-| Git, tmux, zsh | — | Common dev tools |
-| Node.js | LTS | JavaScript runtime |
+| Software | Description |
+|----------|-------------|
+| OpenSSH Server | SSH access |
+| Claude Code | AI coding assistant |
+| KasmVNC + Chromium | Remote desktop |
+| sing-box | Tunnel client |
+| Git, tmux, zsh | Dev tools |
+| Node.js | JavaScript runtime |

@@ -1,42 +1,37 @@
 # Deployment Guide
 
-> For system administrators with Linux experience, deploying on a single host from scratch.
+For system administrators with Linux experience, deploying on a single host from scratch.
 
 ## Prerequisites
 
-- Ubuntu 22.04+ / Debian 12+ (or equivalent systemd-based Linux)
+- Ubuntu 22.04+ / Debian 12+ (or equivalent systemd-based distro)
 - Root or sudo access
 - Public IP (for bootstrap endpoint and user SSH access)
-- At least one proxy config for an exit IP
+- At least one proxy config for an egress IP
 
 ## 1. Environment Setup
 
-### 1.1 Dependency Check
+### Dependency Check
 
 ```bash
 sudo bash deploy/scripts/host-preflight.sh
 ```
 
-| Dependency | Min Version | Purpose |
-|-----------|-------------|---------|
-| Docker Engine | 28.x+ | Container runtime |
-| FUSE | kernel module | Container sshfs directory mapping |
-| nftables (`nft`) | -- | Container firewall rules |
-| `nsenter` | -- | Network namespace verification |
-| `curl` | -- | Egress IP verification and health checks |
-| `ip` | -- | Network configuration |
-| `systemctl` | -- | Service management |
-| Go | 1.26+ | Build control-plane and host-agent |
-| PostgreSQL | 18.x | Persistent storage |
-| Node.js | 24 LTS | Frontend build (optional) |
+Checks: Docker Engine 28+, FUSE kernel module, nftables, nsenter, curl, ip, systemctl, Go 1.26+, PostgreSQL 18.x, Node.js 24 LTS (optional).
 
-### 1.2 Install Missing Dependencies
+### Install Missing Dependencies
 
 **Docker Engine:**
 
 ```bash
 curl -fsSL https://get.docker.com | sh
 systemctl enable --now docker
+```
+
+**nftables / nsenter / curl:**
+
+```bash
+apt-get install -y nftables util-linux curl
 ```
 
 **FUSE kernel module:**
@@ -46,7 +41,7 @@ modprobe fuse
 echo fuse >> /etc/modules-load.d/fuse.conf
 ```
 
-> Verify: `ls -la /dev/fuse` should show a character device with `crw-rw-rw-` permissions.
+Verify: `ls -la /dev/fuse` should show a character device with `crw-rw-rw-` permissions.
 
 **Go 1.26:**
 
@@ -57,20 +52,24 @@ echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile.d/go.sh
 source /etc/profile.d/go.sh
 ```
 
-### 1.3 FUSE and AppArmor Compatibility
+**PostgreSQL 18:**
 
-Container-based sshfs directory mapping requires FUSE. Docker's default AppArmor profile (`docker-default`) includes a `deny mount` rule that blocks FUSE mount operations inside containers. The system automatically adds `--security-opt apparmor=unconfined` when creating containers.
+```bash
+apt-get install -y postgresql-18
+systemctl enable --now postgresql
+```
 
-**Known limitations:**
+### FUSE & AppArmor Compatibility
+
+sshfs inside containers requires FUSE. Docker's default AppArmor profile includes a `deny mount` rule. The system automatically adds `--security-opt apparmor=unconfined` when creating containers.
 
 | Host OS | Impact | Handling |
 |---------|--------|----------|
-| Ubuntu 24.04 LTS | Default AppArmor blocks FUSE mount | Handled automatically (apparmor=unconfined) |
-| Ubuntu 25.04+ | Additional fusermount3 AppArmor profile may block | Run `aa-disable /usr/bin/fusermount3` if needed |
-| Debian 12+ | No AppArmor by default | No extra configuration needed |
-| Distros without AppArmor | No impact | No extra configuration needed |
+| Ubuntu 24.04 | Default AppArmor blocks FUSE mount | Handled automatically |
+| Ubuntu 25.04+ | Additional fusermount3 profile may block | `aa-disable /usr/bin/fusermount3` |
+| Debian 12+ | No AppArmor | No action needed |
 
-**Verify FUSE compatibility:**
+Verify FUSE compatibility:
 
 ```bash
 sudo bash scripts/verify-fuse-compat.sh
@@ -89,41 +88,37 @@ GRANT ALL ON SCHEMA public TO cloudproxy;
 SQL
 ```
 
+Verify connection:
+
+```bash
+psql "postgresql://cloudproxy:password@127.0.0.1:5432/cloudproxy" -c "SELECT 1"
+```
+
 ## 3. Build
 
 ```bash
 git clone https://github.com/ZaneL1u/cloud-cli-proxy.git /opt/cloud-cli-proxy
 cd /opt/cloud-cli-proxy
 
-# Control plane
 go build -o /opt/cloud-cli-proxy/bin/control-plane ./cmd/control-plane
-
-# Host agent
 go build -o /opt/cloud-cli-proxy/bin/host-agent ./cmd/host-agent
-
-# Managed user image
 bash deploy/docker/managed-user/build-managed-image.sh
+
+# Frontend (optional)
+cd web/admin && pnpm install && pnpm build && cd /opt/cloud-cli-proxy
 ```
 
 ## 4. Configuration
 
-### System User
-
 ```bash
 useradd --system --no-create-home --shell /usr/sbin/nologin cloudproxy
 usermod -aG docker cloudproxy
-```
 
-### Directories
-
-```bash
 mkdir -p /var/lib/cloud-cli-proxy /run/cloud-cli-proxy /etc/cloud-cli-proxy
 chown cloudproxy:cloudproxy /var/lib/cloud-cli-proxy /run/cloud-cli-proxy /etc/cloud-cli-proxy
 ```
 
-### Environment Variables
-
-Create `/etc/cloud-cli-proxy/env`. See [Configuration](./configuration) for the full reference.
+Create `/etc/cloud-cli-proxy/env`. See [Configuration](./configuration) for the full variable reference.
 
 ## 5. Install systemd Services
 
@@ -154,8 +149,8 @@ curl -s http://127.0.0.1:8080/healthz
 ## Post-deploy Layout
 
 ```
-/opt/cloud-cli-proxy/bin/     # control-plane, host-agent binaries
-/etc/cloud-cli-proxy/env      # Environment variables (chmod 600)
-/var/lib/cloud-cli-proxy/     # Data directory
-/run/cloud-cli-proxy/         # Runtime Unix socket
+/opt/cloud-cli-proxy/bin/     # binaries
+/etc/cloud-cli-proxy/env      # environment variables (chmod 600)
+/var/lib/cloud-cli-proxy/     # data directory
+/run/cloud-cli-proxy/         # Unix socket
 ```
