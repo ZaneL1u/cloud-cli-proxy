@@ -7,6 +7,7 @@ import { useCreateHost } from "@/hooks/use-hosts";
 import { useEgressIPs } from "@/hooks/use-egress-ips";
 import { useTaskPolling } from "@/hooks/use-tasks";
 import { PathAutocomplete } from "@/components/hosts/path-autocomplete";
+import { ResourceLimitsSelector, type ResourceLimitsValue } from "@/components/hosts/resource-limits-selector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -84,6 +85,11 @@ export function CreateHostDialog({
   const [userId, setUserId] = useState("");
   const [egressIpId, setEgressIpId] = useState("");
   const [timezone, setTimezone] = useState("America/Los_Angeles");
+  const [resources, setResources] = useState<ResourceLimitsValue>({
+    memory_limit_mb: null,
+    cpu_limit: null,
+    disk_limit_gb: null,
+  });
   const [hostMounts, setHostMounts] = useState<Array<{ source: string; target: string }>>([
     { source: "", target: "" },
   ]);
@@ -131,7 +137,7 @@ export function CreateHostDialog({
     const mounts = hostMounts
       .filter((m) => m.source && m.target && m.source.startsWith("/") && m.target.startsWith("/"));
     createMutation.mutate(
-      { user_id: userId, egress_ip_id: egressIpId, timezone, host_mounts: mounts.length > 0 ? mounts : undefined },
+      { user_id: userId, egress_ip_id: egressIpId, timezone, memory_limit_mb: resources.memory_limit_mb, cpu_limit: resources.cpu_limit, disk_limit_gb: resources.disk_limit_gb, host_mounts: mounts.length > 0 ? mounts : undefined },
       {
         onSuccess: (data) => {
           setTaskId(data.task_id);
@@ -145,6 +151,7 @@ export function CreateHostDialog({
     setUserId("");
     setEgressIpId("");
     setTimezone("America/Los_Angeles");
+    setResources({ memory_limit_mb: null, cpu_limit: null, disk_limit_gb: null });
     setHostMounts([{ source: "", target: "" }]);
     setTaskId(null);
     onOpenChange(false);
@@ -221,6 +228,17 @@ export function CreateHostDialog({
                     没有可用的出口 IP，请先添加
                   </p>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>资源限制</Label>
+                <p className="text-xs text-muted-foreground">
+                  不设置则使用默认值（4 GB 内存 / 2 核 CPU / 20 GB 磁盘）。选择"无限制"可使用宿主机全部资源。
+                </p>
+                <ResourceLimitsSelector
+                  value={resources}
+                  onChange={setResources}
+                />
               </div>
 
               <div className="space-y-2">

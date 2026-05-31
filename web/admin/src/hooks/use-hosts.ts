@@ -62,6 +62,9 @@ export interface HostDetail {
     slot_key: string;
     timezone: string;
     hostname: string;
+    memory_limit_mb: number | null;
+    cpu_limit: number | null;
+    disk_limit_gb: number | null;
     host_mounts?: HostMount[];
     
     created_at: string;
@@ -118,7 +121,7 @@ export function useHostDetail(hostId: string) {
 export function useCreateHost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { user_id: string; egress_ip_id: string; timezone?: string; host_mounts?: HostMount[] }) =>
+    mutationFn: (data: { user_id: string; egress_ip_id: string; timezone?: string; memory_limit_mb?: number | null; cpu_limit?: number | null; disk_limit_gb?: number | null; host_mounts?: HostMount[] }) =>
       apiFetch<{ host: HostWithUsername; task_id: string }>("/hosts", {
         method: "POST",
         body: JSON.stringify(data),
@@ -141,6 +144,28 @@ export function useUpdateHostMounts(hostId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["hosts", hostId] });
+    },
+  });
+}
+
+export function usePatchHostResources(hostId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      memory_limit_mb?: number | null;
+      cpu_limit?: number | null;
+      disk_limit_gb?: number | null;
+    }) =>
+      apiFetch(`/hosts/${hostId}/resources`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hosts", hostId] });
+      toast.success("资源限制已更新");
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "更新资源限制失败");
     },
   });
 }
