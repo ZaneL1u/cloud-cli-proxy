@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.1.1 - 2026-05-31
+## What's Changed
+
+### Backend (Go / API)
+- feat: v4.1.1 - 出口 IP 检测迁移、bypass 审计面板与前端多项改进 (111ccc6)
+
+### Frontend (Admin Web)
+- feat: v4.1.1 - 出口 IP 检测迁移、bypass 审计面板与前端多项改进 (111ccc6)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.1.0...v4.1.1
+
+
 ## v4.1.0 - 2026-05-31
 ## What's Changed
 
