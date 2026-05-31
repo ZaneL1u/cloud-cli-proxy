@@ -279,6 +279,7 @@ export function CreateHostDialog({
                             if (!next[i].target) next[i].target = v;
                             setHostMounts(next);
                           }}
+                          showBrowseButton
                         />
                       </div>
                       <span className="pb-2 text-muted-foreground">-&gt;</span>

@@ -18,6 +18,17 @@ var sensitiveDirs = []string{
 	"/proc", "/sys", "/dev", "/boot", "/etc/ssh", "/root/.ssh",
 }
 
+func isAbsolutePath(path string) bool {
+	if strings.HasPrefix(path, "/") {
+		return true
+	}
+	if len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/') {
+		c := path[0]
+		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+	}
+	return false
+}
+
 type AdminHostFilesHandler struct {
 	logger *slog.Logger
 }
@@ -41,7 +52,7 @@ func (h *AdminHostFilesHandler) List() nethttp.Handler {
 			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "path parameter is required"})
 			return
 		}
-		if !strings.HasPrefix(path, "/") {
+		if !isAbsolutePath(path) {
 			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "path must be absolute"})
 			return
 		}
@@ -50,10 +61,12 @@ func (h *AdminHostFilesHandler) List() nethttp.Handler {
 			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "path traversal not allowed"})
 			return
 		}
-		for _, blocked := range sensitiveDirs {
-			if strings.HasPrefix(cleaned, blocked) {
-				writeJSON(w, nethttp.StatusForbidden, map[string]string{"error": "access to sensitive directory denied"})
-				return
+		if strings.HasPrefix(path, "/") {
+			for _, blocked := range sensitiveDirs {
+				if strings.HasPrefix(cleaned, blocked) {
+					writeJSON(w, nethttp.StatusForbidden, map[string]string{"error": "access to sensitive directory denied"})
+					return
+				}
 			}
 		}
 

@@ -78,6 +78,8 @@ export function MountManager({ hostId, hostStatus, mounts }: MountManagerProps) 
                       placeholder="例: /data/shared"
                       value={m.source}
                       onChange={(v) => updateMountRow(i, "source", v)}
+                      showBrowseButton
+                      hostId={hostId}
                     />
                   </div>
                   <span className="pb-2 text-muted-foreground">-&gt;</span>

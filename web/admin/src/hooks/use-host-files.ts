@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { isAbsolutePath } from "@/lib/path-utils";
 
 export interface HostFileEntry {
   name: string;
@@ -25,7 +26,7 @@ export function useHostFiles(path: string, hostId?: string) {
       apiFetch<HostFilesResponse>(
         `/host-files?${params.toString()}`,
       ),
-    enabled: path.length > 0 && path.startsWith("/"),
+    enabled: path.length > 0 && isAbsolutePath(path),
     staleTime: 30_000,
   });
 }
