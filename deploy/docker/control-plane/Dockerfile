@@ -26,6 +26,13 @@ RUN apt-get update \
 
 COPY --from=builder /usr/local/bin/control-plane /usr/local/bin/control-plane
 
+ARG SINGBOX_VERSION=1.13.3
+RUN arch=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') && \
+    curl -fsSL -o /tmp/sb.tgz "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VERSION}/sing-box-${SINGBOX_VERSION}-linux-${arch}.tar.gz" && \
+    tar -xzf /tmp/sb.tgz -C /tmp && \
+    install -m 0755 "/tmp/sing-box-${SINGBOX_VERSION}-linux-${arch}/sing-box" /usr/local/bin/sing-box && \
+    rm -rf /tmp/sb.tgz "/tmp/sing-box-${SINGBOX_VERSION}-linux-${arch}"
+
 WORKDIR /app
 COPY internal/store/migrations internal/store/migrations
 COPY deploy/docker/managed-user/image.lock deploy/docker/managed-user/image.lock

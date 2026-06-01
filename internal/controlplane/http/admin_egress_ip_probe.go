@@ -224,11 +224,11 @@ func startLocalSingBox(ctx context.Context, proxyConfig json.RawMessage) (port i
 	port = listener.Addr().(*net.TCPAddr).Port
 	listener.Close()
 
-	if _, lookErr := exec.LookPath("docker"); lookErr == nil {
-		return startSingBoxDocker(ctx, proxyConfig, port)
-	}
 	if _, lookErr := exec.LookPath("sing-box"); lookErr == nil {
 		return startSingBoxNative(ctx, proxyConfig, port)
+	}
+	if _, lookErr := exec.LookPath("docker"); lookErr == nil {
+		return startSingBoxDocker(ctx, proxyConfig, port)
 	}
 	return 0, nil, fmt.Errorf("需要 Docker 或 sing-box 来测试此协议，两者均未安装")
 }
