@@ -30,7 +30,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -225,10 +224,10 @@ func (s *Scenario) Start(ctx context.Context) (retErr error) {
 		}
 	}()
 
-		// ─── Step 1: SQLite ──────────────────────────────
 	// ─── Step 1: SQLite ───────────────────────────────────────────────
 	if err := s.startSQLite(ctx); err != nil {
 		return fmt.Errorf("scenario start step1 (sqlite): %w", err)
+	}
 
 	// ─── Step 2: control-plane 子进程 ─────────────────────────────────
 	if s.controlPlane != nil {
