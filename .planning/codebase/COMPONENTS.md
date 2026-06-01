@@ -1,6 +1,6 @@
 # Components
 
-**Analysis Date:** 2026-05-10
+**Analysis Date:** 2026-06-01
 
 ## cmd/ — Entry Points
 
@@ -12,7 +12,7 @@
 
 ### `cmd/host-agent/main.go`
 - 宿主机代理服务入口
-- 连接 PostgreSQL（用于 worker 的 repository 操作）
+- 连接 SQLite（用于 worker 的 repository 操作）
 - 创建 Unix socket 监听（默认 `/run/cloud-cli-proxy/host-agent.sock`）
 - 在 Linux 上使用默认 socket，非 Linux 使用 `~/.cloud-cli-proxy/host-agent.sock`
 
@@ -30,7 +30,7 @@
 ### `internal/controlplane/app/app.go`
 - **职责:** 控制面的依赖注入和生命周期管理
 - **关键行为:**
-  - 创建 pgxpool 连接池（MaxConns=10, MinConns=2）
+  - 创建 `*sql.DB` 连接（WAL 模式，SetMaxOpenConns(1)）
   - 运行数据库 migrations
   - 根据 `HOST_AGENT_MODE` 环境变量选择 embedded 或独立 host-agent 模式
   - 组装 Router、SSHProxy、Scheduler（expiry + reconcile + image-cache-refresh）
@@ -289,7 +289,7 @@
 ### `internal/store/repository/queries.go`
 - **职责:** 数据访问方法
 - 每个模型一组 CRUD 查询
-- 使用 `pgx/v5` 的 `QueryRow` / `Query` / `Exec`
+- 使用 `database/sql` 的 `QueryRow` / `Query` / `Exec`
 - 事务支持通过 `BeginTx` 手动管理
 
 ### `internal/store/migrations/`
@@ -354,4 +354,4 @@
 
 ---
 
-*Components analysis: 2026-05-10*
+*Components analysis: 2026-06-01*

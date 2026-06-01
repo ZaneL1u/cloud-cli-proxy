@@ -4,6 +4,30 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.0 - 2026-06-01
+## What's Changed
+
+### Backend (Go / API)
+- feat: PostgreSQL → SQLite 迁移 — 全项目移除 pgx/v5，改用 database/sql + modernc.org/sqlite（纯 Go，WAL 模式）
+- feat: 21 个迁移文件从 PG 语法改写为 SQLite 语法
+- feat: queries.go + queries_bypass.go 从 pgx 重写为 database/sql（1690 + 652 行）
+- feat: App 初始化改为 sql.Open + PRAGMA WAL/foreign_keys/busy_timeout
+- feat: Admin 前端 dist 通过 //go:embed 嵌入 Go 二进制，统一端口 :8080
+- feat: sing-box 探针二进制内嵌至 control-plane，优先使用 native 模式
+
+### Runtime & Deployment
+- feat: Docker Compose 从 5 服务精简至 2 服务（control-plane + managed-user）
+- feat: 统一环境变量 — 移除 POSTGRES_*，DATABASE_URL 改为 SQLite 路径
+- feat: Makefile 移除 db/db-stop/db-reset 目标，dev 不再检测 PostgreSQL
+- feat: deploy/scripts 移除 PostgreSQL 交互和检查
+
+### Docs
+- docs: README/文档站架构图、环境变量表、访问地址全面更新
+- docs: FAQ 中 PG 相关排障条目更新为 SQLite
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.1.4...v4.2.0
+
+
 ## v4.1.4 - 2026-06-01
 ## What's Changed
 

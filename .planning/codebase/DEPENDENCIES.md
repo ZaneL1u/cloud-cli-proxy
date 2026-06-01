@@ -1,6 +1,6 @@
 # Dependencies
 
-**Analysis Date:** 2026-05-10
+**Analysis Date:** 2026-06-01
 
 ## Go Dependencies
 
@@ -8,7 +8,8 @@
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `github.com/jackc/pgx/v5` | v5.7.6 | PostgreSQL 驱动和连接池 |
+| `modernc.org/sqlite` | latest | SQLite 驱动（纯 Go，WAL 模式） |
+| `github.com/google/uuid` | latest | UUID 生成 |
 | `github.com/golang-jwt/jwt/v5` | v5.3.1 | JWT 认证（HS256） |
 | `github.com/spf13/cobra` | v1.10.2 | cloud-claude CLI 命令框架 |
 | `golang.org/x/crypto` | v0.41.0 | SSH 客户端/服务器实现 |
@@ -106,8 +107,8 @@
 
 | System | Version | Purpose |
 |--------|---------|---------|
-| Go | 1.25.7 | 后端运行时 |
-| PostgreSQL | 18.x | 持久化数据库 |
+| Go | 1.26.1 | 后端运行时 |
+| SQLite | modernc.org/sqlite (纯 Go, WAL 模式) | 持久化数据库 |
 | Docker Engine | 28.x | 容器运行时 |
 | OpenSSH | 10.2p1 | 容器内 SSH Server |
 | sing-box | 协议稳定 | 全隧道代理网关 |
@@ -117,4 +118,4 @@
 
 ---
 
-*Dependencies analysis: 2026-05-10*
+*Dependencies analysis: 2026-06-01*

@@ -354,6 +354,68 @@
 
 ---
 
+## Milestone: v4.2.0 — 容器合并 · SQLite 迁移 · 配置统一
+
+**Shipped:** 2026-06-01
+**Phases:** 5 (58-62) | **Plans:** 3 (Phase 58 waves) | **Timeline:** 1 day (2026-06-01)
+
+### What Was Built
+
+- PostgreSQL → SQLite 全项目迁移：移除 pgx/v5，引入 modernc.org/sqlite + google/uuid（纯 Go，零 CGO）
+- migrator 重写为 database/sql + embed.FS 内嵌迁移文件
+- 21 个迁移文件从 PG 语法改写为 SQLite 语法（UUID/TIMESTAMPTZ/JSONB → TEXT，BOOLEAN → INTEGER）
+- queries.go (1690 行) + queries_bypass.go (652 行) 从 pgx 重写为 database/sql
+- App 初始化 sql.Open + PRAGMA WAL/foreign_keys/busy_timeout，SetMaxOpenConns(1)
+- Admin 前端 dist 通过 //go:embed 嵌入 Go 二进制，SPA fallback handler，统一端口 :8080
+- sing-box 探针二进制内嵌至 control-plane Dockerfile，优先 native 模式
+- Docker Compose 5 服务精简至 2 服务（control-plane + managed-user），移除 PostgreSQL/admin/sing-box 容器
+- 环境变量统一：移除 POSTGRES_*，DATABASE_URL 改为 SQLite 路径
+- Makefile 移除 db/db-stop/db-reset 目标和 PG 检测；deploy/scripts 移除 PostgreSQL 交互
+- README/文档站/FAQ 全面更新
+- 单元测试从 testcontainers PG 切换到内存 SQLite
+
+### What Worked
+
+- **Phase 58 wave 化执行**：3 波按依赖顺序推进（依赖切换 → 迁移+查询重写 → 全项目引用清除），每波独立可验证，偏差自动修复
+- **embed.FS 迁移文件**：完全消除外部文件依赖，单一二进制包含所有迁移 SQL
+- **database/sql 标准库**：零新依赖，与 Go 标准库无缝集成，WAL 模式性能满足单机需求
+- **SPA fallback handler**：简洁的 //go:embed + http.FileServer + 自定义 404 回退，无需独立 nginx
+- **sing-box native 优先**：宿主机有二进制直接用，Docker 作为回退，灵活且高效
+- **atomic commits + auto-fix**：Phase 58 plan 执行中发现的 3 个 Bug（缺 embed.go、pgx.Tx 不兼容、SQLite 语法不兼容）全部由 executor 自动修复
+
+### What Was Inefficient
+
+- **Phase 59-62 全部 inline 执行**：没有生成正式的 PLAN.md / SUMMARY.md / VERIFICATION.md，仅 Phase 58 有完整 GSD 工件集
+- **Phase 58 Plan 01 拆分不足**：Task 1（依赖切换）和 Task 2（migrator 重写）必须合并执行，因为 go mod tidy 会重新引入 pgx 依赖——plan 设计时应考虑原子性边界
+- **REQUIREMENTS.md 追溯表未同步**：PRB/DEP 共 7 条需求在审计确认完成时，追溯表仍显示 Pending，audit 后才手动修正
+- **codebase/ 文档未随里程碑更新**：ARCHITECTURE/DEPENDENCIES/COMPONENTS 仍然引用 PostgreSQL/pgx/pgxpool，与代码实际状态不符
+- **go.mod 中 pgx/v5 残留**：因 tests/e2e/helpers_linux.go 的 e2e 构建标签而保留，虽非阻塞但属于技术债务
+
+### Patterns Established
+
+- **纯 Go SQLite (modernc.org/sqlite)**：零 CGO 依赖，WAL 模式，单文件数据库，适合单机部署
+- **embed.FS 迁移系统**：迁移 SQL 文件嵌入 Go 二进制，消除运行时文件路径依赖
+- **SPA fallback 模式**：//go:embed 嵌入前端 dist + 自定义 FileSystem wrapper + router 注册
+- **sing-box native 优先模式**：探针启动时先检查宿主机二进制路径，不存在才回退 Docker 容器
+- **统一端口 :8080**：所有 HTTP 流量走单一端口，简化部署和防火墙配置
+
+### Key Lessons
+
+1. **Plan 应显式标注原子性边界** — Phase 58 Plan 01 拆分了两个必须一起执行的任务，导致执行时自动合并偏差；plan 中应标注"以下 task 必须同波执行"的强依赖
+2. **里程碑审计应自动触发文档同步** — codebase/ 文档和追溯表的过期是重复出现的问题（v1.0 → v4.2.0 反复印证），应在审计检查清单中自动提醒
+3. **inline phase 至少应保留 SUMMARY** — Phase 59-62 的 inline 执行虽然快速，但缺少 SUMMARY 让后续回顾和跨里程碑趋势分析失去依据
+4. **构建标签下的遗留依赖要有明确清理计划** — pgx/v5 因 e2e 构建标签保留，应在下一里程碑 E2E 适配时一并清理
+5. **SQLite 迁移无痛切换的前提是标准库接口** — pgx 到 database/sql 的接口差异（没有 QueryRow direct scan、没有 Batch、没有 CopyFrom）需要在 plan 阶段充分评估影响面
+
+### Cost Observations
+
+- **Model mix**: balanced profile；Phase 58 使用默认模型（大规模重写），Phase 59-62 以 fast model 为主
+- **Sessions**: 约 3-5 次会话完成全部 5 个 phase
+- **Notable**: Phase 58 是核心复杂度所在（3 waves × 2 commits = 6 commits），Phase 59-62 均为小粒度变更（1 commit each）
+- **Code change**: 约 40+ 文件被修改，核心变更是 queries.go (1690 行) + queries_bypass.go (652 行) 的完整重写
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -366,6 +428,7 @@
 | v3.0 | 5 days | 8 (含 1 hotfix) | 30 | Critical Pitfalls 前置 + Gap-closure + post-fix + integration-checker |
 | v3.1 | ~1 day active | 2 | 11 | 纯配置/参数级改动 + 并发引擎 + e2e UAT；effective accessor 兜底模式 |
 | v3.4 | 2 days | 7 (含 3 gap) | 14 | 审计驱动 gap closure 闭环；SSH 端口转发 + 本地 Dev Containers |
+| v4.2.0 | 1 day | 5 | 3 | SQLite 全项目迁移 + 服务精简至 2 个 + 前端/探针内嵌至单一二进制 |
 
 ### Cumulative Quality
 
@@ -377,10 +440,11 @@
 | v3.0 | 200+ | ~45,766 | 30 | ~10-30 min |
 | v3.1 | 230+ | ~48,953 | 11 | ~5-15 min |
 | v3.4 | 263+ | ~43,300 | 14 | ~2-10 min |
+| v4.2.0 | 263+ | ~43,000 | 3 | ~5-18 min |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. 验证流程应覆盖所有阶段，不跳过早期阶段（v1.0 → v3.1 反复印证）
+1. 验证流程应覆盖所有阶段，不跳过早期阶段（v1.0 → v4.2.0 反复印证）
 2. 横切关注点引入时应立即全量扫描覆盖范围
 3. 错误码的定义端和消费端应同步建立映射
 4. 对称设计能大幅降低新功能实现成本
@@ -396,3 +460,6 @@
 14. **macOS stub + Linux 真实实现的双平台分离（v3.1 新）** — 开发不阻塞，真机验证留到目标平台
 15. **审计→gap closure→再审计 三步闭环（v3.4 新）** — 精准修复比一次性修补更可靠，gap closure phase 应即开即关
 16. **VERIFICATION.md 应在实现阶段同步生成（v3.4 新）** — 推到审计阶段补齐会多浪费一个 gap closure phase
+17. **Plan 应显式标注原子性边界（v4.2.0 新）** — Phase 58 Plan 01 拆分导致 go mod tidy 重引入旧依赖，task 间有隐式原子依赖时应在 plan 中标注
+18. **inline phase 至少应保留 SUMMARY（v4.2.0 新）** — Phase 59-62 inline 执行缺少工作总结，后续回顾失去依据
+19. **里程碑审计应自动触发文档同步（v4.2.0 新）** — codebase/ 文档和 REQUIREMENTS.md 追溯表在审计后仍显示旧状态，应在审计流程中加入自动更新步骤
