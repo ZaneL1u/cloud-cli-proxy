@@ -1,5 +1,17 @@
 # Milestones
 
+## v4.2.0 容器合并 · SQLite 迁移 · 配置统一 (Shipped: 2026-06-01)
+
+**Phases completed:** 5 phases, 3 plans, 6 tasks
+
+**Key accomplishments:**
+
+- migrator.go 从 pgxpool.Pool + filepath.Glob 重写为 database/sql + embed.FS + SQLite 语法，go.mod 新增 modernc.org/sqlite 直接依赖
+- 21 个迁移文件从 PostgreSQL 语法改写为 SQLite 语法，queries.go (1690行) + queries_bypass.go (652行) 从 pgx 重写为 database/sql 标准库，所有测试文件同步适配
+- 1. [Rule 3 - Blocking] embed.go 缺失（迁移文件 embed.FS 未创建）
+
+---
+
 ## v4.0 sing-box 同容器化 (Shipped: 2026-05-27)
 
 **Phases completed:** 4 phases, 13 plans, 25 tasks

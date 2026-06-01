@@ -1,141 +1,86 @@
 # Roadmap: Cloud CLI Proxy
 
-## Current Milestone: v4.2.0 容器合并 · SQLite 迁移 · 配置统一
+## Milestones
 
-**Started:** 2026-06-01
-**Phases:** 5 (Phase 58-62)
-**Requirements:** 21 total
-
----
-
-## Phase 58: SQLite 数据库层迁移
-
-**Goal:** 将整个持久化层从 PostgreSQL 切换至 SQLite，包括驱动、迁移系统、Repository 层和 App 初始化。
-
-**Requirements:** DB-01, DB-02, DB-03, DB-04, DB-05
-
-**Plans:** 3/3 plans complete
-
-Plans:
-
-- [x] 58-01-PLAN.md — 依赖切换 + migrator 重写（Wave 1）
-- [x] 58-02-PLAN.md — 迁移文件改写 + queries.go 重写（Wave 2）
-- [x] 58-03-PLAN.md — queries_bypass + App 初始化 + 全项目 pgx 清除（Wave 3）
-
-**Success Criteria:**
-
-1. `go build ./cmd/control-plane` 编译通过，无 pgx 引用
-2. `go test ./internal/store/...` 全部通过（内存 SQLite）
-3. migrator 正确执行 24 个 SQLite 迁移文件
-4. PRAGMA journal_mode=WAL, foreign_keys=ON, busy_timeout=5000 在连接时生效
-5. Repository 层 140+ 处查询全部改为 database/sql 标准库调用
-
----
-
-## Phase 59: Admin 前端嵌入
-
-**Goal:** 将 admin 前端构建产物嵌入 Go 二进制，由 control-plane 直接提供静态文件服务。
-
-**Requirements:** UI-01, UI-02, UI-03, UI-04
-
-**Success Criteria:**
-
-1. `//go:embed` 正确嵌入 web/admin/dist/* 文件
-2. 访问 `/` 返回 index.html，访问 `/assets/*` 返回对应静态资源
-3. 访问 `/v1/*` 不被静态文件 handler 拦截，正确路由到 API
-4. Vite dev proxy target 改为 127.0.0.1:8080
-
----
-
-## Phase 60: Sing-box 探针内嵌
-
-**Goal:** 将 sing-box 二进制内置到 control-plane 镜像，探针优先使用原生二进制而非 Docker。
-
-**Requirements:** PRB-01, PRB-02
-
-**Success Criteria:**
-
-1. control-plane 镜像内 `/usr/local/bin/sing-box` 可用
-2. 探针调用时优先 `startSingBoxNative`，二进制不存在才回退 Docker
-3. 出口 IP 探针功能正常工作（SOCKS5 流量验证通过）
-
----
-
-## Phase 61: 部署精简与配置统一
-
-**Goal:** 精简 docker-compose 至 2 服务，统一所有环境变量和端口。
-
-**Requirements:** DEP-01, DEP-02, DEP-03, DEP-04, DEP-05
-
-**Success Criteria:**
-
-1. docker-compose.yml 只有 control-plane + managed-user 两个服务
-2. `DATABASE_URL=file:/data/cloud-cli-proxy.db` 正确连接 SQLite
-3. `./data` 目录映射持久化数据库文件
-4. .env / .env.example 无 POSTGRES_* 和 ADMIN_PORT 变量
-5. Makefile 无 PostgreSQL 相关目标
-6. deploy 脚本无 PostgreSQL 交互和连通性检查
-
----
-
-## Phase 62: 文档同步与测试适配
-
-**Goal:** 文档全面更新以反映新架构，单元测试适配 SQLite。
-
-**Requirements:** DOC-01, DOC-02, DOC-03, TEST-01, TEST-02
-
-**Success Criteria:**
-
-1. README 架构图显示单一 control-plane 服务（无独立 admin/PG）
-2. 文档中所有 `:3000` admin 引用改为 `:8080`
-3. 文档中所有 PostgreSQL 相关配置说明更新为 SQLite
-4. FAQ 中 PG 排障条目更新或移除
-5. `go test ./...` 全部通过（非 e2e 包）
+- ✅ **v4.2.0 容器合并 · SQLite 迁移 · 配置统一** — Phases 58-62 (shipped 2026-06-01)
+- ✅ v4.0 sing-box 同容器化 (shipped 2026-05-27)
+- ✅ v3.6 端到端测试体系与网络隔离验证 (shipped 2026-05-14)
+- ✅ v3.5 Bypass 规则与防火墙热重载 (shipped 2026-04-28)
+- ✅ v3.4 SSH 端口转发与 VS Code Remote SSH (shipped 2026-04-21)
+- ✅ v3.1 cloud-claude CLI 重构 (shipped 2026-03-30)
+- ✅ v3.0 用户入口与 SSH 接入 (shipped 2026-03-27)
+- ✅ v2.0 FUSE 与容器内 sing-box (shipped 2026-03-15)
+- ✅ v1.0 - v1.3 (Archived)
 
 ---
 
 ## Milestone History
 
-### v4.0 sing-box 同容器化 (Shipped: 2026-05-27)
+<details>
+<summary>✅ v4.2.0 容器合并 · SQLite 迁移 · 配置统一 (Phases 58-62) — SHIPPED 2026-06-01</summary>
 
-Phases 53-56, 13 plans, 25 tasks
+- [x] Phase 58: SQLite 数据库层迁移 (3/3 plans) — completed 2026-06-01
+- [x] Phase 59: Admin 前端嵌入 — completed 2026-06-01
+- [x] Phase 60: Sing-box 探针内嵌 — completed 2026-06-01
+- [x] Phase 61: 部署精简与配置统一 — completed 2026-06-01
+- [x] Phase 62: 文档同步与测试适配 — completed 2026-06-01
 
-### v3.6 端到端测试体系与网络隔离验证 (Shipped: 2026-05-14)
+21/21 requirements satisfied. See `.planning/milestones/v4.2.0-ROADMAP.md`
 
-Phases 45-52, 39 plans, 38 REQ
+</details>
 
-### v3.5 Bypass 规则与防火墙热重载 (Shipped: 2026-04-28)
+<details>
+<summary>✅ v4.0 sing-box 同容器化 (Phases 53-56) — SHIPPED 2026-05-27</summary>
 
-Phase 44-47, hot-reload + snapshot/audit + nft atomic swap
+Phases 53-56, 13 plans, 25 tasks. See `.planning/milestones/v4.0-ROADMAP.md`
 
-### v3.4 SSH 端口转发与 VS Code Remote SSH (Shipped: 2026-04-21)
+</details>
 
-Phase 38-43, port forwarding + VS Code integration
+<details>
+<summary>✅ v3.6 端到端测试体系与网络隔离验证 (Phases 45-52) — SHIPPED 2026-05-14</summary>
 
-### v3.1 cloud-claude CLI 重构 (Shipped: 2026-03-30)
+Phases 45-52, 39 plans, 38 REQ. See `.planning/milestones/v3.6-ROADMAP.md`
 
-Phase 25-30, CLI rewrite + entry script + SSH key management
+</details>
 
-### v3.0 用户入口与 SSH 接入 (Shipped: 2026-03-27)
+<details>
+<summary>✅ v3.5 Bypass 规则与防火墙热重载 (Phase 44-47) — SHIPPED 2026-04-28</summary>
 
-Phase 01-24, control plane + host agent + SSH proxy + admin UI
+Hot-reload + snapshot/audit + nft atomic swap. See `.planning/milestones/v3.5-ROADMAP.md`
 
-### v2.0 FUSE 与容器内 sing-box (Shipped: 2026-03-15)
+</details>
 
-Phase 22-28, FUSE support + sing-box in-container
+<details>
+<summary>✅ v3.4 SSH 端口转发与 VS Code Remote SSH (Phase 38-43) — SHIPPED 2026-04-21</summary>
 
-### v1.3 (Archived)
+Port forwarding + VS Code integration. See `.planning/milestones/v3.4-ROADMAP.md`
 
-Phase 18-21
+</details>
 
-### v1.1 / v1.2 (Archived)
+<details>
+<summary>✅ v3.1 cloud-claude CLI 重构 (Phase 25-30) — SHIPPED 2026-03-30</summary>
 
-Phase 09-17
+CLI rewrite + entry script + SSH key management. See `.planning/milestones/v3.1-ROADMAP.md`
 
-### v1.0 (Archived)
+</details>
 
-Phase 01-08
+<details>
+<summary>✅ v3.0 用户入口与 SSH 接入 (Phase 01-24) — SHIPPED 2026-03-27</summary>
+
+Control plane + host agent + SSH proxy + admin UI. See `.planning/milestones/v3.0-ROADMAP.md`
+
+</details>
+
+<details>
+<summary>✅ v1.0 - v2.0 (Archived)</summary>
+
+v2.0: FUSE + sing-box in-container (Phase 22-28)
+v1.3: Phase 18-21
+v1.1/v1.2: Phase 09-17
+v1.0: Phase 01-08
+
+</details>
 
 ---
 
-Last updated: 2026-06-01 after Phase 58 planning
+Last updated: 2026-06-01 after v4.2.0 milestone completion
