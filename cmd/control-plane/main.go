@@ -19,7 +19,6 @@ func main() {
 	cfg := app.Config{
 		Addr:           envOrDefault("CONTROL_PLANE_ADDR", ":8080"),
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
-		MigrationDir:   "internal/store/migrations",
 		AdminUsername:   envOrDefault("ADMIN_USERNAME", "admin"),
 		AdminPassword:  os.Getenv("ADMIN_PASSWORD"),
 		AdminJWTSecret: os.Getenv("ADMIN_JWT_SECRET"),

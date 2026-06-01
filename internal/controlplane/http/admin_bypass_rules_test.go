@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -376,7 +376,7 @@ func TestAdminBypassRulesHandler(t *testing.T) {
 	})
 
 	t.Run("Delete missing → 404", func(t *testing.T) {
-		store := &stubBypassRuleStore{getByIDErr: pgx.ErrNoRows}
+		store := &stubBypassRuleStore{getByIDErr: sql.ErrNoRows}
 		h := newRuleHandler(store, &stubBypassProxyProvider{}, &stubEventRecorder{})
 
 		r := newRuleTestRequest(t, "DELETE", "/v1/admin/bypass/rules/missing", "admin", nil)

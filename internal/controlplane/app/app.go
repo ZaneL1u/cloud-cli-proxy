@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	_ "modernc.org/sqlite"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
 	"github.com/zanel1u/cloud-cli-proxy/internal/broadcast"
@@ -22,13 +24,13 @@ import (
 	runtimetasks "github.com/zanel1u/cloud-cli-proxy/internal/runtime/tasks"
 	"github.com/zanel1u/cloud-cli-proxy/internal/sshproxy"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/migrator"
+	"github.com/zanel1u/cloud-cli-proxy/internal/store/migrations"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
 
 type Config struct {
 	Addr               string
 	DatabaseURL        string
-	MigrationDir       string
 	AdminUsername       string
 	AdminPassword      string
 	AdminJWTSecret     string
@@ -44,9 +46,9 @@ type Config struct {
 type App struct {
 	cfg           Config
 	logger        *slog.Logger
-	db            *pgxpool.Pool
+	db            *sql.DB
 	repo          *repository.Repository
-	migrator      func(context.Context, *pgxpool.Pool, string) error
+	migrator      func(context.Context, *sql.DB, embed.FS) error
 	handler       http.Handler
 	expiryScanner *scheduler.ExpiryScanner
 	reconciler    *scheduler.Reconciler
@@ -73,18 +75,25 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 	logger := newLogger()
 	broadcast.SetLogger(logger.With("component", "sse"))
 
-	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	db, err := sql.Open("sqlite", cfg.DatabaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse database url: %w", err)
+		return nil, fmt.Errorf("open database: %w", err)
 	}
-	poolCfg.MaxConns = 10
-	poolCfg.MinConns = 2
-	poolCfg.MaxConnLifetime = 30 * time.Minute
-	poolCfg.MaxConnIdleTime = 5 * time.Minute
-	db, err := pgxpool.NewWithConfig(ctx, poolCfg)
-	if err != nil {
-		return nil, fmt.Errorf("connect database: %w", err)
+
+	for _, pragma := range []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA foreign_keys=ON",
+		"PRAGMA busy_timeout=5000",
+	} {
+		if _, err := db.ExecContext(ctx, pragma); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("set %s: %w", pragma, err)
+		}
 	}
+
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(0)
 
 	repo := repository.New(db)
 
@@ -213,7 +222,7 @@ func (a *App) ensureSeedAdmin(ctx context.Context) error {
 func (a *App) Run(ctx context.Context) error {
 	defer a.db.Close()
 
-	if err := a.migrator(ctx, a.db, a.cfg.MigrationDir); err != nil {
+	if err := a.migrator(ctx, a.db, migrations.FS); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	nethttp "net/http"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
 )
@@ -74,7 +74,7 @@ func (h HostActionsHandler) handleLifecycleAction(route string, action agentapi.
 			}
 
 			status := nethttp.StatusInternalServerError
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				status = nethttp.StatusNotFound
 			}
 			writeJSON(w, status, map[string]string{"error": err.Error()})

@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/controlplane/credgen"
@@ -238,7 +238,7 @@ func (h *SSHKeyHandler) Delete() nethttp.Handler {
 		}
 
 		if err := h.store.DeleteSSHKey(r.Context(), keyID, userID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "密钥不存在"})
 				return
 			}

@@ -7,7 +7,7 @@ import (
 	nethttp "net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
@@ -15,7 +15,7 @@ import (
 
 // AdminClaudeAccountStore 暴露 Plan 02 仅需的最小集（与 AdminHostStore 风格一致）。
 type AdminClaudeAccountStore interface {
-	BeginTx(ctx context.Context) (pgx.Tx, error)
+	BeginTx(ctx context.Context) (*sql.Tx, error)
 }
 
 // HostActionRunner 抽象 host-agent 调用，让 handler 在 embedded（in-process worker）和
@@ -75,13 +75,13 @@ func (h *AdminClaudeAccountsHandler) deleteStrict(w nethttp.ResponseWriter, r *n
 	rollback := true
 	defer func() {
 		if rollback {
-			_ = tx.Rollback(context.Background())
+			_ = tx.Rollback()
 		}
 	}()
 
 	id, volumeName, err := repository.LockClaudeAccountForDelete(ctx, tx, accountID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "claude_account not found"})
 			return
 		}
@@ -118,7 +118,7 @@ func (h *AdminClaudeAccountsHandler) deleteStrict(w nethttp.ResponseWriter, r *n
 		writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "delete claude_account failed"})
 		return
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err := tx.Commit(); err != nil {
 		h.logger.Error("commit failed", "error", err)
 		writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "commit failed"})
 		return
@@ -149,8 +149,8 @@ func (h *AdminClaudeAccountsHandler) deleteForce(w nethttp.ResponseWriter, r *ne
 	}
 	id, volumeName, err := repository.LockClaudeAccountForDelete(ctx, tx, accountID)
 	if err != nil {
-		_ = tx.Rollback(ctx)
-		if errors.Is(err, pgx.ErrNoRows) {
+		_ = tx.Rollback()
+		if errors.Is(err, sql.ErrNoRows) {
 			writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "claude_account not found"})
 			return
 		}
@@ -158,12 +158,12 @@ func (h *AdminClaudeAccountsHandler) deleteForce(w nethttp.ResponseWriter, r *ne
 		return
 	}
 	if err := repository.DeleteClaudeAccountTx(ctx, tx, id); err != nil {
-		_ = tx.Rollback(ctx)
+		_ = tx.Rollback()
 		h.logger.Error("delete claude_account failed (force)", "id", id, "error", err)
 		writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "delete claude_account failed"})
 		return
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err := tx.Commit(); err != nil {
 		h.logger.Error("commit failed (force)", "error", err)
 		writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "commit failed"})
 		return

@@ -8,7 +8,7 @@ import (
 	nethttp "net/http"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -180,7 +180,7 @@ func (h *AdminBypassRulesHandler) Update() nethttp.Handler {
 		ruleID := r.PathValue("ruleID")
 		before, err := h.store.GetBypassRuleByID(r.Context(), ruleID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassRuleNotFound, "rule not found")
 				return
 			}
@@ -236,7 +236,7 @@ func (h *AdminBypassRulesHandler) Update() nethttp.Handler {
 
 		after, err := h.store.UpdateBypassRule(r.Context(), ruleID, params)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassRuleNotFound, "rule not found")
 				return
 			}
@@ -255,7 +255,7 @@ func (h *AdminBypassRulesHandler) Delete() nethttp.Handler {
 		ruleID := r.PathValue("ruleID")
 		before, err := h.store.GetBypassRuleByID(r.Context(), ruleID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassRuleNotFound, "rule not found")
 				return
 			}
@@ -265,7 +265,7 @@ func (h *AdminBypassRulesHandler) Delete() nethttp.Handler {
 		}
 
 		if err := h.store.DeleteBypassRule(r.Context(), ruleID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassRuleNotFound, "rule not found")
 				return
 			}

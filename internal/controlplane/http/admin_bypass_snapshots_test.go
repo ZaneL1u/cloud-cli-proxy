@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
 	"github.com/zanel1u/cloud-cli-proxy/internal/network"
@@ -72,7 +72,7 @@ func (s *stubBypassSnapshotStore) ListBypassBindingsByHost(_ context.Context, _ 
 func (s *stubBypassSnapshotStore) GetBypassPresetByID(_ context.Context, id string) (repository.BypassPreset, error) {
 	p, ok := s.presetByID[id]
 	if !ok {
-		return repository.BypassPreset{}, pgx.ErrNoRows
+		return repository.BypassPreset{}, sql.ErrNoRows
 	}
 	return p, nil
 }
@@ -119,7 +119,7 @@ func (s *stubBypassSnapshotStore) GetBypassSnapshotByID(_ context.Context, id st
 	s.mu.Unlock()
 	snap, ok := s.snapshotByID[id]
 	if !ok {
-		return repository.BypassSnapshot{}, pgx.ErrNoRows
+		return repository.BypassSnapshot{}, sql.ErrNoRows
 	}
 	return snap, nil
 }
@@ -235,7 +235,7 @@ func TestAdminBypassSnapshotsHandler(t *testing.T) {
 
 	t.Run("preview returns 404 when host not found", func(t *testing.T) {
 		store := newStubSnapStore()
-		store.hostErr = pgx.ErrNoRows
+		store.hostErr = sql.ErrNoRows
 		h := newSnapHandler(store, &stubHostActionQueuer{}, &stubEventRecorderSnap{})
 
 		rec := doRequest(h.Preview(), "POST", "/v1/admin/hosts/h1/bypass/preview", "h1", nil)
@@ -252,7 +252,7 @@ func TestAdminBypassSnapshotsHandler(t *testing.T) {
 		store.rules = []repository.BypassRule{
 			{ID: "r1", Scope: "host", HostID: strPtr("h1"), RuleType: "cidr", Value: "10.0.0.0/8"},
 		}
-		store.latestErr = pgx.ErrNoRows // 没有 prev applied snapshot
+		store.latestErr = sql.ErrNoRows // 没有 prev applied snapshot
 		q := &stubHostActionQueuer{returnTID: "task-7"}
 		ev := &stubEventRecorderSnap{}
 		h := newSnapHandler(store, q, ev)
@@ -350,7 +350,7 @@ func TestAdminBypassSnapshotsHandler(t *testing.T) {
 		store.rules = []repository.BypassRule{
 			{ID: "r1", Scope: "host", HostID: strPtr("h1"), RuleType: "cidr", Value: "10.0.0.0/8"},
 		}
-		store.latestErr = pgx.ErrNoRows
+		store.latestErr = sql.ErrNoRows
 		h := newSnapHandler(store, &stubHostActionQueuer{}, &stubEventRecorderSnap{})
 
 		recPrev := doRequest(h.Preview(), "POST", "/v1/admin/hosts/h1/bypass/preview", "h1", nil)
@@ -556,7 +556,7 @@ func TestAdminBypassSnapshotsHandler(t *testing.T) {
 
 	t.Run("effective returns 404 when host not found", func(t *testing.T) {
 		store := newStubSnapStore()
-		store.hostErr = pgx.ErrNoRows
+		store.hostErr = sql.ErrNoRows
 		h := newSnapHandler(store, &stubHostActionQueuer{}, &stubEventRecorderSnap{})
 		rec := doRequest(h.Effective(), "GET", "/v1/admin/hosts/h1/bypass/effective", "h1", nil)
 		if rec.Code != nethttp.StatusNotFound {
@@ -653,7 +653,7 @@ func TestConsistency_Drift(t *testing.T) {
 // 新的鉴权逻辑，复用已有 adminGuard）。
 func TestConsistency_AdminOnly(t *testing.T) {
 	store := newStubSnapStore()
-	store.hostErr = pgx.ErrNoRows
+	store.hostErr = sql.ErrNoRows
 	h := newSnapHandler(store, &stubHostActionQueuer{}, &stubEventRecorderSnap{})
 
 	called := false

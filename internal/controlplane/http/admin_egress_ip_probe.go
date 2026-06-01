@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 	"golang.org/x/net/proxy"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/containerregistry"
@@ -554,7 +554,7 @@ func runProbeStream(ctx context.Context, h *AdminEgressIPsHandler, ipID string, 
 
 	ip, err := h.store.GetEgressIP(ctx, ipID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			ch <- ProbeStreamEvent{Stage: StageError, Message: "出口 IP 不存在"}
 			return
 		}
@@ -696,7 +696,7 @@ func (h *AdminEgressIPsHandler) TestProxy() nethttp.Handler {
 		ipID := r.PathValue("ipID")
 		ip, err := h.store.GetEgressIP(ctx, ipID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "egress ip not found"})
 				return
 			}

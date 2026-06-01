@@ -10,7 +10,7 @@ import (
 	nethttp "net/http"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -148,7 +148,7 @@ func (h *AdminEgressIPsHandler) Get() nethttp.Handler {
 		ipID := r.PathValue("ipID")
 		ip, err := h.store.GetEgressIP(r.Context(), ipID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "egress ip not found"})
 				return
 			}
@@ -264,7 +264,7 @@ func (h *AdminEgressIPsHandler) Update() nethttp.Handler {
 			ProxyConfig: req.ProxyConfig,
 		})
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "egress ip not found"})
 				return
 			}
@@ -294,7 +294,7 @@ func (h *AdminEgressIPsHandler) Delete() nethttp.Handler {
 		ipID := r.PathValue("ipID")
 
 		if err := h.store.DeleteEgressIP(r.Context(), ipID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "egress ip not found"})
 				return
 			}

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
@@ -49,7 +49,7 @@ func (r *bypassReloadFakeRepo) GetBypassSnapshotByID(_ context.Context, id strin
 	if snap, ok := r.snapshotByID[id]; ok {
 		return snap, nil
 	}
-	return repository.BypassSnapshot{}, pgx.ErrNoRows
+	return repository.BypassSnapshot{}, sql.ErrNoRows
 }
 
 func (r *bypassReloadFakeRepo) UpdateBypassSnapshotStatus(_ context.Context, id, status string) (repository.BypassSnapshot, error) {
@@ -64,7 +64,7 @@ func (r *bypassReloadFakeRepo) GetLatestAppliedBypassSnapshot(_ context.Context,
 		return repository.BypassSnapshot{}, r.latestAppliedErr
 	}
 	if r.latestApplied == nil {
-		return repository.BypassSnapshot{}, pgx.ErrNoRows
+		return repository.BypassSnapshot{}, sql.ErrNoRows
 	}
 	return *r.latestApplied, nil
 }
@@ -250,7 +250,7 @@ func TestHandleReloadHostBypass_AutoRollback(t *testing.T) {
 // ===== Test 3: failed terminal =====
 
 // TestHandleReloadHostBypass_NoApplied_FailedTerminal 守护 acceptance Test 3：
-//   - 健康检查失败 + GetLatestAppliedBypassSnapshot 返回 pgx.ErrNoRows
+//   - 健康检查失败 + GetLatestAppliedBypassSnapshot 返回 sql.ErrNoRows
 //   - UpdateBypassSnapshotStatus(currentID, "failed")
 //   - RecordEvent("bypass.reload_failed")
 //   - return ErrBypassReloadFailed
@@ -260,7 +260,7 @@ func TestHandleReloadHostBypass_NoApplied_FailedTerminal(t *testing.T) {
 	current := sampleSnapshot("snap-first", "h-first", "v1")
 	repo := &bypassReloadFakeRepo{
 		snapshotByID:     map[string]repository.BypassSnapshot{current.ID: current},
-		latestAppliedErr: pgx.ErrNoRows,
+		latestAppliedErr: sql.ErrNoRows,
 	}
 	w := NewWorker(repo, nil)
 

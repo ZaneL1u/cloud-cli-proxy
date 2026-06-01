@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -147,7 +147,7 @@ func TestAdminBypassPresetsHandler(t *testing.T) {
 	})
 
 	t.Run("Get 404 when not found", func(t *testing.T) {
-		store := &stubBypassPresetStore{getErr: pgx.ErrNoRows}
+		store := &stubBypassPresetStore{getErr: sql.ErrNoRows}
 		h := newPresetHandler(store, &stubEventRecorder{})
 
 		r := newPresetTestRequest(t, "GET", "/v1/admin/bypass/presets/missing", "test-admin-id", nil)
@@ -247,7 +247,7 @@ func TestAdminBypassPresetsHandler(t *testing.T) {
 	})
 
 	t.Run("Update missing preset returns 404", func(t *testing.T) {
-		store := &stubBypassPresetStore{getErr: pgx.ErrNoRows}
+		store := &stubBypassPresetStore{getErr: sql.ErrNoRows}
 		h := newPresetHandler(store, &stubEventRecorder{})
 
 		body := map[string]any{"name": stringPtr("x")}

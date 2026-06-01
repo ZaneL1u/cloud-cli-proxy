@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
@@ -84,7 +84,7 @@ func TestBootstrapAuthHandler(t *testing.T) {
 			name: "user not found returns auth_invalid",
 			body: map[string]string{"username": "nouser", "password": "pass"},
 			userLookup: &stubUserLookup{
-				err: pgx.ErrNoRows,
+				err: sql.ErrNoRows,
 			},
 			hostLookup:      &stubHostLookup{},
 			queue:           &stubQueuer{},

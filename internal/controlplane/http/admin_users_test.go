@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -217,7 +217,7 @@ func TestAdminUsersHandler(t *testing.T) {
 			name:       "Get user 404",
 			method:     "GET",
 			path:       "/v1/admin/users/missing",
-			store:      &stubUserStore{err: pgx.ErrNoRows},
+			store:      &stubUserStore{err: sql.ErrNoRows},
 			wantStatus: 404,
 		},
 		{
@@ -247,7 +247,7 @@ func TestAdminUsersHandler(t *testing.T) {
 			name:       "Delete user 404",
 			method:     "DELETE",
 			path:       "/v1/admin/users/missing",
-			store:      &stubUserStore{deleteErr: pgx.ErrNoRows},
+			store:      &stubUserStore{deleteErr: sql.ErrNoRows},
 			wantStatus: 404,
 		},
 		{
@@ -262,7 +262,7 @@ func TestAdminUsersHandler(t *testing.T) {
 			name:       "RotatePassword 404",
 			method:     "POST",
 			path:       "/v1/admin/users/missing/rotate-password",
-			store:      &stubUserStore{updatePwdErr: pgx.ErrNoRows},
+			store:      &stubUserStore{updatePwdErr: sql.ErrNoRows},
 			wantStatus: 404,
 		},
 		{

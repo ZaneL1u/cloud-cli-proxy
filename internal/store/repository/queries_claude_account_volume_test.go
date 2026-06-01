@@ -10,7 +10,7 @@ func TestUpsertClaudeAccountPersistentVolumeNameSQL_ContainsKeyTokens(t *testing
 	must := []string{
 		"UPDATE claude_accounts",
 		"SET persistent_volume_name = ?",
-		"updated_at = NOW()",
+		"updated_at = CURRENT_TIMESTAMP",
 		"WHERE id = ? AND persistent_volume_name IS NULL",
 	}
 	for _, token := range must {

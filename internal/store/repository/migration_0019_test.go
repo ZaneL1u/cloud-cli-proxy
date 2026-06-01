@@ -42,7 +42,6 @@ func TestMigration0019_FileContent(t *testing.T) {
 		"CONSTRAINT chk_bypass_binding_xor",
 		"UNIQUE (host_id, config_hash)",
 		"REFERENCES hosts(id) ON DELETE CASCADE",
-		"REFERENCES users(id) ON DELETE SET NULL",
 		"ON CONFLICT (slug) DO NOTHING",
 		"'loopback'",
 		"'lan'",

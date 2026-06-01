@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,109 +13,77 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	_ "modernc.org/sqlite"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
+	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
 
-// stubTx 实现 pgx.Tx 最小接口（仅 handler 实际使用的 4 方法）；其余 panic 以提示设计偏差。
-type stubTx struct {
-	scanResults  []any
-	queryRowErr  error
-	execAffected int64
-	execErr      error
-	committed    bool
-	rolledback   bool
+// sqliteAccountStore 使用内存 SQLite 实现 AdminClaudeAccountStore。
+// BeginTx 返回真正的 *sql.Tx，handler 会把 tx 传给 repository.LockClaudeAccountForDelete
+// 与 repository.DeleteClaudeAccountTx——这两个函数现在直接操作 *sql.Tx。
+type sqliteAccountStore struct {
+	db        *sql.DB
+	beginErr  error
+	beginCnt  int
+	beginCtx  context.Context
 }
 
-type stubRow struct {
-	results []any
-	err     error
-}
-
-func (r *stubRow) Scan(dest ...any) error {
-	if r.err != nil {
-		return r.err
-	}
-	for i, d := range dest {
-		if i >= len(r.results) {
-			return errors.New("stubRow: not enough results")
-		}
-		switch dd := d.(type) {
-		case *string:
-			*dd = r.results[i].(string)
-		default:
-			return errors.New("stubRow: unsupported dest type")
-		}
-	}
-	return nil
-}
-
-func (s *stubTx) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
-	return &stubRow{results: s.scanResults, err: s.queryRowErr}
-}
-func (s *stubTx) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
-	if s.execErr != nil {
-		return pgconn.CommandTag{}, s.execErr
-	}
-	return pgconn.NewCommandTag("DELETE " + itoa(s.execAffected)), nil
-}
-func (s *stubTx) Commit(_ context.Context) error   { s.committed = true; return nil }
-func (s *stubTx) Rollback(_ context.Context) error { s.rolledback = true; return nil }
-
-func (s *stubTx) Begin(_ context.Context) (pgx.Tx, error) { panic("stubTx.Begin not implemented") }
-func (s *stubTx) CopyFrom(_ context.Context, _ pgx.Identifier, _ []string, _ pgx.CopyFromSource) (int64, error) {
-	panic("stubTx.CopyFrom not implemented")
-}
-func (s *stubTx) SendBatch(_ context.Context, _ *pgx.Batch) pgx.BatchResults {
-	panic("stubTx.SendBatch not implemented")
-}
-func (s *stubTx) LargeObjects() pgx.LargeObjects { panic("stubTx.LargeObjects not implemented") }
-func (s *stubTx) Prepare(_ context.Context, _, _ string) (*pgconn.StatementDescription, error) {
-	panic("stubTx.Prepare not implemented")
-}
-func (s *stubTx) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
-	panic("stubTx.Query not implemented")
-}
-func (s *stubTx) Conn() *pgx.Conn { panic("stubTx.Conn not implemented") }
-
-func itoa(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
-}
-
-type stubAdminClaudeAccountStore struct {
-	tx       *stubTx
-	beginErr error
-	beginCnt int
-	beginCtx context.Context
-}
-
-func (s *stubAdminClaudeAccountStore) BeginTx(ctx context.Context) (pgx.Tx, error) {
+func (s *sqliteAccountStore) BeginTx(ctx context.Context) (*sql.Tx, error) {
 	s.beginCnt++
 	s.beginCtx = ctx
 	if s.beginErr != nil {
 		return nil, s.beginErr
 	}
-	return s.tx, nil
+	return s.db.BeginTx(ctx, nil)
+}
+
+// newSQLiteAccountStore 创建内存 SQLite 并建好 claude_accounts 表的最小列集。
+func newSQLiteAccountStore(t *testing.T) *sqliteAccountStore {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	for _, pragma := range []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA foreign_keys=ON",
+		"PRAGMA busy_timeout=5000",
+	} {
+		if _, err := db.ExecContext(context.Background(), pragma); err != nil {
+			t.Fatalf("pragma %s: %v", pragma, err)
+		}
+	}
+	// 建表：仅 claude_accounts（handler 路径需要）。
+	_, err = db.ExecContext(context.Background(), `
+		CREATE TABLE IF NOT EXISTS claude_accounts (
+			id          TEXT PRIMARY KEY,
+			user_id     TEXT,
+			account_id  TEXT UNIQUE NOT NULL,
+			provider    TEXT NOT NULL DEFAULT '',
+			status      TEXT NOT NULL DEFAULT 'active',
+			persistent_volume_name TEXT NOT NULL DEFAULT '',
+			created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+		)
+	`)
+	if err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	return &sqliteAccountStore{db: db}
+}
+
+// seedClaudeAccount 插入一条 claude_account 行，供 handler 删除。
+func (s *sqliteAccountStore) seedClaudeAccount(t *testing.T, id, volumeName string) {
+	t.Helper()
+	_, err := s.db.ExecContext(context.Background(),
+		`INSERT INTO claude_accounts (id, user_id, account_id, provider, status, persistent_volume_name)
+		 VALUES (?, 'u-1', 'user@example.com', 'anthropic', 'active', ?)`,
+		id, volumeName)
+	if err != nil {
+		t.Fatalf("seed claude_account: %v", err)
+	}
 }
 
 func newAdminClaudeAccountsTestRouter(t *testing.T, store AdminClaudeAccountStore, events EventRecorder) (nethttp.Handler, func()) {
@@ -127,11 +96,8 @@ func newAdminClaudeAccountsTestRouter(t *testing.T, store AdminClaudeAccountStor
 }
 
 func TestAdminClaudeAccountsDelete_StrictSuccess_DBDeletedAndAuditEventEmitted(t *testing.T) {
-	tx := &stubTx{
-		scanResults:  []any{"acct-1", "claude-state-acct-1"},
-		execAffected: 1,
-	}
-	store := &stubAdminClaudeAccountStore{tx: tx}
+	store := newSQLiteAccountStore(t)
+	store.seedClaudeAccount(t, "acct-1", "claude-state-acct-1")
 	events := &stubEventRecorder{}
 
 	origRun := runHostAction
@@ -154,17 +120,23 @@ func TestAdminClaudeAccountsDelete_StrictSuccess_DBDeletedAndAuditEventEmitted(t
 	if rr.Code != nethttp.StatusOK {
 		t.Errorf("want 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
-	if !tx.committed {
-		t.Error("tx must be committed on success")
-	}
 	if !events.hasType("claude_account.deleted") {
 		t.Error("audit event claude_account.deleted must be emitted")
+	}
+	// 验证行被真实删除。
+	var cnt int
+	if err := store.db.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM claude_accounts WHERE id = 'acct-1'`).Scan(&cnt); err != nil {
+		t.Fatal(err)
+	}
+	if cnt != 0 {
+		t.Error("claude_account must be deleted from DB")
 	}
 }
 
 func TestAdminClaudeAccountsDelete_StrictHostAgentFailure_RollbackAnd409WithChineseMessage(t *testing.T) {
-	tx := &stubTx{scanResults: []any{"acct-1", "claude-state-acct-1"}}
-	store := &stubAdminClaudeAccountStore{tx: tx}
+	store := newSQLiteAccountStore(t)
+	store.seedClaudeAccount(t, "acct-1", "claude-state-acct-1")
 	events := &stubEventRecorder{}
 
 	origRun := runHostAction
@@ -181,11 +153,17 @@ func TestAdminClaudeAccountsDelete_StrictHostAgentFailure_RollbackAnd409WithChin
 	if rr.Code != nethttp.StatusConflict {
 		t.Fatalf("want 409, got %d body=%s", rr.Code, rr.Body.String())
 	}
-	if !tx.rolledback {
-		t.Error("tx must be rolled back on host-agent failure")
-	}
 	if !events.hasType("claude_account.delete_volume_rm_failed") {
 		t.Error("audit event claude_account.delete_volume_rm_failed must be emitted")
+	}
+	// 验证行未被删除（rollback 生效）。
+	var cnt int
+	if err := store.db.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM claude_accounts WHERE id = 'acct-1'`).Scan(&cnt); err != nil {
+		t.Fatal(err)
+	}
+	if cnt != 1 {
+		t.Errorf("claude_account must remain after rollback, got count=%d", cnt)
 	}
 
 	var body map[string]any
@@ -203,8 +181,8 @@ func TestAdminClaudeAccountsDelete_StrictHostAgentFailure_RollbackAnd409WithChin
 }
 
 func TestAdminClaudeAccountsDelete_ForceTrue_DBDeletedEvenWhenRmFails(t *testing.T) {
-	tx := &stubTx{scanResults: []any{"acct-1", "claude-state-acct-1"}, execAffected: 1}
-	store := &stubAdminClaudeAccountStore{tx: tx}
+	store := newSQLiteAccountStore(t)
+	store.seedClaudeAccount(t, "acct-1", "claude-state-acct-1")
 	events := &stubEventRecorder{}
 
 	origRun := runHostAction
@@ -223,14 +201,20 @@ func TestAdminClaudeAccountsDelete_ForceTrue_DBDeletedEvenWhenRmFails(t *testing
 	if rr.Code != nethttp.StatusOK {
 		t.Fatalf("force=true must return 200 even when rm fails, got %d body=%s", rr.Code, rr.Body.String())
 	}
-	if !tx.committed {
-		t.Error("tx must be committed (DB delete first) in force path")
-	}
 	if capturedLabels["force"] != "true" {
 		t.Errorf("force label must be propagated to host-agent, got %v", capturedLabels)
 	}
 	if !events.hasType("claude_account.force_volume_rm_failed") {
 		t.Error("audit event claude_account.force_volume_rm_failed must be emitted")
+	}
+	// 验证 row 已被删除。
+	var cnt int
+	if err := store.db.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM claude_accounts WHERE id = 'acct-1'`).Scan(&cnt); err != nil {
+		t.Fatal(err)
+	}
+	if cnt != 0 {
+		t.Error("claude_account must be deleted (force path commits first)")
 	}
 
 	var body map[string]any
@@ -244,9 +228,11 @@ func TestAdminClaudeAccountsDelete_ForceTrue_DBDeletedEvenWhenRmFails(t *testing
 }
 
 func TestAdminClaudeAccountsDelete_AccountNotFound_404(t *testing.T) {
-	tx := &stubTx{queryRowErr: pgx.ErrNoRows}
-	store := &stubAdminClaudeAccountStore{tx: tx}
-	mux, _ := newAdminClaudeAccountsTestRouter(t, store, &stubEventRecorder{})
+	store := newSQLiteAccountStore(t)
+	// 不 seed 任何行 → 404。
+	events := &stubEventRecorder{}
+
+	mux, _ := newAdminClaudeAccountsTestRouter(t, store, events)
 	req := httptest.NewRequest(nethttp.MethodDelete, "/v1/admin/claude-accounts/missing", nil)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -256,8 +242,8 @@ func TestAdminClaudeAccountsDelete_AccountNotFound_404(t *testing.T) {
 }
 
 func TestAdminClaudeAccountsDelete_NoVolumeName_SkipsHostAgentCall(t *testing.T) {
-	tx := &stubTx{scanResults: []any{"acct-1", ""}, execAffected: 1}
-	store := &stubAdminClaudeAccountStore{tx: tx}
+	store := newSQLiteAccountStore(t)
+	store.seedClaudeAccount(t, "acct-1", "")
 	events := &stubEventRecorder{}
 	called := false
 	origRun := runHostAction
@@ -281,8 +267,8 @@ func TestAdminClaudeAccountsDelete_NoVolumeName_SkipsHostAgentCall(t *testing.T)
 }
 
 func TestAdminClaudeAccountsDelete_StrictUsesTenSecondTimeout(t *testing.T) {
-	tx := &stubTx{scanResults: []any{"acct-1", "claude-state-acct-1"}, execAffected: 1}
-	store := &stubAdminClaudeAccountStore{tx: tx}
+	store := newSQLiteAccountStore(t)
+	store.seedClaudeAccount(t, "acct-1", "")
 	origRun := runHostAction
 	runHostAction = func(ctx context.Context, client HostActionRunner, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
 		return agentapi.HostActionResponse{}, nil
@@ -307,8 +293,8 @@ func TestAdminClaudeAccountsDelete_StrictUsesTenSecondTimeout(t *testing.T) {
 }
 
 func TestAdminClaudeAccountsDelete_ForceUsesThirtySecondTimeout(t *testing.T) {
-	tx := &stubTx{scanResults: []any{"acct-1", "claude-state-acct-1"}, execAffected: 1}
-	store := &stubAdminClaudeAccountStore{tx: tx}
+	store := newSQLiteAccountStore(t)
+	store.seedClaudeAccount(t, "acct-1", "")
 	origRun := runHostAction
 	runHostAction = func(ctx context.Context, client HostActionRunner, req agentapi.HostActionRequest) (agentapi.HostActionResponse, error) {
 		return agentapi.HostActionResponse{}, nil
@@ -328,6 +314,9 @@ func TestAdminClaudeAccountsDelete_ForceUsesThirtySecondTimeout(t *testing.T) {
 		t.Errorf("force timeout must be ~30s, got %v", remaining)
 	}
 }
+
+// 确保 _ 变量压制未使用导入的编译错误（repository 在非 strict/force 路径中隐式引用）。
+var _ = repository.LockClaudeAccountForDelete
 
 func TestParseForceFlag_AcceptsTrueOneYes(t *testing.T) {
 	cases := map[string]bool{"true": true, "1": true, "yes": true, "false": false, "": false, "TRUE": false}

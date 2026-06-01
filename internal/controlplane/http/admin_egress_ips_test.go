@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -135,7 +135,7 @@ func TestAdminEgressIPsHandler(t *testing.T) {
 			name:       "Get egress IP 404",
 			method:     "GET",
 			path:       "/v1/admin/egress-ips/missing",
-			store:      &stubEgressIPStore{err: pgx.ErrNoRows},
+			store:      &stubEgressIPStore{err: sql.ErrNoRows},
 			wantStatus: 404,
 		},
 		{
@@ -163,7 +163,7 @@ func TestAdminEgressIPsHandler(t *testing.T) {
 					"type": "socks", "server": "proxy.example.com", "server_port": 1080,
 				},
 			},
-			store:      &stubEgressIPStore{updateErr: pgx.ErrNoRows},
+			store:      &stubEgressIPStore{updateErr: sql.ErrNoRows},
 			wantStatus: 404,
 		},
 		{
@@ -177,7 +177,7 @@ func TestAdminEgressIPsHandler(t *testing.T) {
 			name:       "Delete egress IP 404",
 			method:     "DELETE",
 			path:       "/v1/admin/egress-ips/missing",
-			store:      &stubEgressIPStore{deleteErr: pgx.ErrNoRows},
+			store:      &stubEgressIPStore{deleteErr: sql.ErrNoRows},
 			wantStatus: 404,
 		},
 		{

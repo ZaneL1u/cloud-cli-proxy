@@ -12,8 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
 	"github.com/zanel1u/cloud-cli-proxy/internal/network"
@@ -98,7 +97,7 @@ func (h *AdminBypassSnapshotsHandler) collectRenderInput(ctx context.Context, ho
 		}
 		preset, perr := h.store.GetBypassPresetByID(ctx, *b.PresetID)
 		if perr != nil {
-			if errors.Is(perr, pgx.ErrNoRows) {
+			if errors.Is(perr, sql.ErrNoRows) {
 				// preset 被删但 binding 残留，跳过即可。
 				continue
 			}
@@ -203,7 +202,7 @@ func (h *AdminBypassSnapshotsHandler) Preview() nethttp.Handler {
 			return
 		}
 		if _, err := h.store.GetHost(r.Context(), hostID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassHostNotFound, "host not found")
 				return
 			}
@@ -278,7 +277,7 @@ func (h *AdminBypassSnapshotsHandler) Apply() nethttp.Handler {
 			return
 		}
 		if _, err := h.store.GetHost(r.Context(), hostID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassHostNotFound, "host not found")
 				return
 			}
@@ -436,7 +435,7 @@ func (h *AdminBypassSnapshotsHandler) Rollback() nethttp.Handler {
 			return
 		}
 		if _, err := h.store.GetHost(r.Context(), hostID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassHostNotFound, "host not found")
 				return
 			}
@@ -459,7 +458,7 @@ func (h *AdminBypassSnapshotsHandler) Rollback() nethttp.Handler {
 		// 1. 取 target snapshot
 		target, err := h.store.GetBypassSnapshotByID(r.Context(), req.TargetSnapshotID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassSnapshotNotFound, "snapshot not found")
 				return
 			}
@@ -588,7 +587,7 @@ func (h *AdminBypassSnapshotsHandler) Effective() nethttp.Handler {
 			return
 		}
 		if _, err := h.store.GetHost(r.Context(), hostID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassHostNotFound, "host not found")
 				return
 			}
@@ -654,7 +653,7 @@ func (h *AdminBypassSnapshotsHandler) Consistency() nethttp.Handler {
 			return
 		}
 		if _, err := h.store.GetHost(r.Context(), hostID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassHostNotFound, "host not found")
 				return
 			}
@@ -684,24 +683,16 @@ func (h *AdminBypassSnapshotsHandler) Consistency() nethttp.Handler {
 	})
 }
 
-// isUniqueViolation 识别 pgx / pq 返回的 UNIQUE 约束冲突错误。
+// isUniqueViolation 识别 SQLite 返回的 UNIQUE 约束冲突错误。
 // apply / rollback 幂等路径依赖该判定。
 //
-// WR-04：优先按 SQLSTATE 23505 严格匹配；若 wrap 链里能取到 pgconn.PgError
-// 就用结构化判定，避免字符串匹配把其他 PG 错误（信息含 "unique" / "duplicate"
-// 字样）误判为本约束冲突。字符串回退仅匹配 SQLSTATE 23505 + 具体约束名，
-// 不再无差别匹配关键字。测试场景把 fake error 串构造为 "duplicate key
-// value violates unique constraint host_bypass_snapshots_host_id_config_hash_key"
-// 仍可命中。
+// SQLite 的 UNIQUE constraint 错误消息包含 "UNIQUE constraint failed" 字样。
+// 字符串回退也匹配约束名，用于兼容测试场景的 fake error。
 func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false
 	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return pgErr.Code == "23505"
-	}
 	msg := err.Error()
-	return strings.Contains(msg, "23505") ||
+	return strings.Contains(msg, "UNIQUE constraint failed") ||
 		strings.Contains(msg, "host_bypass_snapshots_host_id_config_hash_key")
 }

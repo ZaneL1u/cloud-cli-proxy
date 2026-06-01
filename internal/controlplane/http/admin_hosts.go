@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
 	"github.com/zanel1u/cloud-cli-proxy/internal/controlplane/credgen"
@@ -103,7 +103,7 @@ func (h *AdminHostsHandler) Get() nethttp.Handler {
 		hostID := r.PathValue("hostID")
 		detail, err := h.store.GetHostDetail(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -116,7 +116,7 @@ func (h *AdminHostsHandler) Get() nethttp.Handler {
 		// Phase 33 D-22：从 LEFT JOIN 取 persistent_volume_name，失败仅记日志不影响 detail 主路径。
 		if hostWithCA, err := h.store.GetHostWithClaudeAccount(r.Context(), hostID); err == nil {
 			resp.PersistentVolumeName = hostWithCA.PersistentVolumeName
-		} else if !errors.Is(err, pgx.ErrNoRows) {
+		} else if !errors.Is(err, sql.ErrNoRows) {
 			h.logger.Warn("get host with claude_account failed (degraded)", "host_id", hostID, "error", err)
 		}
 		resp.User.PasswordHash = ""
@@ -189,7 +189,7 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 		}
 
 		if _, err := h.store.GetUser(r.Context(), body.UserID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "user not found"})
 				return
 			}
@@ -309,7 +309,7 @@ func (h *AdminHostsHandler) lifecycleAction(action agentapi.HostAction) nethttp.
 
 		task, err := h.queue.QueueHostAction(r.Context(), hostID, action, "admin", "")
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -344,7 +344,7 @@ func (h *AdminHostsHandler) Delete() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -393,7 +393,7 @@ func (h *AdminHostsHandler) RestartVNC() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -443,7 +443,7 @@ func (h *AdminHostsHandler) ChangeRootPassword() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -569,7 +569,7 @@ func (h *AdminHostsHandler) ExportConfig() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -648,7 +648,7 @@ func (h *AdminHostsHandler) ImportConfig() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -710,7 +710,7 @@ func (h *AdminHostsHandler) GetClaudeSettings() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -759,7 +759,7 @@ func (h *AdminHostsHandler) UpdateClaudeSettings() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -816,7 +816,7 @@ func (h *AdminHostsHandler) GetClaudeInfo() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -904,7 +904,7 @@ func (h *AdminHostsHandler) GetClaudeStatus() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -971,7 +971,7 @@ func (h *AdminHostsHandler) UpdateClaude() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -1128,7 +1128,7 @@ func (h *AdminHostsHandler) PatchResources() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -1210,7 +1210,7 @@ func (h *AdminHostsHandler) GetLogs() nethttp.Handler {
 
 		_, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}

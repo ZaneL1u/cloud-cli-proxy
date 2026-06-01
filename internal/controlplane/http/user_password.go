@@ -9,7 +9,7 @@ import (
 	nethttp "net/http"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
@@ -66,7 +66,7 @@ func (h *UserPasswordHandler) ChangePassword() nethttp.Handler {
 
 		user, err := h.store.GetUser(r.Context(), userID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "user not found"})
 				return
 			}
@@ -88,7 +88,7 @@ func (h *UserPasswordHandler) ChangePassword() nethttp.Handler {
 		}
 
 		if err := h.store.UpdateUserPassword(r.Context(), userID, string(hash)); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "user not found"})
 				return
 			}

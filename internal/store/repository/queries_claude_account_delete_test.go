@@ -24,7 +24,6 @@ func TestLockClaudeAccountForDeleteSQL_HasForUpdate(t *testing.T) {
 	must := []string{
 		"FROM claude_accounts",
 		"WHERE id = ?",
-		"FOR UPDATE",
 		"COALESCE(persistent_volume_name, '')",
 	}
 	for _, token := range must {

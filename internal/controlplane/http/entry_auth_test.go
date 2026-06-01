@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
@@ -153,7 +153,7 @@ func TestEntryAuth_Ready_ViaUsername_V3Image(t *testing.T) {
 func TestEntryAuth_Ready_ViaUsernameFallback_V3Image(t *testing.T) {
 	hash := mustBcrypt(t, "correct-horse")
 	store := &stubEntryStore{
-		hostAuthErr: pgx.ErrNoRows,
+		hostAuthErr: sql.ErrNoRows,
 		userByUsername: repository.User{
 			ID: "u-99", Username: "bob", Status: "active", Role: "user", PasswordHash: hash,
 			EntryPassword: "host-pwd",

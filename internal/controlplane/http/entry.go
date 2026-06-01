@@ -9,7 +9,7 @@ import (
 	nethttp "net/http"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/runtime"
@@ -151,7 +151,7 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 			// 一期兼容：username 查不到时，尝试按旧 short_id 查 user 再 fallback 到 primary host
 			u, err := h.store.GetUserByUsername(r.Context(), username)
 			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
+				if errors.Is(err, sql.ErrNoRows) {
 					writeJSON(w, nethttp.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 					return
 				}
@@ -162,7 +162,7 @@ func (h *EntryHandler) Auth() nethttp.Handler {
 			user = u
 			primaryHost, err := h.store.GetPrimaryHostByUserID(r.Context(), user.ID)
 			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
+				if errors.Is(err, sql.ErrNoRows) {
 					writeJSON(w, nethttp.StatusNotFound, map[string]string{
 						"error":  "no host assigned",
 						"status": "no_host",

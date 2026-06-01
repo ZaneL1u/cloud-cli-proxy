@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	nethttp "net/http"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -45,7 +45,7 @@ func (h *bootstrapHandoffHandler) ServeHTTP(w nethttp.ResponseWriter, r *nethttp
 
 	task, err := h.tasks.GetTaskByID(r.Context(), taskID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			writeBootstrapError(w, nethttp.StatusNotFound, "task_not_found", "任务不存在")
 			return
 		}

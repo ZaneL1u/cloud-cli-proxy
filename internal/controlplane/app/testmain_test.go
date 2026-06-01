@@ -13,7 +13,7 @@ import (
 //   - internal/broadcast.(*Hub).cleanupLoop：跨包包级 init 启动的 SSE 清理
 //     goroutine（不退出，设计内）。
 //
-// 后续 pgx pool background health check / sing-box 等若被触达再追加。
+// 后续若 SQLite 连接或 sing-box 等被触达再追加。
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m,
 		goleak.IgnoreTopFunction("github.com/zanel1u/cloud-cli-proxy/internal/broadcast.(*Hub).cleanupLoop"),

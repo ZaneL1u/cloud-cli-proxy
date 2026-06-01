@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	nethttp "net/http"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
@@ -68,7 +68,7 @@ func (h *bootstrapAuthHandler) ServeHTTP(w nethttp.ResponseWriter, r *nethttp.Re
 
 	user, err := h.users.GetBootstrapUserByUsername(r.Context(), req.Username)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			h.recordAuthEvent(r.Context(), nil, req.Username, "invalid_credentials")
 			writeBootstrapError(w, nethttp.StatusUnauthorized, "auth_invalid", "用户名或密码错误")
 			return
@@ -103,7 +103,7 @@ func (h *bootstrapAuthHandler) ServeHTTP(w nethttp.ResponseWriter, r *nethttp.Re
 
 	host, err := h.hosts.GetPrimaryHostByUserID(r.Context(), user.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			writeBootstrapError(w, nethttp.StatusNotFound, "host_not_found", "未找到可用主机，请联系管理员分配")
 			return
 		}

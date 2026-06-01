@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
 	"github.com/zanel1u/cloud-cli-proxy/internal/broadcast"
@@ -106,7 +106,7 @@ func NewService(
 func (s *Service) QueueHostAction(ctx context.Context, hostID string, action agentapi.HostAction, requestedBy string, bypassSnapshotID string) (repository.Task, error) {
 	host, err := s.repo.GetHost(ctx, hostID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return repository.Task{}, fmt.Errorf("host %s not found: %w", hostID, err)
 		}
 		return repository.Task{}, fmt.Errorf("load host: %w", err)
@@ -119,7 +119,7 @@ func (s *Service) QueueHostAction(ctx context.Context, hostID string, action age
 
 	owner, err := s.repo.GetUser(ctx, host.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return repository.Task{}, fmt.Errorf("host owner user %s not found: %w", host.UserID, err)
 		}
 		return repository.Task{}, fmt.Errorf("load host owner user: %w", err)

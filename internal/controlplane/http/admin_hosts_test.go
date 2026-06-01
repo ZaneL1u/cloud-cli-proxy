@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
@@ -131,7 +131,7 @@ func TestAdminHostsHandler(t *testing.T) {
 			name:       "Get host 404",
 			method:     "GET",
 			path:       "/v1/admin/hosts/missing",
-			hostStore:  &stubHostStore{detailErr: pgx.ErrNoRows},
+			hostStore:  &stubHostStore{detailErr: sql.ErrNoRows},
 			queue:      &stubQueuer{},
 			wantStatus: 404,
 		},
@@ -150,7 +150,7 @@ func TestAdminHostsHandler(t *testing.T) {
 			method:     "POST",
 			path:       "/v1/admin/hosts/missing/start",
 			hostStore:  &stubHostStore{},
-			queue:      &stubQueuer{err: pgx.ErrNoRows},
+			queue:      &stubQueuer{err: sql.ErrNoRows},
 			wantStatus: 404,
 		},
 		{
@@ -185,7 +185,7 @@ func TestAdminHostsHandler(t *testing.T) {
 			name:       "Restart VNC host 404",
 			method:     "POST",
 			path:       "/v1/admin/hosts/missing/vnc/restart",
-			hostStore:  &stubHostStore{hostErr: pgx.ErrNoRows},
+			hostStore:  &stubHostStore{hostErr: sql.ErrNoRows},
 			queue:      &stubQueuer{},
 			wantStatus: 404,
 		},

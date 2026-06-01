@@ -8,7 +8,7 @@ import (
 	nethttp "net/http"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -134,7 +134,7 @@ func (h *AdminBypassBindingsHandler) Unbind() nethttp.Handler {
 			return
 		}
 		if err := h.store.DeleteBypassBinding(r.Context(), bindingID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassBindingNotFound, "binding not found")
 				return
 			}

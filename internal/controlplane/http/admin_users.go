@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/controlplane/credgen"
@@ -66,7 +66,7 @@ func (h *AdminUsersHandler) Get() nethttp.Handler {
 
 		user, err := h.store.GetUser(r.Context(), userID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "user not found"})
 				return
 			}
@@ -206,7 +206,7 @@ func (h *AdminUsersHandler) RegenerateCredentials() nethttp.Handler {
 
 		user, err := h.store.GetUser(r.Context(), userID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "user not found"})
 				return
 			}
@@ -292,7 +292,7 @@ func (h *AdminUsersHandler) UpdateStatus() nethttp.Handler {
 
 		user, err := h.store.UpdateUserStatus(r.Context(), userID, req.Status)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "user not found"})
 				return
 			}
@@ -347,7 +347,7 @@ func (h *AdminUsersHandler) UpdateExpiry() nethttp.Handler {
 
 		user, err := h.store.UpdateUserExpiry(r.Context(), userID, expiresAt)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "user not found"})
 				return
 			}
@@ -381,7 +381,7 @@ func (h *AdminUsersHandler) Delete() nethttp.Handler {
 		userID := r.PathValue("userID")
 
 		if err := h.store.DeleteUser(r.Context(), userID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "user not found"})
 				return
 			}
@@ -459,7 +459,7 @@ func (h *AdminUsersHandler) RotatePassword() nethttp.Handler {
 		}
 
 		if err := h.store.UpdateUserPassword(r.Context(), userID, string(hash)); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "user not found"})
 				return
 			}

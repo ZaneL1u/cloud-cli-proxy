@@ -8,7 +8,7 @@ import (
 	nethttp "net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
@@ -53,7 +53,7 @@ func (h *UnifiedLoginHandler) ServeHTTP(w nethttp.ResponseWriter, r *nethttp.Req
 
 	user, err := h.store.GetUserByLoginIdentifierForAuth(r.Context(), req.Username)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			writeJSON(w, nethttp.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 			return
 		}

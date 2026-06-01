@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -26,7 +26,7 @@ type stubBindingStore struct {
 	hostIDErr error
 	// Phase 51 Plan 09：双绑 pre-check 字段。
 	// existingEgressHostID = 当前 egress_ip_id 已绑定到的 host_id；
-	// existingEgressErr = lookup error；默认 pgx.ErrNoRows 表示「未绑定」。
+	// existingEgressErr = lookup error；默认 sql.ErrNoRows 表示「未绑定」。
 	existingEgressHostID string
 	existingEgressErr    error
 }
@@ -53,7 +53,7 @@ func (s *stubBindingStore) GetBindingHostIDByEgressIP(_ context.Context, _ strin
 	}
 	if s.existingEgressHostID == "" {
 		// 默认行为：未配置 stub 字段 → 视为未绑定（与 Phase 47 之前测试预期一致）
-		return "", pgx.ErrNoRows
+		return "", sql.ErrNoRows
 	}
 	return s.existingEgressHostID, nil
 }
@@ -108,7 +108,7 @@ func TestAdminBindingsHandler(t *testing.T) {
 			path:   "/v1/admin/bindings",
 			body:   map[string]string{"host_id": "missing", "egress_ip_id": "ip1"},
 			store: &stubBindingStore{
-				hostErr: pgx.ErrNoRows,
+				hostErr: sql.ErrNoRows,
 			},
 			wantStatus: 404,
 		},
@@ -136,7 +136,7 @@ func TestAdminBindingsHandler(t *testing.T) {
 			method: "DELETE",
 			path:   "/v1/admin/bindings/missing",
 			store: &stubBindingStore{
-				hostIDErr: pgx.ErrNoRows,
+				hostIDErr: sql.ErrNoRows,
 			},
 			wantStatus: 404,
 		},

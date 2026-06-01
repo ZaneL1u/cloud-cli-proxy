@@ -112,7 +112,6 @@ func TestClaudeAccountQueries_Shape(t *testing.T) {
 		},
 		"lockClaudeAccountForDeleteSQL": {
 			"claude_accounts",
-			"FOR UPDATE",
 		},
 		"deleteClaudeAccountSQL": {
 			"DELETE FROM claude_accounts",

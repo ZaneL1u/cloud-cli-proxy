@@ -8,7 +8,7 @@ import (
 	nethttp "net/http"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -56,7 +56,7 @@ func (h *AdminBypassPresetsHandler) Get() nethttp.Handler {
 		presetID := r.PathValue("presetID")
 		p, err := h.store.GetBypassPresetByID(r.Context(), presetID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassPresetNotFound, "preset not found")
 				return
 			}
@@ -154,7 +154,7 @@ func (h *AdminBypassPresetsHandler) Update() nethttp.Handler {
 		// before 快照（用于 audit log diff）。
 		before, getErr := h.store.GetBypassPresetByID(r.Context(), presetID)
 		if getErr != nil {
-			if errors.Is(getErr, pgx.ErrNoRows) {
+			if errors.Is(getErr, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassPresetNotFound, "preset not found")
 				return
 			}
@@ -202,7 +202,7 @@ func (h *AdminBypassPresetsHandler) Update() nethttp.Handler {
 				writeBypassError(w, nethttp.StatusForbidden, ErrCodeBypassPresetImmutable, "system preset is immutable")
 				return
 			}
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassPresetNotFound, "preset not found")
 				return
 			}
@@ -223,7 +223,7 @@ func (h *AdminBypassPresetsHandler) Delete() nethttp.Handler {
 		// before 快照（用于 audit log diff）。
 		before, getErr := h.store.GetBypassPresetByID(r.Context(), presetID)
 		if getErr != nil {
-			if errors.Is(getErr, pgx.ErrNoRows) {
+			if errors.Is(getErr, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassPresetNotFound, "preset not found")
 				return
 			}
@@ -237,7 +237,7 @@ func (h *AdminBypassPresetsHandler) Delete() nethttp.Handler {
 				writeBypassError(w, nethttp.StatusForbidden, ErrCodeBypassPresetImmutable, "system preset is immutable")
 				return
 			}
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeBypassError(w, nethttp.StatusNotFound, ErrCodeBypassPresetNotFound, "preset not found")
 				return
 			}

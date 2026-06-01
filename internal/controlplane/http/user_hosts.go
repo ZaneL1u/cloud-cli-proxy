@@ -8,7 +8,7 @@ import (
 	nethttp "net/http"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/agentapi"
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
@@ -70,7 +70,7 @@ func (h *UserHostsHandler) Get() nethttp.Handler {
 		// Ownership check: fetch host first
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -154,7 +154,7 @@ func (h *UserHostsHandler) RestartVNC() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -213,7 +213,7 @@ func (h *UserHostsHandler) Rebuild() nethttp.Handler {
 		// Ownership check
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}

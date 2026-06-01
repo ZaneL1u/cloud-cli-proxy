@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	nethttp "net/http"
 
-	"github.com/jackc/pgx/v5"
+	"database/sql"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/store/repository"
 )
@@ -18,7 +18,7 @@ type AdminBindingStore interface {
 	UnbindEgressIPFromHost(context.Context, string) error
 	GetBindingHostID(context.Context, string) (string, error)
 	// GetBindingHostIDByEgressIP Phase 51 Plan 09：返回该 egress IP 当前绑定
-	// 的 host_id；row 不存在时返回 pgx.ErrNoRows。
+	// 的 host_id；row 不存在时返回 sql.ErrNoRows。
 	GetBindingHostIDByEgressIP(context.Context, string) (string, error)
 }
 
@@ -58,7 +58,7 @@ func (h *AdminBindingsHandler) Bind() nethttp.Handler {
 
 		host, err := h.store.GetHost(r.Context(), req.HostID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
@@ -79,7 +79,7 @@ func (h *AdminBindingsHandler) Bind() nethttp.Handler {
 		// host_egress_bindings 表的 UNIQUE (host_id, egress_ip_id) 复合键兜底
 		// 重复 row（行为不变）。
 		existingHostID, lookupErr := h.store.GetBindingHostIDByEgressIP(r.Context(), req.EgressIPID)
-		if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
+		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
 			h.logger.Error("check existing binding by egress ip failed",
 				"egress_ip_id", req.EgressIPID, "error", lookupErr)
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{
@@ -126,7 +126,7 @@ func (h *AdminBindingsHandler) Unbind() nethttp.Handler {
 
 		hostID, err := h.store.GetBindingHostID(r.Context(), bindingID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "binding not found"})
 				return
 			}
@@ -148,7 +148,7 @@ func (h *AdminBindingsHandler) Unbind() nethttp.Handler {
 		}
 
 		if err := h.store.UnbindEgressIPFromHost(r.Context(), bindingID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "binding not found"})
 				return
 			}
