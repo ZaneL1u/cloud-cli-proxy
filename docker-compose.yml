@@ -4,7 +4,7 @@ services:
     pull_policy: always
     restart: unless-stopped
     environment:
-      DATABASE_URL: file:/data/cloud-cli-proxy.db
+      DATABASE_URL: file:/data/cloud-cli-proxy.db?_texttotime=true
       CONTROL_PLANE_ADDR: ":8080"
       HOST_AGENT_MODE: embedded
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
@@ -12,6 +12,7 @@ services:
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?Set ADMIN_JWT_SECRET in .env}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      SKIP_EGRESS_VERIFY: ${SKIP_EGRESS_VERIFY:-}
       CONTAINER_REGISTRY: ${CONTAINER_REGISTRY:-}
     ports:
       - "${SSH_PROXY_PORT:-2222}:2222"

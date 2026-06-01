@@ -10,49 +10,40 @@ import (
 	"testing"
 )
 
-// migration0014Filename 是 Phase 30 Plan 01 落地的 migration 文件名。
-// 对齐 30-CONTEXT D-10（紧随现存 0013 之后，无跳号）。
-const migration0014Filename = "0014_claude_account_persistent_volume.sql"
+// initialMigrationFile 是整合后的初始 migration 文件名。
+const initialMigrationFile = "0001_initial.sql"
 
-// TestMigration0014_FileContent 验证 migration 0014 的内容语义（D-01/D-02/D-10）。
-//   - 使用 ADD COLUMN IF NOT EXISTS 保持幂等，兼容空库与 v2.0 升级库。
-//   - 列类型 TEXT，且不能使用空字符串默认值（避免三态，NULL = 未分配）。
-//   - 文件中必须包含 down 路径注释（DROP COLUMN IF EXISTS）以便后续回滚指令清晰。
+// TestMigration0014_FileContent 验证 claude_accounts 表的 persistent_volume_name 列语义（D-01/D-02/D-10）。
 func TestMigration0014_FileContent(t *testing.T) {
-	path := filepath.Join("..", "migrations", migration0014Filename)
+	path := filepath.Join("..", "migrations", initialMigrationFile)
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("读取 migration 失败（%s）: %v", migration0014Filename, err)
+		t.Fatalf("读取 migration 失败（%s）: %v", initialMigrationFile, err)
 	}
 	content := string(raw)
 
 	mustContain := []string{
 		"claude_accounts",
 		"persistent_volume_name",
-		"ADD COLUMN IF NOT EXISTS persistent_volume_name",
-		"TEXT",
-		"DROP COLUMN IF EXISTS persistent_volume_name",
 	}
 	for _, token := range mustContain {
 		if !strings.Contains(content, token) {
-			t.Errorf("migration 0014 必须包含 %q，当前内容:\n%s", token, content)
+			t.Errorf("migration 必须包含 %q", token)
 		}
 	}
 
 	forbidden := []string{
-		"DEFAULT ''",
-		"DEFAULT \"\"",
-		"NOT NULL",
+		"persistent_volume_name TEXT NOT NULL DEFAULT ''",
+		"persistent_volume_name TEXT NOT NULL DEFAULT \"\"",
 	}
 	for _, token := range forbidden {
 		if strings.Contains(content, token) {
-			t.Errorf("migration 0014 不得包含 %q（D-02：NULL 表示未分配，禁止三态）", token)
+			t.Errorf("migration 不得包含 %q（D-02：NULL 表示未分配，禁止三态）", token)
 		}
 	}
 }
 
 // TestClaudeAccount_PersistentVolumeNameNullable 验证仓储模型通过 *string 支持 NULL 语义。
-// D-02：NULL = 未分配；非空字符串 = 已分配的 Docker named volume 名称。
 func TestClaudeAccount_PersistentVolumeNameNullable(t *testing.T) {
 	typ := reflect.TypeOf(ClaudeAccount{})
 	field, ok := typ.FieldByName("PersistentVolumeName")
@@ -70,7 +61,6 @@ func TestClaudeAccount_PersistentVolumeNameNullable(t *testing.T) {
 		t.Errorf("json tag 必须包含 omitempty，未分配时省略字段；实际为 %q", jsonTag)
 	}
 
-	// JSON 回路：未分配序列化应省略字段；已分配应序列化为字符串。
 	unassigned := ClaudeAccount{ID: "a"}
 	b, err := json.Marshal(unassigned)
 	if err != nil {
@@ -91,8 +81,6 @@ func TestClaudeAccount_PersistentVolumeNameNullable(t *testing.T) {
 	}
 }
 
-// TestHostSSHAuth_HasTemplateImageRef 验证 HostSSHAuth 暴露 TemplateImageRef，
-// 供 Wave 2 的 Entry API 推导 image_version / supports_* 能力字段（D-05/D-06/D-07）。
 func TestHostSSHAuth_HasTemplateImageRef(t *testing.T) {
 	typ := reflect.TypeOf(HostSSHAuth{})
 	field, ok := typ.FieldByName("TemplateImageRef")
@@ -104,8 +92,6 @@ func TestHostSSHAuth_HasTemplateImageRef(t *testing.T) {
 	}
 }
 
-// TestResolveClaudeAccountQueries_MatchD05 锁定 D-05 的 SQL 解析顺序，
-// 避免后续改动悄悄破坏「host 绑定优先、user fallback」的确定性。
 func TestResolveClaudeAccountQueries_MatchD05(t *testing.T) {
 	hostQuery := resolveClaudeAccountByHostSQL
 	fallbackQuery := resolveClaudeAccountByUserFallbackSQL
@@ -125,9 +111,6 @@ func TestResolveClaudeAccountQueries_MatchD05(t *testing.T) {
 	}
 }
 
-// TestResolveClaudeAccountIDForEntry_Signature 使用反射确认 Repository 暴露
-// ResolveClaudeAccountIDForEntry(ctx, userID, hostID) (string, bool, error) 签名，
-// 以契约形式让 Wave 2 的 Entry API 可直接消费。
 func TestResolveClaudeAccountIDForEntry_Signature(t *testing.T) {
 	repoType := reflect.TypeOf((*Repository)(nil))
 	method, ok := repoType.MethodByName("ResolveClaudeAccountIDForEntry")
@@ -135,7 +118,6 @@ func TestResolveClaudeAccountIDForEntry_Signature(t *testing.T) {
 		t.Fatalf("Repository 必须暴露 ResolveClaudeAccountIDForEntry 方法")
 	}
 
-	// 方法集包含 receiver；预期签名为 (*Repository, context.Context, string, string) (string, bool, error)。
 	mt := method.Type
 	if mt.NumIn() != 4 {
 		t.Fatalf("ResolveClaudeAccountIDForEntry 参数数量错误：want 4 (含 receiver)，got %d", mt.NumIn())
@@ -163,17 +145,12 @@ func TestResolveClaudeAccountIDForEntry_Signature(t *testing.T) {
 	}
 }
 
-// TestWave1_DataLayerBoundary 保护 Phase 30 Plan 01 只覆盖 migration + repository 变更，
-// 避免在数据层提前引入 Wave 2（HTTP / cloudclaude）的职责。
-// 任一违约都说明波次边界被破坏（D-11/D-12，ROADMAP Phase 30 Scope）。
 func TestWave1_DataLayerBoundary(t *testing.T) {
-	// 1) Wave 1 的关键产物必须存在且位于 internal/store/**。
-	migrationPath := filepath.Join("..", "migrations", migration0014Filename)
+	migrationPath := filepath.Join("..", "migrations", initialMigrationFile)
 	if _, err := os.Stat(migrationPath); err != nil {
 		t.Fatalf("Wave 1 必须交付 %s：%v", migrationPath, err)
 	}
 
-	// 2) D-05 两条查询必须保持参数化、非字符串拼接（T-30-01 缓解）。
 	sqls := map[string]string{
 		"resolveClaudeAccountByHostSQL":         resolveClaudeAccountByHostSQL,
 		"resolveClaudeAccountByUserFallbackSQL": resolveClaudeAccountByUserFallbackSQL,
@@ -187,7 +164,6 @@ func TestWave1_DataLayerBoundary(t *testing.T) {
 		}
 	}
 
-	// 3) 数据层只应位于 internal/store/**；断言当前测试文件的归属路径。
 	abs, err := filepath.Abs(".")
 	if err != nil {
 		t.Fatalf("resolve cwd: %v", err)

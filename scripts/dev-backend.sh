@@ -29,7 +29,7 @@ build() {
 }
 
 start() {
-    HOST_AGENT_MODE=embedded DATA_DIR="$DATA_DIR" "$BIN" &
+    HOST_AGENT_MODE=embedded DATA_DIR="$DATA_DIR" DATABASE_URL="file:${DATA_DIR}/cloud-cli-proxy.db?_texttotime=true" "$BIN" &
     PID=$!
     echo "[dev-backend] started (PID $PID)"
 }

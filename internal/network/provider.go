@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"log/slog"
+	"os"
 	"runtime"
 )
 
@@ -41,12 +42,16 @@ type NetworkVerifier interface {
 }
 
 // NewProvider 返回平台适配的 Provider 实现。
-// 内部根据 runtime.GOOS 选择 NetworkVerifier：
-//   - Linux：DockerVerifier，通过 docker exec 进入容器做真实网络验证
-//   - 非 Linux：NopVerifier，返回 safe-pass 结果不阻塞开发
+//
+// Verifier 选择规则（按优先级）：
+//   1. SKIP_EGRESS_VERIFY=true → NopVerifier（Windows/macOS Docker Desktop 开发环境）
+//   2. runtime.GOOS != "linux" → NopVerifier（非 Linux 原生环境）
+//   3. 默认 → DockerVerifier（Linux 生产环境，通过 docker exec 做真实网络验证）
 func NewProvider(logger *slog.Logger) Provider {
 	var verifier NetworkVerifier
-	if runtime.GOOS == "linux" {
+	if os.Getenv("SKIP_EGRESS_VERIFY") == "true" {
+		verifier = &NopVerifier{}
+	} else if runtime.GOOS == "linux" {
 		verifier = &DockerVerifier{}
 	} else {
 		verifier = &NopVerifier{}

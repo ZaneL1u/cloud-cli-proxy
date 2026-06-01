@@ -1,4 +1,0 @@
-ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS ssh_public_key  TEXT DEFAULT '',
-    ADD COLUMN IF NOT EXISTS ssh_private_key TEXT DEFAULT '',
-    ADD COLUMN IF NOT EXISTS ssh_key_type    TEXT DEFAULT '';
