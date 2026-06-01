@@ -10,10 +10,11 @@
 
 1. `journalctl -u cloud-cli-proxy-control-plane --no-pager -n 50`
 2. `grep DATABASE_URL /etc/cloud-cli-proxy/env`
-3. `systemctl status postgresql`
+3. `file /data/cloud-cli-proxy.db` — 检查数据库文件是否存在
+4. `sqlite3 /data/cloud-cli-proxy.db "PRAGMA integrity_check"` — 检查数据库完整性
 4. `ss -tlnp | grep 8080`
 
-**原因与修复：** 数据库连不上则检查 PostgreSQL 状态并修正连接串；端口被占用则停掉冲突进程或改 `CONTROL_PLANE_ADDR`；权限问题则确认 `cloudproxy` 用户有数据库权限。
+**原因与修复：** 数据库连不上则检查 SQLite 文件和路径；端口被占用则停掉冲突进程或改 `CONTROL_PLANE_ADDR`；权限问题则确认 `cloudproxy` 用户有数据库权限。
 
 ### 用户无法登录
 
@@ -52,8 +53,6 @@ bootstrap 脚本提示"认证失败"。
 日志出现 `too many connections`。
 
 ```bash
-sudo -u postgres psql -c "SELECT count(*) FROM pg_stat_activity WHERE datname='cloudproxy'"
-sudo -u postgres psql -c "SHOW max_connections"
 ```
 
 临时释放重启控制面，长期调大 `max_connections`。
@@ -106,9 +105,7 @@ sudo -u postgres psql -c "SHOW max_connections"
 
 ```bash
 systemctl stop cloud-cli-proxy-control-plane
-sudo -u postgres psql -c "DROP DATABASE cloudproxy"
-sudo -u postgres psql -c "CREATE DATABASE cloudproxy OWNER cloudproxy"
-pg_restore -d cloudproxy /var/backups/cloud-cli-proxy/latest.dump
+cp /var/backups/cloud-cli-proxy/cloud-cli-proxy.db /data/cloud-cli-proxy.db
 systemctl start cloud-cli-proxy-control-plane
 ```
 

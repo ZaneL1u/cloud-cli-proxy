@@ -61,7 +61,7 @@ curl http://127.0.0.1:8080/healthz
 服务地址：
 
 - **API**：`http://YOUR_HOST:8080`
-- **管理后台**：`http://YOUR_HOST:3000`
+- **管理后台（内嵌）**：`http://YOUR_HOST:8080`
 - **SSH 代理**：`YOUR_HOST:2222`
 
 ## 给用户开机器
@@ -341,12 +341,12 @@ make dev      # 后端 + 前端热重载
 启动后：
 
 - Admin 前端：`http://localhost:2568`
-- Control Plane API：`http://127.0.0.1:8090`
+- Control Plane API：`http://127.0.0.1:8080`
 
 ### 3. 验证
 
 ```bash
-curl http://127.0.0.1:8090/healthz
+curl http://127.0.0.1:8080/healthz
 make test
 ```
 

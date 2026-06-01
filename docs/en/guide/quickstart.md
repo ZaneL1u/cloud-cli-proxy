@@ -61,7 +61,7 @@ curl http://127.0.0.1:8080/healthz
 Service endpoints:
 
 - **API**: `http://YOUR_HOST:8080`
-- **Admin dashboard**: `http://YOUR_HOST:3000`
+- **Admin dashboard (embedded)**: `http://YOUR_HOST:8080`
 - **SSH proxy**: `YOUR_HOST:2222`
 
 ## Provisioning Users
@@ -341,12 +341,12 @@ make dev      # backend + frontend hot reload
 After startup:
 
 - Admin frontend: `http://localhost:2568`
-- Control Plane API: `http://127.0.0.1:8090`
+- Control Plane API: `http://127.0.0.1:8080`
 
 ### 3. Verify
 
 ```bash
-curl http://127.0.0.1:8090/healthz
+curl http://127.0.0.1:8080/healthz
 make test
 ```
 

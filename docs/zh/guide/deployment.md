@@ -47,7 +47,7 @@ docker compose up -d
 
 启动后：
 
-- 管理后台：`http://YOUR_HOST:3000`
+  - 管理后台（内嵌）：`http://YOUR_HOST:8080`
 - API：`http://YOUR_HOST:8080`
 
 验证：

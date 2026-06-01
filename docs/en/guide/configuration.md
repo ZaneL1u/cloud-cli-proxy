@@ -62,20 +62,17 @@ Create `/etc/cloud-cli-proxy/env` (systemd deployment) or `.env` (Docker Compose
 | `LOG_FORMAT` | No | `json` | Log format: `json` / `text` |
 | `LOG_LEVEL` | No | `info` | Log level: `debug` / `info` / `warn` / `error` |
 
-#### Database (Docker Compose built-in PostgreSQL)
+#### Database (SQLite)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DB_MODE` | No | `docker` | `docker` built-in / `external` |
-| `POSTGRES_DB` | No | `cloudproxy` | Database name |
-| `POSTGRES_USER` | No | `cloudproxy` | Database user |
-| `POSTGRES_PASSWORD` | Yes (docker) | — | Database password |
+| `DATABASE_URL` | No | `file:/data/cloud-cli-proxy.db` | SQLite database file path |
 
-#### Admin Dashboard & Service Ports
+#### Service Ports
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ADMIN_PORT` | `3000` | Admin dashboard port |
+| `CONTROL_PLANE_ADDR` | `:8080` | Control plane listen address (API + Admin UI + SSH proxy) |
 | `SSH_PROXY_PORT` | `2222` | SSH proxy port |
 
 ### cloud-claude Config

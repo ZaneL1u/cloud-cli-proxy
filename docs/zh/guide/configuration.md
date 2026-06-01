@@ -50,7 +50,7 @@ cloud-claude explain MOUNT_SSHFS_DISCONNECTED
 
 | 变量 | 必需 | 默认值 | 说明 |
 |------|------|--------|------|
-| `DATABASE_URL` | 是 | — | PostgreSQL 连接字符串 |
+| `DATABASE_URL` | 否 | `file:/data/cloud-cli-proxy.db` | SQLite 数据库文件路径 |
 | `CONTROL_PLANE_ADDR` | 否 | `:8080` | HTTP API 监听地址 |
 | `ADMIN_USERNAME` | 否 | `admin` | 管理员用户名 |
 | `ADMIN_PASSWORD` | 是 | — | 管理员密码（首次启动种子） |
@@ -62,20 +62,17 @@ cloud-claude explain MOUNT_SSHFS_DISCONNECTED
 | `LOG_FORMAT` | 否 | `json` | 日志格式：`json` / `text` |
 | `LOG_LEVEL` | 否 | `info` | 日志级别：`debug` / `info` / `warn` / `error` |
 
-#### 数据库（Docker Compose 内置 PostgreSQL）
+#### 数据库（SQLite）
 
 | 变量 | 必需 | 默认值 | 说明 |
 |------|------|--------|------|
-| `DB_MODE` | 否 | `docker` | `docker` 内置 / `external` 外部 |
-| `POSTGRES_DB` | 否 | `cloudproxy` | 数据库名 |
-| `POSTGRES_USER` | 否 | `cloudproxy` | 数据库用户 |
-| `POSTGRES_PASSWORD` | 是（docker） | — | 数据库密码 |
+| `DATABASE_URL` | 否 | `file:/data/cloud-cli-proxy.db` | SQLite 数据库文件路径 |
 
-#### 管理后台与服务端口
+#### 服务端口
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `ADMIN_PORT` | `3000` | 管理后台端口 |
+| `CONTROL_PLANE_ADDR` | `:8080` | 控制面监听地址（API + 管理后台 + SSH 代理） |
 | `SSH_PROXY_PORT` | `2222` | SSH 代理端口 |
 
 ### cloud-claude 配置
@@ -195,7 +192,7 @@ nft add rule inet filter input ct state established,related accept
 nft add rule inet filter input iif lo accept
 nft add rule inet filter input tcp dport 22 accept
 nft add rule inet filter input tcp dport 8080 accept
-nft add rule inet filter input tcp dport 3000 accept
+# 管理后台已内嵌至 control-plane，无需单独端口
 nft add rule inet filter input tcp dport 2222 accept
 ```
 
@@ -206,7 +203,6 @@ nft add rule inet filter input tcp dport 2222 accept
 | 镜像 | 地址 |
 |------|------|
 | control-plane | `ghcr.io/zanel1u/cloud-cli-proxy/control-plane` |
-| admin | `ghcr.io/zanel1u/cloud-cli-proxy/admin` |
 | managed-user | `ghcr.io/zanel1u/cloud-cli-proxy/managed-user` |
 
 标签规则：

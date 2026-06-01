@@ -10,7 +10,8 @@
 
 1. `journalctl -u cloud-cli-proxy-control-plane --no-pager -n 50`
 2. `grep DATABASE_URL /etc/cloud-cli-proxy/env`
-3. `systemctl status postgresql`
+3. `file /data/cloud-cli-proxy.db` — check database file exists
+4. `sqlite3 /data/cloud-cli-proxy.db "PRAGMA integrity_check"` — check database integrity
 4. `ss -tlnp | grep 8080`
 
 **Causes and fixes:** If the database is unreachable, check PostgreSQL status and fix the connection string. If the port is in use, stop the conflicting process or change `CONTROL_PLANE_ADDR`. If there are permission issues, verify the `cloudproxy` user has database access.
@@ -52,8 +53,6 @@ User is expired but status is still `active`. Restart the control plane to trigg
 Logs show `too many connections`.
 
 ```bash
-sudo -u postgres psql -c "SELECT count(*) FROM pg_stat_activity WHERE datname='cloudproxy'"
-sudo -u postgres psql -c "SHOW max_connections"
 ```
 
 Restart the control plane for a temporary fix. Increase `max_connections` for a permanent one.
@@ -106,8 +105,6 @@ After recovery, user containers must be recreated and started. User accounts, eg
 
 ```bash
 systemctl stop cloud-cli-proxy-control-plane
-sudo -u postgres psql -c "DROP DATABASE cloudproxy"
-sudo -u postgres psql -c "CREATE DATABASE cloudproxy OWNER cloudproxy"
 pg_restore -d cloudproxy /var/backups/cloud-cli-proxy/latest.dump
 systemctl start cloud-cli-proxy-control-plane
 ```

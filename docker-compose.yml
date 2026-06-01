@@ -1,29 +1,10 @@
 services:
-  postgres:
-    image: postgres:18.3
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-cloudproxy}
-      POSTGRES_USER: ${POSTGRES_USER:-cloudproxy}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env or use external DB}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cloudproxy} -d ${POSTGRES_DB:-cloudproxy}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    volumes:
-      - cloudproxy-postgres:/var/lib/postgresql
-
   control-plane:
     image: ${CONTAINER_REGISTRY:-ghcr.io}/zanel1u/cloud-cli-proxy/control-plane:latest
     pull_policy: always
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-        required: false
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-cloudproxy}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-cloudproxy}?sslmode=disable
+      DATABASE_URL: file:/data/cloud-cli-proxy.db
       CONTROL_PLANE_ADDR: ":8080"
       HOST_AGENT_MODE: embedded
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
@@ -34,6 +15,7 @@ services:
       CONTAINER_REGISTRY: ${CONTAINER_REGISTRY:-}
     ports:
       - "${SSH_PROXY_PORT:-2222}:2222"
+      - "8080:8080"
     pid: host
     cap_add:
       - NET_ADMIN
@@ -41,6 +23,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/cloud-cli-proxy:/var/lib/cloud-cli-proxy
+      - cloud-cli-proxy-data:/data
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/healthz"]
       interval: 10s
@@ -48,29 +31,12 @@ services:
       retries: 10
       start_period: 30s
 
-  admin:
-    image: ${CONTAINER_REGISTRY:-ghcr.io}/zanel1u/cloud-cli-proxy/admin:latest
-    pull_policy: always
-    restart: unless-stopped
-    depends_on:
-      control-plane:
-        condition: service_healthy
-    ports:
-      - "${ADMIN_PORT:-3000}:80"
-
-  # 预拉取镜像，保持本地缓存。host-agent 通过 docker create 使用此镜像。
   managed-user:
     image: ${CONTAINER_REGISTRY:-ghcr.io}/zanel1u/cloud-cli-proxy/managed-user:latest
     pull_policy: always
-    restart: "no"
-    command: ["true"]
-
-  # 预拉取探针镜像，供 egress IP 连通性测试使用。
-  sing-box:
-    image: ${CONTAINER_REGISTRY:-ghcr.io}/sagernet/sing-box:v1.13.3
-    pull_policy: always
-    restart: "no"
-    command: ["true"]
+    restart: unless-stopped
+    volumes:
+      - cloud-cli-proxy-data:/data
 
 volumes:
-  cloudproxy-postgres:
+  cloud-cli-proxy-data:

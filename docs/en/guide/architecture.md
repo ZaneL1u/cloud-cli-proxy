@@ -9,7 +9,7 @@ User ──curl──> Control Plane (:8080) ──Docker──> │ User Contai
                     │                              │  SSH + Claude + VNC      │
                PostgreSQL                          │  sing-box tun tunnel     │
                     │                              │       ↓                  │
-              Admin SPA (:3000)                    │  Designated egress IP    │
+              Admin UI (embed)                    │  Designated egress IP    │
                     │                              └──────────────────────────┘
               SSH Proxy (:2222)
 ```

@@ -9,7 +9,7 @@ Cloud CLI Proxy 由四个核心组件组成：Control Plane（控制面）、Hos
                     │                            │  SSH + Claude + VNC      │
                PostgreSQL                        │  sing-box tun 隧道       │
                     │                            │       ↓                  │
-              Admin SPA (:3000)                  │  指定出口 IP              │
+              Admin UI (embed)                  │  指定出口 IP              │
                     │                            └──────────────────────────┘
               SSH Proxy (:2222)
 ```
