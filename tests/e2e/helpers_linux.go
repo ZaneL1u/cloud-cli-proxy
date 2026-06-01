@@ -246,9 +246,13 @@ func (p *GoldenPath) SimulateExpiry(ctx context.Context, userID string, waitForT
 	if err != nil {
 		return fmt.Errorf("simulate expiry: update users: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("simulate expiry: user %q not found", userID)
-	}
+	n, err := tag.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("simulate expiry: rows affected: %w", err)
+		}
+		if n == 0 {
+			return fmt.Errorf("simulate expiry: user %q not found", userID)
+		}
 
 	if !waitForTick {
 		return nil
