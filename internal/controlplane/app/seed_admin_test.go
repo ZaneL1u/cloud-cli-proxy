@@ -2,12 +2,12 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"io"
 	"log/slog"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/controlplane/credgen"
@@ -160,7 +160,7 @@ func TestPlanSeedAdminCredentialFix(t *testing.T) {
 
 func TestEnsureSeedAdmin_FreshInstall(t *testing.T) {
 	repo := &fakeSeedAdminRepo{
-		getByIdentifierErr: pgx.ErrNoRows,
+		getByIdentifierErr: sql.ErrNoRows,
 		listInboundKeys:    nil, // 新建用户必然 ssh_keys 表无 auto-generated 行
 	}
 	if err := ensureSeedAdminWithRepo(context.Background(), newDiscardLogger(), repo, "admin", "p4ss"); err != nil {

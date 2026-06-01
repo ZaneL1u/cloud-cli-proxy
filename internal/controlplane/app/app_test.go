@@ -9,7 +9,7 @@ import (
 func TestConfig_Defaults(t *testing.T) {
 	cfg := Config{
 		Addr:           ":8080",
-		DatabaseURL:    "postgres://localhost:5432/cloud",
+		DatabaseURL:    "file:/var/lib/cloud-cli-proxy/cloud-cli-proxy.db",
 		AdminUsername:  "admin",
 		AdminPassword:  "secret",
 		AdminJWTSecret: "jwt-secret",

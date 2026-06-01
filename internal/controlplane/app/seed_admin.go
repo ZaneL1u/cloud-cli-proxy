@@ -2,11 +2,11 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/zanel1u/cloud-cli-proxy/internal/controlplane/credgen"
@@ -78,7 +78,7 @@ func ensureSeedAdminWithRepo(ctx context.Context, logger *slog.Logger, repo seed
 	existing, err := repo.GetUserByLoginIdentifierForAuth(ctx, username)
 	var user repository.User
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, sql.ErrNoRows):
 		user, err = repo.CreateUserWithRole(ctx, repository.CreateUserWithRoleParams{
 			Username:     username,
 			PasswordHash: string(hash),
