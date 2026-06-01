@@ -17,34 +17,34 @@
 
 ### UI — Admin 前端嵌入
 
-- [ ] **UI-01**: 使用 //go:embed 嵌入 web/admin/dist/* 到 Go 二进制
-- [ ] **UI-02**: 实现 SPA fallback — 非 API 路径先匹配静态文件，未命中返回 index.html
-- [ ] **UI-03**: router.go 注册静态文件 handler，API 路由优先级高于静态文件
-- [ ] **UI-04**: vite.config.ts 代理 target 从 127.0.0.1:8090 改为 127.0.0.1:8080
+- [x] **UI-01**: 使用 //go:embed 嵌入 web/admin/dist/* 到 Go 二进制
+- [x] **UI-02**: 实现 SPA fallback — 非 API 路径先匹配静态文件，未命中返回 index.html
+- [x] **UI-03**: router.go 注册静态文件 handler，API 路由优先级高于静态文件
+- [x] **UI-04**: vite.config.ts 代理 target 从 127.0.0.1:8090 改为 127.0.0.1:8080
 
 ### PRB — Sing-box 探针内嵌
 
-- [ ] **PRB-01**: control-plane Dockerfile 运行阶段下载 sing-box v1.13.3 二进制到 /usr/local/bin/
-- [ ] **PRB-02**: 探针优先级调整 — startLocalSingBox 优先使用宿主机二进制，不存在才回退 Docker
+- [x] **PRB-01**: control-plane Dockerfile 运行阶段下载 sing-box v1.13.3 二进制到 /usr/local/bin/
+- [x] **PRB-02**: 探针优先级调整 — startLocalSingBox 优先使用宿主机二进制，不存在才回退 Docker
 
 ### DEP — 部署精简与配置统一
 
-- [ ] **DEP-01**: docker-compose.yml 移除 postgres、admin、sing-box 三个服务及 cloudproxy-postgres volume
-- [ ] **DEP-02**: control-plane 服务改为 DATABASE_URL=file:/data/cloud-cli-proxy.db + ./data:/data volume
-- [ ] **DEP-03**: .env / .env.example 移除 POSTGRES_* 变量，DATABASE_URL 改为 SQLite 路径，CONTROL_PLANE_ADDR 统一为 :8080
-- [ ] **DEP-04**: Makefile 移除 db/db-stop/db-reset 目标，dev 目标不再检测 PostgreSQL
-- [ ] **DEP-05**: deploy/scripts/setup-env.sh 和 deploy/scripts/deploy.sh 移除 PostgreSQL 交互和检查
+- [x] **DEP-01**: docker-compose.yml 移除 postgres、admin、sing-box 三个服务及 cloudproxy-postgres volume
+- [x] **DEP-02**: control-plane 服务改为 DATABASE_URL=file:/data/cloud-cli-proxy.db + ./data:/data volume
+- [x] **DEP-03**: .env / .env.example 移除 POSTGRES_* 变量，DATABASE_URL 改为 SQLite 路径，CONTROL_PLANE_ADDR 统一为 :8080
+- [x] **DEP-04**: Makefile 移除 db/db-stop/db-reset 目标，dev 目标不再检测 PostgreSQL
+- [x] **DEP-05**: deploy/scripts/setup-env.sh 和 deploy/scripts/deploy.sh 移除 PostgreSQL 交互和检查
 
 ### DOC — 文档同步
 
-- [ ] **DOC-01**: README.md / README.en.md 更新架构图、环境变量表、访问地址
-- [ ] **DOC-02**: docs/zh/guide/ 和 docs/en/guide/ 更新 architecture、deployment、quickstart、configuration
-- [ ] **DOC-03**: docs/zh/reference/faq.md 和 docs/en/reference/faq.md 更新 PG 相关排障条目
+- [x] **DOC-01**: README.md / README.en.md 更新架构图、环境变量表、访问地址
+- [x] **DOC-02**: docs/zh/guide/ 和 docs/en/guide/ 更新 architecture、deployment、quickstart、configuration
+- [x] **DOC-03**: docs/zh/reference/faq.md 和 docs/en/reference/faq.md 更新 PG 相关排障条目
 
 ### TEST — 测试适配
 
-- [ ] **TEST-01**: internal/store/repository/*_test.go 从 testcontainers PG 切换到内存 SQLite
-- [ ] **TEST-02**: internal/controlplane/app/app_test.go 更新配置常量，确认编译和测试通过
+- [x] **TEST-01**: internal/store/repository/*_test.go 从 testcontainers PG 切换到内存 SQLite
+- [x] **TEST-02**: internal/controlplane/app/app_test.go 更新配置常量，确认编译和测试通过
 
 ## v2 Requirements
 
@@ -68,10 +68,10 @@ None for this milestone.
 | DB-03 | 58 | Complete |
 | DB-04 | 58 | Complete |
 | DB-05 | 58 | Complete |
-| UI-01 | 59 | Pending |
-| UI-02 | 59 | Pending |
-| UI-03 | 59 | Pending |
-| UI-04 | 59 | Pending |
+| UI-01 | 59 | Complete |
+| UI-02 | 59 | Complete |
+| UI-03 | 59 | Complete |
+| UI-04 | 59 | Complete |
 | PRB-01 | 60 | Pending |
 | PRB-02 | 60 | Pending |
 | DEP-01 | 61 | Pending |
@@ -79,11 +79,11 @@ None for this milestone.
 | DEP-03 | 61 | Pending |
 | DEP-04 | 61 | Pending |
 | DEP-05 | 61 | Pending |
-| DOC-01 | 62 | Pending |
-| DOC-02 | 62 | Pending |
-| DOC-03 | 62 | Pending |
-| TEST-01 | 62 | Pending |
-| TEST-02 | 62 | Pending |
+| DOC-01 | 62 | Complete |
+| DOC-02 | 62 | Complete |
+| DOC-03 | 62 | Complete |
+| TEST-01 | 62 | Complete |
+| TEST-02 | 62 | Complete |
 
 **Coverage:**
 
