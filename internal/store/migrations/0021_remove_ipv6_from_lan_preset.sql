@@ -8,5 +8,5 @@ SET rules = '[
   {"rule_type":"cidr","value":"172.16.0.0/12"},
   {"rule_type":"cidr","value":"192.168.0.0/16"},
   {"rule_type":"cidr","value":"100.64.0.0/10"}
-]'::jsonb
+]'
 WHERE slug = 'lan';

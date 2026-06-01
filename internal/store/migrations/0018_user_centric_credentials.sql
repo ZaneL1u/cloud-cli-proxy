@@ -7,22 +7,26 @@
 -- 用户已确认无「一用户多 host」存量数据；存量用户若 entry_password 为空、
 -- host 侧非空，则做反向回填，确保此次迁移后 SSH 仍可以原密码登录。
 
-BEGIN;
-
 -- 反向回填：原 host.entry_password → user.entry_password（仅当 user 侧为空且 host 侧非空）
-UPDATE users u
-SET entry_password = h.entry_password
-FROM hosts h
-WHERE u.id = h.user_id
-  AND COALESCE(u.entry_password, '') = ''
-  AND COALESCE(h.entry_password, '') <> '';
+UPDATE users
+SET entry_password = (
+    SELECT h.entry_password FROM hosts h
+    WHERE h.user_id = users.id
+      AND COALESCE(users.entry_password, '') = ''
+      AND COALESCE(h.entry_password, '') <> ''
+)
+WHERE EXISTS (
+    SELECT 1 FROM hosts h
+    WHERE h.user_id = users.id
+      AND COALESCE(users.entry_password, '') = ''
+      AND COALESCE(h.entry_password, '') <> ''
+);
 
--- 一用户一活跃 host 硬约束（排除 deleted/archived）
-CREATE UNIQUE INDEX idx_hosts_user_active
-  ON hosts (user_id)
-  WHERE status NOT IN ('deleted', 'archived');
-
--- 删除 hosts.entry_password 列
+-- 删除 hosts.entry_password 列（SQLite 3.35+ 支持 DROP COLUMN）
 ALTER TABLE hosts DROP COLUMN entry_password;
 
-COMMIT;
+-- Note: SQLite partial indexes with WHERE NOT IN syntax may need care.
+-- This unique index ensures one active host per user.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_hosts_user_active
+  ON hosts (user_id)
+  WHERE status NOT IN ('deleted', 'archived');

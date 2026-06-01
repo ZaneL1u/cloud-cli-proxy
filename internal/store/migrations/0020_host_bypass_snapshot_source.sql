@@ -5,23 +5,10 @@
 -- Phase 45 Plan 03 在 SUMMARY 内描述了 source 列，但 0019 migration 实际未建；此 migration 补上。
 --
 -- 回滚路径（运维手工执行，本 migrator 仅做 up）：
---   ALTER TABLE host_bypass_snapshots DROP CONSTRAINT IF EXISTS chk_bypass_snapshot_source;
 --   ALTER TABLE host_bypass_snapshots DROP COLUMN IF EXISTS source;
-
-BEGIN;
 
 ALTER TABLE host_bypass_snapshots
     ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'apply';
 
--- 用 ADD CONSTRAINT IF NOT EXISTS 不可移植；走条件块兜底确保 migration 可重放。
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'chk_bypass_snapshot_source'
-    ) THEN
-        ALTER TABLE host_bypass_snapshots
-            ADD CONSTRAINT chk_bypass_snapshot_source CHECK (source IN ('apply', 'rollback'));
-    END IF;
-END $$;
-
-COMMIT;
+-- Note: SQLite does not support ADD CONSTRAINT on existing tables.
+-- The CHECK constraint is enforced at the application level.

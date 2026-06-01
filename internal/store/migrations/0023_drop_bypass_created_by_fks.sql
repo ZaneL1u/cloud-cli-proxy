@@ -6,32 +6,55 @@
 -- 审计字段不应阻塞业务写入 — 用户 ID 只是记录"谁做了这个操作"，即使该用户已不存在，
 -- 保留原始 ID 对审计追溯仍然有价值。
 --
--- 回滚路径（运维手工执行）：
---   ALTER TABLE host_bypass_snapshots ADD CONSTRAINT host_bypass_snapshots_created_by_fkey
---     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL;
---   ALTER TABLE host_bypass_audit_log ADD CONSTRAINT host_bypass_audit_log_actor_id_fkey
---     FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE SET NULL;
+-- SQLite 不支持 ALTER TABLE DROP CONSTRAINT，使用重建表模式。
 
-BEGIN;
+PRAGMA foreign_keys=OFF;
 
--- 条件块确保 migration 可重放
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'host_bypass_snapshots_created_by_fkey'
-    ) THEN
-        ALTER TABLE host_bypass_snapshots
-            DROP CONSTRAINT host_bypass_snapshots_created_by_fkey;
-    END IF;
+-- Rebuild host_bypass_snapshots without created_by FK
+CREATE TABLE host_bypass_snapshots_new (
+    id                      TEXT PRIMARY KEY,
+    host_id                 TEXT NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+    version                 INTEGER NOT NULL,
+    config_hash             TEXT NOT NULL,
+    whitelist_cidrs_json    TEXT NOT NULL DEFAULT '{"version":3,"rules":[]}',
+    whitelist_domains_json  TEXT NOT NULL DEFAULT '{"version":3,"rules":[]}',
+    applied_status          TEXT NOT NULL DEFAULT 'pending'
+                            CHECK (applied_status IN ('pending','applied','failed','rolled_back')),
+    source                  TEXT NOT NULL DEFAULT 'apply',
+    created_by              TEXT,
+    created_at              TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    UNIQUE (host_id, config_hash)
+);
 
-    IF EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'host_bypass_audit_log_actor_id_fkey'
-    ) THEN
-        ALTER TABLE host_bypass_audit_log
-            DROP CONSTRAINT host_bypass_audit_log_actor_id_fkey;
-    END IF;
-END $$;
+INSERT INTO host_bypass_snapshots_new
+    SELECT * FROM host_bypass_snapshots;
 
-COMMIT;
+DROP TABLE host_bypass_snapshots;
+ALTER TABLE host_bypass_snapshots_new RENAME TO host_bypass_snapshots;
+
+CREATE INDEX IF NOT EXISTS idx_bypass_snapshots_host_version ON host_bypass_snapshots(host_id, version DESC);
+
+-- Rebuild host_bypass_audit_log without actor_id FK
+CREATE TABLE host_bypass_audit_log_new (
+    id           TEXT PRIMARY KEY,
+    actor_id     TEXT,
+    actor_ip     TEXT,
+    action       TEXT NOT NULL,
+    target_kind  TEXT NOT NULL,
+    target_id    TEXT,
+    before       TEXT,
+    after        TEXT,
+    note         TEXT,
+    created_at   TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
+INSERT INTO host_bypass_audit_log_new
+    SELECT * FROM host_bypass_audit_log;
+
+DROP TABLE host_bypass_audit_log;
+ALTER TABLE host_bypass_audit_log_new RENAME TO host_bypass_audit_log;
+
+CREATE INDEX IF NOT EXISTS idx_bypass_audit_target  ON host_bypass_audit_log(target_kind, target_id);
+CREATE INDEX IF NOT EXISTS idx_bypass_audit_created ON host_bypass_audit_log(created_at DESC);
+
+PRAGMA foreign_keys=ON;
