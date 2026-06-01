@@ -79,7 +79,7 @@ curl http://127.0.0.1:8080/healthz
 
 After startup:
 
-- Admin dashboard: `http://YOUR_HOST:3000`
+- Admin dashboard: `http://YOUR_HOST:8080`
 - API: `http://YOUR_HOST:8080`
 - SSH proxy: `YOUR_HOST:2222`
 
@@ -119,7 +119,7 @@ Creates a `cloudproxy` system user, builds binaries and images, installs systemd
 | `ADMIN_USERNAME` | Admin username | `admin` |
 | `ADMIN_PASSWORD` | Admin password (bcrypt) | Required |
 | `ADMIN_JWT_SECRET` | JWT signing secret | Required |
-| `ADMIN_PORT` | Admin dashboard port | `3000` |
+
 | `SSH_PROXY_PORT` | SSH proxy port | `2222` |
 | `LOG_FORMAT` | Log format `json` / `text` | `json` |
 | `LOG_LEVEL` | Log level | `info` |
@@ -150,7 +150,7 @@ User ──curl──> Control Plane (:8080) ──Docker──>    │ User Con
                     │                                │  SSH + Claude Code + VNC          │
                PostgreSQL                            │  sshfs ← same path as local cwd  │
                     │                                │  sing-box tun tunnel              │
-              Admin SPA (:3000)                      │       ↓                           │
+              Admin UI (embed)                      │       ↓                           │
                     │                                │  Designated Exit IP               │
               SSH Proxy (:2222)                      └───────────────────────────────────┘
 ```
@@ -180,7 +180,7 @@ Local dev environment:
 ```bash
 make setup    # Install dependencies
 make db       # Start PostgreSQL
-make dev      # Backend + frontend hot-reload (API :8090, frontend localhost:2568)
+make dev      # Backend + frontend hot-reload (API :8080, frontend localhost:2568)
 make test     # Run tests
 ```
 

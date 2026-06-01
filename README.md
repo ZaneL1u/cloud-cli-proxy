@@ -79,7 +79,7 @@ curl http://127.0.0.1:8080/healthz
 
 启动后：
 
-- 管理后台：`http://YOUR_HOST:3000`
+- 管理后台：`http://YOUR_HOST:8080`
 - API：`http://YOUR_HOST:8080`
 - SSH 代理：`YOUR_HOST:2222`
 
@@ -93,7 +93,7 @@ curl http://127.0.0.1:8080/healthz
 
 - Docker Engine 28.x+
 - Docker Compose v2
-- PostgreSQL 18.x（也可用内置 Docker PostgreSQL）
+
 
 ### Docker Compose（推荐）
 
@@ -115,11 +115,10 @@ sudo bash deploy/scripts/deploy.sh
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `DATABASE_URL` | PostgreSQL 连接字符串 | 必填 |
+| `DATABASE_URL` | SQLite 数据库路径 | `file:/data/cloud-cli-proxy.db` |
 | `ADMIN_USERNAME` | 管理员用户名 | `admin` |
 | `ADMIN_PASSWORD` | 管理员密码（bcrypt） | 必填 |
 | `ADMIN_JWT_SECRET` | JWT 签名密钥 | 必填 |
-| `ADMIN_PORT` | 管理后台端口 | `3000` |
 | `SSH_PROXY_PORT` | SSH 代理端口 | `2222` |
 | `LOG_FORMAT` | 日志格式 `json` / `text` | `json` |
 | `LOG_LEVEL` | 日志级别 | `info` |
@@ -148,9 +147,9 @@ sudo bash deploy/scripts/deploy.sh
                                                     ┌───────────────────────────────────┐
 用户 ──curl──> Control Plane (:8080) ──Docker──>    │ 用户容器                          │
                     │                                │  SSH + Claude Code + VNC          │
-               PostgreSQL                            │  sshfs ← 本地 CWD 同名路径映射    │
+                   SQLite                             │  sshfs ← 本地 CWD 同名路径映射    │
                     │                                │  sing-box tun 隧道                │
-              Admin SPA (:3000)                      │       ↓                           │
+              Admin UI (embed)                   │       ↓                           │
                     │                                │  指定出口 IP                      │
               SSH Proxy (:2222)                      └───────────────────────────────────┘
 ```
@@ -160,7 +159,7 @@ sudo bash deploy/scripts/deploy.sh
 | **Control Plane** | Go API，认证、用户管理、任务编排、SSH 代理 |
 | **Host Agent** | 特权代理，管理 Docker 容器、网络命名空间和隧道 |
 | **用户容器** | Ubuntu 24.04，预装 OpenSSH + Claude Code + sshfs + KasmVNC + Chromium |
-| **PostgreSQL** | 持久化用户、主机、出口 IP、任务、事件、审计日志 |
+| **SQLite** | 持久化用户、主机、出口 IP、任务、事件、审计日志（WAL 模式） |
 | **Admin SPA** | React 19 + TypeScript + Vite + Tailwind CSS |
 
 ---
@@ -179,8 +178,7 @@ Pull Request 流程：
 
 ```bash
 make setup    # 安装依赖
-make db       # 启动 PostgreSQL
-make dev      # 后端 + 前端热重载（API :8090，前端 localhost:2568）
+make dev      # 后端 + 前端热重载（API :8080，前端 localhost:2568）
 make test     # 运行测试
 ```
 
