@@ -25,7 +25,7 @@ func TestMigration0019_FileContent(t *testing.T) {
 		"rules",
 		"TEXT NOT NULL DEFAULT '[]'",
 		"hex(randomblob(16))",
-		"TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)",
+		"DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP)",
 		"CHECK (scope IN ('global', 'host'))",
 		"CHECK (rule_type IN ('ip','cidr','domain','domain_suffix','domain_keyword','port'))",
 		"CHECK (source IN ('admin','system'))",
