@@ -391,7 +391,7 @@ if [ "${RUN_USER}" != "workspace" ]; then
 fi
 
 mkdir -p /workspace/.ssh
-chown -R "${RUN_USER}:${RUN_USER}" /workspace
+chown -R "${RUN_USER}:${RUN_USER}" /workspace 2>/dev/null || true
 chmod 0700 /workspace/.ssh
 
 # 注入 SSH 公钥（local 模式或显式传入时）

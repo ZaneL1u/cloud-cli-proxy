@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.4 - 2026-06-02
+## What's Changed
+
+### Runtime & Deployment
+- fix: entrypoint chown -R /workspace 遇 bind mount 时无容错保护，导致容器重启循环 (36f8bcb)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.3...v4.2.4
+
+
 ## v4.2.3 - 2026-06-01
 ## What's Changed
 
