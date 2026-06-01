@@ -10,7 +10,7 @@ func TestGetHostWithClaudeAccountSQL_ContainsLeftJoinTokens(t *testing.T) {
 		"FROM hosts h",
 		"LEFT JOIN claude_accounts ca ON ca.host_id = h.id",
 		"COALESCE(ca.persistent_volume_name, '')",
-		"WHERE h.id = $1",
+		"WHERE h.id = ?",
 		"LIMIT 1",
 	}
 	for _, token := range must {
@@ -23,7 +23,7 @@ func TestGetHostWithClaudeAccountSQL_ContainsLeftJoinTokens(t *testing.T) {
 func TestLockClaudeAccountForDeleteSQL_HasForUpdate(t *testing.T) {
 	must := []string{
 		"FROM claude_accounts",
-		"WHERE id = $1",
+		"WHERE id = ?",
 		"FOR UPDATE",
 		"COALESCE(persistent_volume_name, '')",
 	}
@@ -35,7 +35,7 @@ func TestLockClaudeAccountForDeleteSQL_HasForUpdate(t *testing.T) {
 }
 
 func TestDeleteClaudeAccountSQL_IsExactDelete(t *testing.T) {
-	want := `DELETE FROM claude_accounts WHERE id = $1`
+	want := `DELETE FROM claude_accounts WHERE id = ?`
 	if deleteClaudeAccountSQL != want {
 		t.Errorf("deleteClaudeAccountSQL must equal %q, got %q", want, deleteClaudeAccountSQL)
 	}

@@ -110,14 +110,14 @@ func TestResolveClaudeAccountQueries_MatchD05(t *testing.T) {
 	hostQuery := resolveClaudeAccountByHostSQL
 	fallbackQuery := resolveClaudeAccountByUserFallbackSQL
 
-	hostMust := []string{"claude_accounts", "host_id = $1", "ORDER BY created_at ASC", "LIMIT 1"}
+	hostMust := []string{"claude_accounts", "host_id = ?", "ORDER BY created_at ASC", "LIMIT 1"}
 	for _, token := range hostMust {
 		if !strings.Contains(hostQuery, token) {
 			t.Errorf("host-bound 查询必须包含 %q（D-05 第一步）；实际:\n%s", token, hostQuery)
 		}
 	}
 
-	fallbackMust := []string{"claude_accounts", "user_id = $1", "host_id IS NULL", "ORDER BY created_at ASC", "LIMIT 1"}
+	fallbackMust := []string{"claude_accounts", "user_id = ?", "host_id IS NULL", "ORDER BY created_at ASC", "LIMIT 1"}
 	for _, token := range fallbackMust {
 		if !strings.Contains(fallbackQuery, token) {
 			t.Errorf("fallback 查询必须包含 %q（D-05 第二步）；实际:\n%s", token, fallbackQuery)
@@ -180,10 +180,10 @@ func TestWave1_DataLayerBoundary(t *testing.T) {
 	}
 	for name, q := range sqls {
 		if strings.Contains(q, "fmt.Sprintf") || strings.Contains(q, "||") {
-			t.Errorf("%s 疑似出现字符串拼接；数据层必须全部走 pgx 参数化：\n%s", name, q)
+			t.Errorf("%s 疑似出现字符串拼接；数据层必须全部走参数化：\n%s", name, q)
 		}
-		if !strings.Contains(q, "$1") {
-			t.Errorf("%s 必须至少有一个占位符（$1）；实际:\n%s", name, q)
+		if !strings.Contains(q, "?") {
+			t.Errorf("%s 必须至少有一个占位符（?）；实际:\n%s", name, q)
 		}
 	}
 

@@ -11,11 +11,11 @@ import (
 const migration0019Filename = "0019_host_bypass_rules.sql"
 
 // TestMigration0019_FileContent 验证 migration 0019 的核心 schema 语义：
-//   - 五张表 + UUID 主键 + TIMESTAMPTZ DEFAULT NOW()
+//   - 五张表 + TEXT 主键 + TEXT DEFAULT (CURRENT_TIMESTAMP)
 //   - 四个 CHECK 枚举（scope / rule_type / source / applied_status）
 //   - XOR 约束（rule scope <-> host_id；binding preset_id <-> rule_id）
 //   - 两条系统预设 seed（loopback / lan，含五段 CIDR）
-//   - BEGIN/COMMIT 包裹，禁止 ENUM 类型与 up 段 DROP TABLE
+//   - 禁止 ENUM 类型与 up 段 DROP TABLE
 func TestMigration0019_FileContent(t *testing.T) {
 	path := filepath.Join("..", "migrations", migration0019Filename)
 	raw, err := os.ReadFile(path)
@@ -30,9 +30,9 @@ func TestMigration0019_FileContent(t *testing.T) {
 		"CREATE TABLE IF NOT EXISTS host_bypass_bindings",
 		"CREATE TABLE IF NOT EXISTS host_bypass_snapshots",
 		"CREATE TABLE IF NOT EXISTS host_bypass_audit_log",
-		"gen_random_uuid()",
-		"TIMESTAMPTZ NOT NULL DEFAULT NOW()",
-		"rules         JSONB NOT NULL DEFAULT '[]'::jsonb",
+		"hex(randomblob(16))",
+		"TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)",
+		"rules         TEXT NOT NULL DEFAULT '[]'",
 		"CHECK (scope IN ('global', 'host'))",
 		"CHECK (rule_type IN ('ip','cidr','domain','domain_suffix','domain_keyword','port'))",
 		"CHECK (source IN ('admin','system'))",
@@ -53,8 +53,6 @@ func TestMigration0019_FileContent(t *testing.T) {
 		"192.168.0.0/16",
 		"100.64.0.0/10",
 		"fc00::/7",
-		"BEGIN;",
-		"COMMIT;",
 	}
 	for _, token := range mustContain {
 		if !strings.Contains(content, token) {
@@ -110,10 +108,10 @@ func TestMigration0019_SnapshotShape(t *testing.T) {
 
 	mustContain := []string{
 		"host_bypass_snapshots",
-		"version                 BIGINT NOT NULL",
+		"version                 INTEGER NOT NULL",
 		"config_hash             TEXT NOT NULL",
-		"whitelist_cidrs_json    JSONB NOT NULL DEFAULT '{\"version\":3,\"rules\":[]}'::jsonb",
-		"whitelist_domains_json  JSONB NOT NULL DEFAULT '{\"version\":3,\"rules\":[]}'::jsonb",
+		"whitelist_cidrs_json    TEXT NOT NULL DEFAULT '{\"version\":3,\"rules\":[]}'",
+		"whitelist_domains_json  TEXT NOT NULL DEFAULT '{\"version\":3,\"rules\":[]}'",
 		"UNIQUE (host_id, config_hash)",
 		"idx_bypass_snapshots_host_version",
 	}

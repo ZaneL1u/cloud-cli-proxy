@@ -2,28 +2,25 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/google/uuid"
 )
 
 // ErrSystemBypassPresetImmutable 表示尝试删除或修改 is_system=true 的预设。
-// 数据层做最小拦截，Phase 46 handler 会把它翻译成 HTTP 403 + 错误码
-// BYPASS_PRESET_IMMUTABLE。SQL 层在 updateBypassPresetSQL / deleteBypassPresetSQL
-// 同时附加 `is_system = FALSE` WHERE 兜底，即使绕过 Go 层校验也不会误删。
 var ErrSystemBypassPresetImmutable = errors.New("bypass preset is system preset and cannot be deleted or modified")
+
+// scanner is a minimal interface satisfied by both *sql.Row and *sql.Rows.
+type scanner interface {
+	Scan(dest ...any) error
+}
 
 // nullableUUIDArg 把 *string 转换为 SQL 友好的 any：
 //   - nil 指针        → nil（SQL NULL）
 //   - 指向空串的指针   → nil（SQL NULL）
-//   - 否则解引用      → 真实字符串（由 pgx 转 UUID）
-//
-// 这是 Phase 45 CR-01 修复：上层（admin handler / mapstructure / JSON 反序列化）
-// 偶尔会传 `s := ""; ptr := &s` 这种"非 nil 指针但指向空串"的状态，旧实现
-// `if ptr != nil { arg = *ptr }` 会把空串发给 PG，触发
-// `invalid input syntax for type uuid: ""`。统一走本 helper 即可消除该坑。
 func nullableUUIDArg(ptr *string) any {
 	if ptr == nil || *ptr == "" {
 		return nil
@@ -33,194 +30,176 @@ func nullableUUIDArg(ptr *string) any {
 
 // ---------------------------------------------------------------------------
 // SQL 常量（包级 const，供 queries_bypass_test.go 文本断言锁定）
-// 命名规范沿用 queries.go 已有模式（listHostsByUserIDSQL 等）。
-// 所有 SELECT 用 `id::text` 把 UUID 转为 string；所有占位符使用 $N，禁止 fmt.Sprintf 拼接。
+// 所有占位符使用 ?，保持参数化查询。
 // ---------------------------------------------------------------------------
 
 const listBypassPresetsSQL = `
-	SELECT id::text, slug, name, COALESCE(description, ''),
+	SELECT id, slug, name, COALESCE(description, ''),
 	       is_system, is_force_on, is_active, rules, created_at, updated_at
 	FROM host_bypass_presets
 	ORDER BY is_system DESC, slug ASC
 `
 
 const getBypassPresetBySlugSQL = `
-	SELECT id::text, slug, name, COALESCE(description, ''),
+	SELECT id, slug, name, COALESCE(description, ''),
 	       is_system, is_force_on, is_active, rules, created_at, updated_at
-	FROM host_bypass_presets WHERE slug = $1
+	FROM host_bypass_presets WHERE slug = ?
 `
 
 const getBypassPresetByIDSQL = `
-	SELECT id::text, slug, name, COALESCE(description, ''),
+	SELECT id, slug, name, COALESCE(description, ''),
 	       is_system, is_force_on, is_active, rules, created_at, updated_at
-	FROM host_bypass_presets WHERE id = $1
+	FROM host_bypass_presets WHERE id = ?
 `
 
 const createBypassPresetSQL = `
-	INSERT INTO host_bypass_presets (slug, name, description, is_force_on, is_active, rules)
-	VALUES ($1, $2, $3, $4, $5, $6)
-	RETURNING id::text, slug, name, COALESCE(description, ''),
+	INSERT INTO host_bypass_presets (id, slug, name, description, is_force_on, is_active, rules)
+	VALUES (?, ?, ?, ?, ?, ?, ?)
+	RETURNING id, slug, name, COALESCE(description, ''),
 	          is_system, is_force_on, is_active, rules, created_at, updated_at
 `
 
-// updateBypassPresetSQL 用 COALESCE($N, col) 实现部分字段更新；
-// 关键防御：`AND is_system = FALSE` 兜底，系统预设永不被改（即使 Go 层漏了）。
+// updateBypassPresetSQL 用 COALESCE(?, col) 实现部分字段更新。
 const updateBypassPresetSQL = `
 	UPDATE host_bypass_presets SET
-		name        = COALESCE($2, name),
-		description = COALESCE($3, description),
-		is_force_on = COALESCE($4, is_force_on),
-		is_active   = COALESCE($5, is_active),
-		rules       = COALESCE($6, rules),
-		updated_at  = NOW()
-	WHERE id = $1 AND is_system = FALSE
-	RETURNING id::text, slug, name, COALESCE(description, ''),
+		name        = COALESCE(?, name),
+		description = COALESCE(?, description),
+		is_force_on = COALESCE(?, is_force_on),
+		is_active   = COALESCE(?, is_active),
+		rules       = COALESCE(?, rules),
+		updated_at  = CURRENT_TIMESTAMP
+	WHERE id = ? AND is_system = 0
+	RETURNING id, slug, name, COALESCE(description, ''),
 	          is_system, is_force_on, is_active, rules, created_at, updated_at
 `
 
-// deleteBypassPresetSQL 同样附加 `AND is_system = FALSE` 兜底。
-const deleteBypassPresetSQL = `DELETE FROM host_bypass_presets WHERE id = $1 AND is_system = FALSE`
+const deleteBypassPresetSQL = `DELETE FROM host_bypass_presets WHERE id = ? AND is_system = 0`
 
-// checkBypassPresetIsSystemSQL 供 Go 层先查 is_system 标志，决定返回
-// ErrSystemBypassPresetImmutable 还是 ErrNoRows。
-const checkBypassPresetIsSystemSQL = `SELECT is_system FROM host_bypass_presets WHERE id = $1`
+const checkBypassPresetIsSystemSQL = `SELECT is_system FROM host_bypass_presets WHERE id = ?`
 
-// listBypassRulesGlobalOnlySQL 仅返回 scope='global' 的规则（hostID 入参为 nil 时使用）。
 const listBypassRulesGlobalOnlySQL = `
-	SELECT id::text, scope, host_id::text, rule_type, value, COALESCE(note, ''),
+	SELECT id, scope, host_id, rule_type, value, COALESCE(note, ''),
 	       is_risky, created_at, updated_at
 	FROM host_bypass_rules
 	WHERE scope = 'global'
 	ORDER BY created_at ASC
 `
 
-// listBypassRulesGlobalOrHostSQL 返回 scope='global' 或 scope='host' 且 host_id=$1 的规则。
 const listBypassRulesGlobalOrHostSQL = `
-	SELECT id::text, scope, host_id::text, rule_type, value, COALESCE(note, ''),
+	SELECT id, scope, host_id, rule_type, value, COALESCE(note, ''),
 	       is_risky, created_at, updated_at
 	FROM host_bypass_rules
-	WHERE scope = 'global' OR (scope = 'host' AND host_id = $1)
+	WHERE scope = 'global' OR (scope = 'host' AND host_id = ?)
 	ORDER BY scope DESC, created_at ASC
 `
 
 const createBypassRuleSQL = `
-	INSERT INTO host_bypass_rules (scope, host_id, rule_type, value, note, is_risky)
-	VALUES ($1, $2, $3, $4, $5, $6)
-	RETURNING id::text, scope, host_id::text, rule_type, value, COALESCE(note, ''),
+	INSERT INTO host_bypass_rules (id, scope, host_id, rule_type, value, note, is_risky)
+	VALUES (?, ?, ?, ?, ?, ?, ?)
+	RETURNING id, scope, host_id, rule_type, value, COALESCE(note, ''),
 	          is_risky, created_at, updated_at
 `
 
 const updateBypassRuleSQL = `
 	UPDATE host_bypass_rules SET
-		value      = COALESCE($2, value),
-		note       = COALESCE($3, note),
-		is_risky   = COALESCE($4, is_risky),
-		updated_at = NOW()
-	WHERE id = $1
-	RETURNING id::text, scope, host_id::text, rule_type, value, COALESCE(note, ''),
+		value      = COALESCE(?, value),
+		note       = COALESCE(?, note),
+		is_risky   = COALESCE(?, is_risky),
+		updated_at = CURRENT_TIMESTAMP
+	WHERE id = ?
+	RETURNING id, scope, host_id, rule_type, value, COALESCE(note, ''),
 	          is_risky, created_at, updated_at
 `
 
-const deleteBypassRuleSQL = `DELETE FROM host_bypass_rules WHERE id = $1`
+const deleteBypassRuleSQL = `DELETE FROM host_bypass_rules WHERE id = ?`
 
-// getBypassRuleByIDSQL：Phase 46 Plan 01 扩展（Task 4 WARN-5 修复）。
-// handler 的 Update / Delete 需要先取 before 快照写入 audit_log.before。
-// 列顺序与 createBypassRuleSQL / updateBypassRuleSQL RETURNING 段一致。
 const getBypassRuleByIDSQL = `
-	SELECT id::text, scope, host_id::text, rule_type, value, COALESCE(note, ''),
+	SELECT id, scope, host_id, rule_type, value, COALESCE(note, ''),
 	       is_risky, created_at, updated_at
-	FROM host_bypass_rules WHERE id = $1
+	FROM host_bypass_rules WHERE id = ?
 `
 
 const listBypassBindingsByHostSQL = `
-	SELECT id::text, host_id::text, preset_id::text, rule_id::text,
+	SELECT id, host_id, preset_id, rule_id,
 	       enabled, source, created_at
 	FROM host_bypass_bindings
-	WHERE host_id = $1
+	WHERE host_id = ?
 	ORDER BY created_at ASC
 `
 
 const createBypassBindingSQL = `
-	INSERT INTO host_bypass_bindings (host_id, preset_id, rule_id, enabled, source)
-	VALUES ($1, $2, $3, $4, $5)
-	RETURNING id::text, host_id::text, preset_id::text, rule_id::text,
+	INSERT INTO host_bypass_bindings (id, host_id, preset_id, rule_id, enabled, source)
+	VALUES (?, ?, ?, ?, ?, ?)
+	RETURNING id, host_id, preset_id, rule_id,
 	          enabled, source, created_at
 `
 
-const deleteBypassBindingSQL = `DELETE FROM host_bypass_bindings WHERE id = $1`
+const deleteBypassBindingSQL = `DELETE FROM host_bypass_bindings WHERE id = ?`
 
 const listBypassSnapshotsByHostSQL = `
-	SELECT id::text, host_id::text, version, config_hash,
+	SELECT id, host_id, version, config_hash,
 	       whitelist_cidrs_json, whitelist_domains_json,
-	       applied_status, source, created_by::text, created_at
+	       applied_status, source, created_by, created_at
 	FROM host_bypass_snapshots
-	WHERE host_id = $1
+	WHERE host_id = ?
 	ORDER BY version DESC
-	LIMIT $2
+	LIMIT ?
 `
 
 const createBypassSnapshotSQL = `
 	INSERT INTO host_bypass_snapshots
-		(host_id, version, config_hash, whitelist_cidrs_json, whitelist_domains_json, source, created_by)
-	VALUES ($1, $2, $3, $4, $5, $6, $7)
-	RETURNING id::text, host_id::text, version, config_hash,
+		(id, host_id, version, config_hash, whitelist_cidrs_json, whitelist_domains_json, source, created_by)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	RETURNING id, host_id, version, config_hash,
 	          whitelist_cidrs_json, whitelist_domains_json,
-	          applied_status, source, created_by::text, created_at
+	          applied_status, source, created_by, created_at
 `
 
 const updateBypassSnapshotStatusSQL = `
-	UPDATE host_bypass_snapshots SET applied_status = $2 WHERE id = $1
-	RETURNING id::text, host_id::text, version, config_hash,
+	UPDATE host_bypass_snapshots SET applied_status = ? WHERE id = ?
+	RETURNING id, host_id, version, config_hash,
 	          whitelist_cidrs_json, whitelist_domains_json,
-	          applied_status, source, created_by::text, created_at
+	          applied_status, source, created_by, created_at
 `
 
-// getLatestAppliedBypassSnapshotSQL 返回 host 最近一次 applied_status='applied' 的 snapshot；
-// version DESC + LIMIT 1 决定语义（Phase 47 rollback 需要它来定位回滚目标）。
 const getLatestAppliedBypassSnapshotSQL = `
-	SELECT id::text, host_id::text, version, config_hash,
+	SELECT id, host_id, version, config_hash,
 	       whitelist_cidrs_json, whitelist_domains_json,
-	       applied_status, source, created_by::text, created_at
+	       applied_status, source, created_by, created_at
 	FROM host_bypass_snapshots
-	WHERE host_id = $1 AND applied_status = 'applied'
+	WHERE host_id = ? AND applied_status = 'applied'
 	ORDER BY version DESC
 	LIMIT 1
 `
 
-// getBypassSnapshotByIDSQL: Phase 46 Plan 02 WARN-4 修复。
-// rollback handler 必须先 GetByID(target) 校验 host_id 匹配 + applied_status='applied'，
-// 才能新建一行 source='rollback' 的 pending snapshot。
 const getBypassSnapshotByIDSQL = `
-	SELECT id::text, host_id::text, version, config_hash,
+	SELECT id, host_id, version, config_hash,
 	       whitelist_cidrs_json, whitelist_domains_json,
-	       applied_status, source, created_by::text, created_at
+	       applied_status, source, created_by, created_at
 	FROM host_bypass_snapshots
-	WHERE id = $1
+	WHERE id = ?
 `
 
 const insertBypassAuditLogSQL = `
 	INSERT INTO host_bypass_audit_log
-		(actor_id, actor_ip, action, target_kind, target_id, before, after, note)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	RETURNING id::text, created_at
+		(id, actor_id, actor_ip, action, target_kind, target_id, before, after, note)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	RETURNING id, created_at
 `
 
 const listBypassAuditLogByTargetSQL = `
-	SELECT id::text, actor_id::text, COALESCE(actor_ip, ''), action, target_kind,
-	       target_id::text, before, after, COALESCE(note, ''), created_at
+	SELECT id, actor_id, COALESCE(actor_ip, ''), action, target_kind,
+	       target_id, before, after, COALESCE(note, ''), created_at
 	FROM host_bypass_audit_log
-	WHERE target_kind = $1 AND target_id = $2
+	WHERE target_kind = ? AND target_id = ?
 	ORDER BY created_at DESC
 `
 
 // ---------------------------------------------------------------------------
-// 19 个 Repository 方法 — Task 2b 真实 pgx v5 实现。
-// 签名与 SQL 常量在 Task 3 已通过反射 + 文本断言 lock 死，本步骤只填方法体。
+// scan helpers — work with both *sql.Row (QueryRow) and *sql.Rows (rows.Scan)
 // ---------------------------------------------------------------------------
 
-// scanBypassPreset 将一行 host_bypass_presets SELECT 结果扫到 BypassPreset。
-// 列顺序与所有 preset SQL 常量的 SELECT/RETURNING 段保持一致。
-func scanBypassPreset(row pgx.Row, out *BypassPreset) error {
+func scanBypassPreset(row scanner, out *BypassPreset) error {
 	var rawRules json.RawMessage
 	if err := row.Scan(
 		&out.ID, &out.Slug, &out.Name, &out.Description,
@@ -235,24 +214,21 @@ func scanBypassPreset(row pgx.Row, out *BypassPreset) error {
 	return nil
 }
 
-// scanBypassRule 同上，host_bypass_rules 列顺序对齐。
-func scanBypassRule(row pgx.Row, out *BypassRule) error {
+func scanBypassRule(row scanner, out *BypassRule) error {
 	return row.Scan(
 		&out.ID, &out.Scope, &out.HostID, &out.RuleType, &out.Value, &out.Note,
 		&out.IsRisky, &out.CreatedAt, &out.UpdatedAt,
 	)
 }
 
-// scanBypassBinding 同上，host_bypass_bindings 列顺序对齐。
-func scanBypassBinding(row pgx.Row, out *BypassBinding) error {
+func scanBypassBinding(row scanner, out *BypassBinding) error {
 	return row.Scan(
 		&out.ID, &out.HostID, &out.PresetID, &out.RuleID,
 		&out.Enabled, &out.Source, &out.CreatedAt,
 	)
 }
 
-// scanBypassSnapshot 同上，host_bypass_snapshots 列顺序对齐。
-func scanBypassSnapshot(row pgx.Row, out *BypassSnapshot) error {
+func scanBypassSnapshot(row scanner, out *BypassSnapshot) error {
 	return row.Scan(
 		&out.ID, &out.HostID, &out.Version, &out.ConfigHash,
 		&out.WhitelistCIDRsJSON, &out.WhitelistDomainsJSON,
@@ -260,8 +236,12 @@ func scanBypassSnapshot(row pgx.Row, out *BypassSnapshot) error {
 	)
 }
 
+// ---------------------------------------------------------------------------
+// 19 个 Repository 方法 — database/sql 实现
+// ---------------------------------------------------------------------------
+
 func (r *Repository) ListBypassPresets(ctx context.Context) ([]BypassPreset, error) {
-	rows, err := r.db.Query(ctx, listBypassPresetsSQL)
+	rows, err := r.db.QueryContext(ctx, listBypassPresetsSQL)
 	if err != nil {
 		return nil, fmt.Errorf("query bypass presets: %w", err)
 	}
@@ -283,7 +263,7 @@ func (r *Repository) ListBypassPresets(ctx context.Context) ([]BypassPreset, err
 
 func (r *Repository) GetBypassPresetBySlug(ctx context.Context, slug string) (BypassPreset, error) {
 	var it BypassPreset
-	if err := scanBypassPreset(r.db.QueryRow(ctx, getBypassPresetBySlugSQL, slug), &it); err != nil {
+	if err := scanBypassPreset(r.db.QueryRowContext(ctx, getBypassPresetBySlugSQL, slug), &it); err != nil {
 		return BypassPreset{}, fmt.Errorf("get bypass preset by slug: %w", err)
 	}
 	return it, nil
@@ -291,7 +271,7 @@ func (r *Repository) GetBypassPresetBySlug(ctx context.Context, slug string) (By
 
 func (r *Repository) GetBypassPresetByID(ctx context.Context, id string) (BypassPreset, error) {
 	var it BypassPreset
-	if err := scanBypassPreset(r.db.QueryRow(ctx, getBypassPresetByIDSQL, id), &it); err != nil {
+	if err := scanBypassPreset(r.db.QueryRowContext(ctx, getBypassPresetByIDSQL, id), &it); err != nil {
 		return BypassPreset{}, fmt.Errorf("get bypass preset by id: %w", err)
 	}
 	return it, nil
@@ -306,7 +286,8 @@ func (r *Repository) CreateBypassPreset(ctx context.Context, params CreateBypass
 		rulesJSON = []byte("[]")
 	}
 	var it BypassPreset
-	row := r.db.QueryRow(ctx, createBypassPresetSQL,
+	row := r.db.QueryRowContext(ctx, createBypassPresetSQL,
+		uuid.NewString(),
 		params.Slug, params.Name, nullIfEmpty(params.Description),
 		params.IsForceOn, params.IsActive, rulesJSON,
 	)
@@ -340,60 +321,60 @@ func (r *Repository) UpdateBypassPreset(ctx context.Context, id string, params U
 	}
 
 	var it BypassPreset
-	row := r.db.QueryRow(ctx, updateBypassPresetSQL, id, nameArg, descArg, forceOnArg, activeArg, rulesArg)
+	row := r.db.QueryRowContext(ctx, updateBypassPresetSQL, nameArg, descArg, forceOnArg, activeArg, rulesArg, id)
 	if err := scanBypassPreset(row, &it); err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if !errors.Is(err, sql.ErrNoRows) {
 			return BypassPreset{}, fmt.Errorf("update bypass preset: %w", err)
 		}
 		// 影响 0 行：区分「命中 is_system 兜底」与「行不存在」。
 		var isSystem bool
-		if e := r.db.QueryRow(ctx, checkBypassPresetIsSystemSQL, id).Scan(&isSystem); e != nil {
-			if errors.Is(e, pgx.ErrNoRows) {
-				return BypassPreset{}, fmt.Errorf("update bypass preset: %w", pgx.ErrNoRows)
+		if e := r.db.QueryRowContext(ctx, checkBypassPresetIsSystemSQL, id).Scan(&isSystem); e != nil {
+			if errors.Is(e, sql.ErrNoRows) {
+				return BypassPreset{}, fmt.Errorf("update bypass preset: %w", sql.ErrNoRows)
 			}
 			return BypassPreset{}, fmt.Errorf("check bypass preset is_system: %w", e)
 		}
 		if isSystem {
 			return BypassPreset{}, ErrSystemBypassPresetImmutable
 		}
-		return BypassPreset{}, fmt.Errorf("update bypass preset: %w", pgx.ErrNoRows)
+		return BypassPreset{}, fmt.Errorf("update bypass preset: %w", sql.ErrNoRows)
 	}
 	return it, nil
 }
 
 func (r *Repository) DeleteBypassPreset(ctx context.Context, id string) error {
-	// 先查 is_system；命中 → sentinel。即使 Go 层漏检，SQL `AND is_system = FALSE`
+	// 先查 is_system；命中 → sentinel。即使 Go 层漏检，SQL `AND is_system = 0`
 	// 也兜底保证不会真的 DELETE。
 	var isSystem bool
-	if err := r.db.QueryRow(ctx, checkBypassPresetIsSystemSQL, id).Scan(&isSystem); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("delete bypass preset: %w", pgx.ErrNoRows)
+	if err := r.db.QueryRowContext(ctx, checkBypassPresetIsSystemSQL, id).Scan(&isSystem); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("delete bypass preset: %w", sql.ErrNoRows)
 		}
 		return fmt.Errorf("check bypass preset is_system: %w", err)
 	}
 	if isSystem {
 		return ErrSystemBypassPresetImmutable
 	}
-	tag, err := r.db.Exec(ctx, deleteBypassPresetSQL, id)
+	tag, err := r.db.ExecContext(ctx, deleteBypassPresetSQL, id)
 	if err != nil {
 		return fmt.Errorf("delete bypass preset: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
+	if n, _ := tag.RowsAffected(); n == 0 {
 		// 极小概率：is_system 查询与 DELETE 之间被改为 system。
-		return fmt.Errorf("delete bypass preset: %w", pgx.ErrNoRows)
+		return fmt.Errorf("delete bypass preset: %w", sql.ErrNoRows)
 	}
 	return nil
 }
 
 func (r *Repository) ListBypassRules(ctx context.Context, hostID *string) ([]BypassRule, error) {
 	var (
-		rows pgx.Rows
+		rows *sql.Rows
 		err  error
 	)
 	if hostID == nil {
-		rows, err = r.db.Query(ctx, listBypassRulesGlobalOnlySQL)
+		rows, err = r.db.QueryContext(ctx, listBypassRulesGlobalOnlySQL)
 	} else {
-		rows, err = r.db.Query(ctx, listBypassRulesGlobalOrHostSQL, *hostID)
+		rows, err = r.db.QueryContext(ctx, listBypassRulesGlobalOrHostSQL, *hostID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query bypass rules: %w", err)
@@ -415,9 +396,6 @@ func (r *Repository) ListBypassRules(ctx context.Context, hostID *string) ([]Byp
 }
 
 func (r *Repository) CreateBypassRule(ctx context.Context, params CreateBypassRuleParams) (BypassRule, error) {
-	// Phase 45 CR-01：scope/host_id 一致性必须在 Go 层显式拦截。
-	// schema 的 CHECK (scope='host' → host_id IS NOT NULL) 对"非 nil 指针指向空串"
-	// 无效（PG 看到的是空串而非 NULL），会返回 invalid syntax 而非 check 失败。
 	if params.Scope == "host" && (params.HostID == nil || *params.HostID == "") {
 		return BypassRule{}, fmt.Errorf("create bypass rule: scope=host requires non-empty host_id")
 	}
@@ -425,7 +403,8 @@ func (r *Repository) CreateBypassRule(ctx context.Context, params CreateBypassRu
 		return BypassRule{}, fmt.Errorf("create bypass rule: scope=global must not carry host_id")
 	}
 	var it BypassRule
-	row := r.db.QueryRow(ctx, createBypassRuleSQL,
+	row := r.db.QueryRowContext(ctx, createBypassRuleSQL,
+		uuid.NewString(),
 		params.Scope, nullableUUIDArg(params.HostID), params.RuleType, params.Value, nullIfEmpty(params.Note), params.IsRisky,
 	)
 	if err := scanBypassRule(row, &it); err != nil {
@@ -446,7 +425,7 @@ func (r *Repository) UpdateBypassRule(ctx context.Context, id string, params Upd
 		riskyArg = *params.IsRisky
 	}
 	var it BypassRule
-	row := r.db.QueryRow(ctx, updateBypassRuleSQL, id, valueArg, noteArg, riskyArg)
+	row := r.db.QueryRowContext(ctx, updateBypassRuleSQL, valueArg, noteArg, riskyArg, id)
 	if err := scanBypassRule(row, &it); err != nil {
 		return BypassRule{}, fmt.Errorf("update bypass rule: %w", err)
 	}
@@ -454,28 +433,26 @@ func (r *Repository) UpdateBypassRule(ctx context.Context, id string, params Upd
 }
 
 func (r *Repository) DeleteBypassRule(ctx context.Context, id string) error {
-	tag, err := r.db.Exec(ctx, deleteBypassRuleSQL, id)
+	tag, err := r.db.ExecContext(ctx, deleteBypassRuleSQL, id)
 	if err != nil {
 		return fmt.Errorf("delete bypass rule: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("delete bypass rule: %w", pgx.ErrNoRows)
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return fmt.Errorf("delete bypass rule: %w", sql.ErrNoRows)
 	}
 	return nil
 }
 
-// GetBypassRuleByID 返回单条规则，主要供 Phase 46 handler 在 Update / Delete 前取
-// before 快照写 audit_log。pgx.ErrNoRows 在调用方做 404 翻译。
 func (r *Repository) GetBypassRuleByID(ctx context.Context, id string) (BypassRule, error) {
 	var it BypassRule
-	if err := scanBypassRule(r.db.QueryRow(ctx, getBypassRuleByIDSQL, id), &it); err != nil {
+	if err := scanBypassRule(r.db.QueryRowContext(ctx, getBypassRuleByIDSQL, id), &it); err != nil {
 		return BypassRule{}, fmt.Errorf("get bypass rule by id: %w", err)
 	}
 	return it, nil
 }
 
 func (r *Repository) ListBypassBindingsByHost(ctx context.Context, hostID string) ([]BypassBinding, error) {
-	rows, err := r.db.Query(ctx, listBypassBindingsByHostSQL, hostID)
+	rows, err := r.db.QueryContext(ctx, listBypassBindingsByHostSQL, hostID)
 	if err != nil {
 		return nil, fmt.Errorf("query bypass bindings: %w", err)
 	}
@@ -501,7 +478,8 @@ func (r *Repository) CreateBypassBinding(ctx context.Context, params CreateBypas
 		source = "admin"
 	}
 	var it BypassBinding
-	row := r.db.QueryRow(ctx, createBypassBindingSQL,
+	row := r.db.QueryRowContext(ctx, createBypassBindingSQL,
+		uuid.NewString(),
 		params.HostID,
 		nullableUUIDArg(params.PresetID),
 		nullableUUIDArg(params.RuleID),
@@ -514,12 +492,12 @@ func (r *Repository) CreateBypassBinding(ctx context.Context, params CreateBypas
 }
 
 func (r *Repository) DeleteBypassBinding(ctx context.Context, id string) error {
-	tag, err := r.db.Exec(ctx, deleteBypassBindingSQL, id)
+	tag, err := r.db.ExecContext(ctx, deleteBypassBindingSQL, id)
 	if err != nil {
 		return fmt.Errorf("delete bypass binding: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("delete bypass binding: %w", pgx.ErrNoRows)
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return fmt.Errorf("delete bypass binding: %w", sql.ErrNoRows)
 	}
 	return nil
 }
@@ -528,7 +506,7 @@ func (r *Repository) ListBypassSnapshotsByHost(ctx context.Context, hostID strin
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := r.db.Query(ctx, listBypassSnapshotsByHostSQL, hostID, limit)
+	rows, err := r.db.QueryContext(ctx, listBypassSnapshotsByHostSQL, hostID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query bypass snapshots: %w", err)
 	}
@@ -562,7 +540,8 @@ func (r *Repository) CreateBypassSnapshot(ctx context.Context, params CreateBypa
 		source = "apply"
 	}
 	var it BypassSnapshot
-	row := r.db.QueryRow(ctx, createBypassSnapshotSQL,
+	row := r.db.QueryRowContext(ctx, createBypassSnapshotSQL,
+		uuid.NewString(),
 		params.HostID, params.Version, params.ConfigHash,
 		[]byte(cidrs), []byte(domains),
 		source,
@@ -576,7 +555,7 @@ func (r *Repository) CreateBypassSnapshot(ctx context.Context, params CreateBypa
 
 func (r *Repository) UpdateBypassSnapshotStatus(ctx context.Context, id string, status string) (BypassSnapshot, error) {
 	var it BypassSnapshot
-	row := r.db.QueryRow(ctx, updateBypassSnapshotStatusSQL, id, status)
+	row := r.db.QueryRowContext(ctx, updateBypassSnapshotStatusSQL, status, id)
 	if err := scanBypassSnapshot(row, &it); err != nil {
 		return BypassSnapshot{}, fmt.Errorf("update bypass snapshot status: %w", err)
 	}
@@ -585,21 +564,16 @@ func (r *Repository) UpdateBypassSnapshotStatus(ctx context.Context, id string, 
 
 func (r *Repository) GetLatestAppliedBypassSnapshot(ctx context.Context, hostID string) (BypassSnapshot, error) {
 	var it BypassSnapshot
-	row := r.db.QueryRow(ctx, getLatestAppliedBypassSnapshotSQL, hostID)
+	row := r.db.QueryRowContext(ctx, getLatestAppliedBypassSnapshotSQL, hostID)
 	if err := scanBypassSnapshot(row, &it); err != nil {
 		return BypassSnapshot{}, fmt.Errorf("get latest applied bypass snapshot: %w", err)
 	}
 	return it, nil
 }
 
-// GetBypassSnapshotByID 返回单条快照，主要供 Phase 46 Plan 02 rollback 接口校验：
-//   - target.HostID 必须匹配 path param hostID（否则 404 不暴露存在性）
-//   - target.AppliedStatus 必须为 'applied'（否则 409）
-//
-// pgx.ErrNoRows 在调用方做 404 翻译（错误码 BYPASS_SNAPSHOT_NOT_FOUND）。
 func (r *Repository) GetBypassSnapshotByID(ctx context.Context, id string) (BypassSnapshot, error) {
 	var it BypassSnapshot
-	row := r.db.QueryRow(ctx, getBypassSnapshotByIDSQL, id)
+	row := r.db.QueryRowContext(ctx, getBypassSnapshotByIDSQL, id)
 	if err := scanBypassSnapshot(row, &it); err != nil {
 		return BypassSnapshot{}, fmt.Errorf("get bypass snapshot by id: %w", err)
 	}
@@ -616,7 +590,8 @@ func (r *Repository) InsertBypassAuditLog(ctx context.Context, params InsertBypa
 	}
 	var id string
 	var createdAt any // 占位接住 RETURNING 的 created_at，调用方不需要它。
-	if err := r.db.QueryRow(ctx, insertBypassAuditLogSQL,
+	if err := r.db.QueryRowContext(ctx, insertBypassAuditLogSQL,
+		uuid.NewString(),
 		nullableUUIDArg(params.ActorID), nullIfEmpty(params.ActorIP),
 		params.Action, params.TargetKind,
 		nullableUUIDArg(params.TargetID),
@@ -628,7 +603,7 @@ func (r *Repository) InsertBypassAuditLog(ctx context.Context, params InsertBypa
 }
 
 func (r *Repository) ListBypassAuditLogByTarget(ctx context.Context, targetKind, targetID string) ([]BypassAuditLog, error) {
-	rows, err := r.db.Query(ctx, listBypassAuditLogByTargetSQL, targetKind, targetID)
+	rows, err := r.db.QueryContext(ctx, listBypassAuditLogByTargetSQL, targetKind, targetID)
 	if err != nil {
 		return nil, fmt.Errorf("query bypass audit log: %w", err)
 	}

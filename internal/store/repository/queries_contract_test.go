@@ -66,7 +66,7 @@ func TestGetHostByUsernameSQL_Shape(t *testing.T) {
 	if !strings.Contains(q, "JOIN users u") {
 		t.Error("getHostByUsernameSQL 应 JOIN users 表")
 	}
-	if !strings.Contains(q, "u.username = $1") {
+	if !strings.Contains(q, "u.username = ?") {
 		t.Error("getHostByUsernameSQL 应按 u.username 查询")
 	}
 	if !strings.Contains(q, "ssh_private_key") {
@@ -75,7 +75,7 @@ func TestGetHostByUsernameSQL_Shape(t *testing.T) {
 	if !strings.Contains(q, "'workspace'") {
 		t.Error("getHostByUsernameSQL 应硬编码 ContainerUser = 'workspace'")
 	}
-	if strings.Contains(q, "h.short_id = $1") {
+	if strings.Contains(q, "h.short_id = ?") {
 		t.Error("getHostByUsernameSQL 不应再按 short_id 查询")
 	}
 	if !strings.Contains(q, "u.entry_password") {

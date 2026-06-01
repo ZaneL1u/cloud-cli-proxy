@@ -9,9 +9,9 @@ import (
 func TestUpsertClaudeAccountPersistentVolumeNameSQL_ContainsKeyTokens(t *testing.T) {
 	must := []string{
 		"UPDATE claude_accounts",
-		"SET persistent_volume_name = $2",
+		"SET persistent_volume_name = ?",
 		"updated_at = NOW()",
-		"WHERE id = $1 AND persistent_volume_name IS NULL",
+		"WHERE id = ? AND persistent_volume_name IS NULL",
 	}
 	for _, token := range must {
 		if !strings.Contains(upsertClaudeAccountPersistentVolumeNameSQL, token) {
@@ -24,7 +24,7 @@ func TestCheckClaudeAccountPersistentVolumeNameSQL_ContainsKeyTokens(t *testing.
 	must := []string{
 		"COALESCE(persistent_volume_name, '')",
 		"FROM claude_accounts",
-		"WHERE id = $1",
+		"WHERE id = ?",
 	}
 	for _, token := range must {
 		if !strings.Contains(checkClaudeAccountPersistentVolumeNameSQL, token) {
