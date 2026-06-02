@@ -217,6 +217,16 @@ func actionToHostStatus(action agentapi.HostAction) string {
 	}
 }
 
+func dockerPidsLimitValue(limit *int) string {
+	if limit == nil {
+		return "1024"
+	}
+	if *limit == 0 {
+		return "-1"
+	}
+	return fmt.Sprintf("%d", *limit)
+}
+
 func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerName, hostname string, egressCfg *network.EgressConfig) ([]string, error) {
 	homeDir := firstNonEmpty(request.HomeDir, hostHomeDir(request.HostID))
 
@@ -226,8 +236,8 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 		"--network", "bridge",
 		// unless-stopped：容器进程崩溃时 docker 自动重启，docker daemon 重启后也会恢复运行。
 		"--restart", "unless-stopped",
-		// 防止 fork 炸弹耗尽宿主机 pid；防止容器日志撑满磁盘。
-		"--pids-limit", "512",
+		// 防止 fork 炸弹耗尽宿主机 pid；0 表示不限制。
+		"--pids-limit", dockerPidsLimitValue(request.PidsLimit),
 		"--log-opt", "max-size=10m",
 		"--log-opt", "max-file=3",
 		// Phase 51 QUAL-06 / 闭 Phase 49 GAP-1：worker capability 收紧。
@@ -1211,14 +1221,14 @@ func (t *pullProgressTracker) maybeReport() {
 		layersCopy[k] = v
 	}
 	broadcast.BroadcastJSON("tasks", map[string]any{
-		"topic":   "tasks",
-		"action":  "progress",
-		"id":      t.taskID,
+		"topic":  "tasks",
+		"action": "progress",
+		"id":     t.taskID,
 		"payload": map[string]any{
-			"percent":  percent,
-			"message":  message,
-			"host_id":  t.hostID,
-			"layers":   layersCopy,
+			"percent": percent,
+			"message": message,
+			"host_id": t.hostID,
+			"layers":  layersCopy,
 		},
 	})
 }

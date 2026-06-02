@@ -32,20 +32,21 @@ type User struct {
 }
 
 type Host struct {
-	ID               string    `json:"id"`
-	UserID           string    `json:"user_id"`
-	Status           string    `json:"status"`
-	ShortID          string    `json:"short_id"`
-	TemplateImageRef string    `json:"template_image_ref"`
-	HomeVolumeName   string    `json:"home_volume_name"`
-	SlotKey          string    `json:"slot_key"`
-	Timezone         string    `json:"timezone"`
-	Hostname         string    `json:"hostname"`
-	MemoryLimitMB    *int      `json:"memory_limit_mb"`
-	CPULimit         *float64  `json:"cpu_limit"`
+	ID               string     `json:"id"`
+	UserID           string     `json:"user_id"`
+	Status           string     `json:"status"`
+	ShortID          string     `json:"short_id"`
+	TemplateImageRef string     `json:"template_image_ref"`
+	HomeVolumeName   string     `json:"home_volume_name"`
+	SlotKey          string     `json:"slot_key"`
+	Timezone         string     `json:"timezone"`
+	Hostname         string     `json:"hostname"`
+	MemoryLimitMB    *int       `json:"memory_limit_mb"`
+	CPULimit         *float64   `json:"cpu_limit"`
+	PidsLimit        *int       `json:"pids_limit"`
 	HostMounts       HostMounts `json:"host_mounts"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 type HostMount struct {
@@ -111,15 +112,15 @@ type Event struct {
 }
 
 type EgressIP struct {
-	ID                 string          `json:"id"`
-	Label              string          `json:"label"`
-	IPAddress          string          `json:"ip_address"`
-	DetectedIPAddress  *string         `json:"detected_ip_address,omitempty"`
-	Provider           string          `json:"provider"`
-	Status             string          `json:"status"`
-	ProxyConfig        json.RawMessage `json:"proxy_config,omitempty"`
-	CreatedAt          time.Time       `json:"created_at"`
-	UpdatedAt          time.Time       `json:"updated_at"`
+	ID                string          `json:"id"`
+	Label             string          `json:"label"`
+	IPAddress         string          `json:"ip_address"`
+	DetectedIPAddress *string         `json:"detected_ip_address,omitempty"`
+	Provider          string          `json:"provider"`
+	Status            string          `json:"status"`
+	ProxyConfig       json.RawMessage `json:"proxy_config,omitempty"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
 }
 
 type DashboardStats struct {
@@ -158,8 +159,8 @@ type UpdateEgressIPParams struct {
 }
 
 type HostDetail struct {
-	Host     Host          `json:"host"`
-	User     User          `json:"user"`
+	Host     Host            `json:"host"`
+	User     User            `json:"user"`
 	Bindings []BindingWithIP `json:"bindings"`
 }
 
@@ -171,11 +172,11 @@ type BindingWithIP struct {
 
 type HostWithUsername struct {
 	Host
-	Username              string  `json:"username"`
-	EgressIPLabel         *string `json:"egress_ip_label,omitempty"`
-	EgressIPAddr          *string `json:"egress_ip_address,omitempty"`
-	EgressIPDetectedAddr  *string `json:"egress_ip_detected_address,omitempty"`
-	DockerStatus          string  `json:"docker_status,omitempty"`
+	Username             string  `json:"username"`
+	EgressIPLabel        *string `json:"egress_ip_label,omitempty"`
+	EgressIPAddr         *string `json:"egress_ip_address,omitempty"`
+	EgressIPDetectedAddr *string `json:"egress_ip_detected_address,omitempty"`
+	DockerStatus         string  `json:"docker_status,omitempty"`
 }
 
 // HostWithClaudeAccount D-23：纯 DB JOIN，避免在 detail handler 引入 docker exec。
@@ -277,6 +278,7 @@ type UpsertHostParams struct {
 	Hostname         string
 	MemoryLimitMB    *int
 	CPULimit         *float64
+	PidsLimit        *int
 	HostMounts       HostMounts
 }
 

@@ -53,6 +53,7 @@ type HostActionRequest struct {
 	Hostname      string            `json:"hostname"`
 	MemoryLimitMB int               `json:"memory_limit_mb,omitempty"`
 	CPULimit      float64           `json:"cpu_limit,omitempty"`
+	PidsLimit     *int              `json:"pids_limit,omitempty"`
 	Username      string            `json:"username,omitempty"`
 	EntryPassword string            `json:"entry_password,omitempty"`
 	SSHPublicKey  string            `json:"ssh_public_key,omitempty"`
