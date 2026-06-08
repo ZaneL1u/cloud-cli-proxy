@@ -104,12 +104,14 @@ var nsenterRunner = func(ctx context.Context, args ...string) ([]byte, error) {
 //   - NonBypassEgressOK  非白名单流量必须从代理出口出（源 IP = egress IP）
 //   - PublicDNSBlocked   nsenter+dig @8.8.8.8 example.com 必须超时（公网 DNS 被阻断）
 type VerifyResult struct {
-	EgressIPMatch  bool
-	ActualEgressIP string
-	DNSCorrect     bool
-	ActualDNS      string
-	LeakBlocked    bool
-	LeakTarget     string
+	EgressIPMatch   bool
+	ActualEgressIP  string
+	DNSCorrect      bool
+	ActualDNS       string
+	DNSResolved     bool
+	DNSResolveError string
+	LeakBlocked     bool
+	LeakTarget      string
 
 	// Phase 47 Plan 03 新增三项
 	BypassEgressOK        bool   `json:"bypass_egress_ok"`
@@ -120,24 +122,24 @@ type VerifyResult struct {
 }
 
 // AllPassed returns true only when all six verification checks passed
-//（旧 3 项 + Phase 47 Plan 03 新增 3 项）。
+// （旧 3 项 + Phase 47 Plan 03 新增 3 项）。
 func (r VerifyResult) AllPassed() bool {
-	return r.EgressIPMatch && r.DNSCorrect && r.LeakBlocked &&
+	return r.EgressIPMatch && r.DNSCorrect && r.DNSResolved && r.LeakBlocked &&
 		r.BypassEgressOK && r.NonBypassEgressOK && r.PublicDNSBlocked
 }
 
 // VerifyNetworkIntegrity runs six independent checks inside the container's
 // network namespace via nsenter:
 //
-//  Legacy (Phase 45 及以前):
-//   1. Egress IP must match the expected binding (D-09)
-//   2. DNS resolver must point to the tunnel-side DNS server (D-09)
-//   3. Direct (non-tunnel) outbound connections must be blocked (D-09)
+//	Legacy (Phase 45 及以前):
+//	 1. Egress IP must match the expected binding (D-09)
+//	 2. DNS resolver must point to the tunnel-side DNS server (D-09)
+//	 3. Direct (non-tunnel) outbound connections must be blocked (D-09)
 //
-//  Phase 47 Plan 03 (BYPASS-VERIFY-01):
-//   4. Whitelist (bypass) traffic exits via host eth0, NOT the proxy egress
-//   5. Non-whitelist traffic exits via the proxy egress IP
-//   6. Public DNS (dig @8.8.8.8) is blocked (must time out)
+//	Phase 47 Plan 03 (BYPASS-VERIFY-01):
+//	 4. Whitelist (bypass) traffic exits via host eth0, NOT the proxy egress
+//	 5. Non-whitelist traffic exits via the proxy egress IP
+//	 6. Public DNS (dig @8.8.8.8) is blocked (must time out)
 //
 // All six checks run regardless of individual failures so the caller gets
 // the complete verification state. The returned error (if any) is a typed
@@ -148,6 +150,7 @@ func VerifyNetworkIntegrity(ctx context.Context, containerPID uint32, expected E
 	var result VerifyResult
 	verifyEgressIPMulti(ctx, prefix, expected.ExpectedIP, egressIPSources, &result)
 	verifyDNS(ctx, prefix, containerExpectedDNS, &result)
+	verifyDNSResolution(ctx, prefix, &result)
 	result.LeakBlocked = true
 	result.LeakTarget = "1.1.1.1:80"
 	result.PublicDNSBlocked = true
@@ -173,9 +176,10 @@ func VerifyNetworkIntegrityDocker(ctx context.Context, containerName string, exp
 		result = VerifyResult{}
 		verifyEgressIPMultiSOCKS(ctx, prefix, expected.ExpectedIP, egressIPSources, &result)
 		verifyDNS(ctx, prefix, containerExpectedDNS, &result)
+		verifyDNSResolution(ctx, prefix, &result)
 		result.LeakBlocked = true
 		result.LeakTarget = "1.1.1.1:80"
-		result.PublicDNSBlocked = true
+		verifyPublicDNSBlocked(ctx, prefix, &result)
 		result.BypassEgressOK = true
 		result.NonBypassEgressOK = true
 
@@ -436,6 +440,26 @@ func verifyDNS(ctx context.Context, prefix []string, expectedDNS string, result 
 	result.DNSCorrect = firstNS == expectedDNS
 }
 
+func verifyDNSResolution(ctx context.Context, prefix []string, result *VerifyResult) {
+	checkCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+
+	args := append(append([]string{}, prefix...), "getent", "ahostsv4", "example.com")
+	out, err := nsenterRunner(checkCtx, args...)
+	if err != nil {
+		result.DNSResolved = false
+		result.DNSResolveError = fmt.Sprintf("getent ahostsv4 example.com failed: %v", err)
+		return
+	}
+	if strings.TrimSpace(string(out)) == "" {
+		result.DNSResolved = false
+		result.DNSResolveError = "getent ahostsv4 example.com returned empty output"
+		return
+	}
+	result.DNSResolved = true
+	result.DNSResolveError = ""
+}
+
 // parseAllNameservers 从 /etc/resolv.conf 原文中提取所有 nameserver 行的 IP，
 // 按原文件顺序返回；空 / 无 nameserver / 全是注释行 → 返回 nil。
 //
@@ -604,8 +628,9 @@ func verifyPublicDNSBlocked(ctx context.Context, prefix []string, result *Verify
 // failing check.
 //
 // 优先级（Phase 47 Plan 03 扩展）:
-//   旧：EgressUnreachable/Mismatch > DNSLeak > LeakNotBlocked
-//   新：> BypassEgress (复用 LeakNotBlocked code) > NonBypass (复用 EgressIPMismatch) > PublicDNS (复用 DNSLeak)
+//
+//	旧：EgressUnreachable/Mismatch > DNSLeak > LeakNotBlocked
+//	新：> BypassEgress (复用 LeakNotBlocked code) > NonBypass (复用 EgressIPMismatch) > PublicDNS (复用 DNSLeak)
 //
 // 新检查放在最低优先级，这样不会破坏调用方对旧错误码的语义假设；同时通过
 // Metadata.bypass_egress / non_bypass_egress / public_dns 子字段让上层日志能识别
@@ -640,6 +665,18 @@ func firstNetworkError(expected EgressConfig, r VerifyResult) *NetworkError {
 			Metadata: map[string]any{
 				"expected_dns": containerExpectedDNS,
 				"actual_dns":   r.ActualDNS,
+			},
+		}
+	}
+
+	if !r.DNSResolved {
+		return &NetworkError{
+			Type:    ErrDNSLeak,
+			Message: fmt.Sprintf("DNS resolution failed: %s", r.DNSResolveError),
+			HostID:  hostID,
+			Metadata: map[string]any{
+				"check": "dns_resolution",
+				"error": r.DNSResolveError,
 			},
 		}
 	}

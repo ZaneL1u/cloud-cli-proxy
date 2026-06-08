@@ -58,7 +58,7 @@ func (m *mockInspector) InspectContainer(_ context.Context, name string) (agenta
 }
 
 func TestReconciler(t *testing.T) {
-	t.Run("Run_AllHealthy_NoUpdates", func(t *testing.T) {
+	t.Run("Run_RunningContainers_QueuesPrepareHost", func(t *testing.T) {
 		store := &mockReconcileStore{
 			runningHosts: []repository.Host{
 				{ID: "h1"},
@@ -81,11 +81,22 @@ func TestReconciler(t *testing.T) {
 		if len(store.updatedHosts) != 0 {
 			t.Errorf("expected no host updates, got %d", len(store.updatedHosts))
 		}
-		if len(store.recordedEvents) != 0 {
-			t.Errorf("expected no events, got %d", len(store.recordedEvents))
+		if len(queuer.queuedActions) != 2 {
+			t.Fatalf("expected 2 queued actions, got %d", len(queuer.queuedActions))
 		}
-		if len(queuer.queuedActions) != 0 {
-			t.Errorf("expected no queued actions, got %d", len(queuer.queuedActions))
+		for _, queued := range queuer.queuedActions {
+			if queued.Action != agentapi.ActionPrepareHost || queued.RequestedBy != "system" {
+				t.Errorf("queued = %+v, want prepare_host by system", queued)
+			}
+		}
+		prepareEvents := 0
+		for _, ev := range store.recordedEvents {
+			if ev.Type == "reconcile.host.network_prepare" {
+				prepareEvents++
+			}
+		}
+		if prepareEvents != 2 {
+			t.Errorf("network prepare event count = %d, want 2", prepareEvents)
 		}
 	})
 

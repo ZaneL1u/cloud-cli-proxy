@@ -102,7 +102,7 @@ func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest
 	case agentapi.ActionRebuildHost:
 		err = w.rebuildHost(ctx, request)
 	case agentapi.ActionPrepareHost:
-		err = w.validateAndPrepare(ctx, request.HostID)
+		err = w.prepareExistingHost(ctx, request)
 	case agentapi.ActionVolumeRemove:
 		err = w.removeVolumes(ctx, request)
 	case agentapi.ActionReloadHostBypass:
@@ -622,6 +622,49 @@ func (w *Worker) rebuildHost(ctx context.Context, request agentapi.HostActionReq
 		return err
 	}
 
+	return nil
+}
+
+func (w *Worker) prepareExistingHost(ctx context.Context, request agentapi.HostActionRequest) error {
+	containerName := firstNonEmpty(request.ContainerName, containerNameForHost(request.HostID))
+	if exists, err := w.containerExists(ctx, containerName); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("prepare host network: container %s does not exist", containerName)
+	}
+
+	running, err := w.containerRunning(ctx, containerName)
+	if err != nil {
+		return err
+	}
+	if !running {
+		return fmt.Errorf("prepare host network: container %s is not running", containerName)
+	}
+
+	if err := w.connectContainerNetworks(ctx, containerName); err != nil {
+		return fmt.Errorf("connect container networks before prepare: %w", err)
+	}
+
+	if err := w.reapplyLatestBypassSnapshot(ctx, request.HostID); err != nil {
+		return fmt.Errorf("reapply latest bypass snapshot before prepare: %w", err)
+	}
+
+	egressCfg, err := w.buildEgressConfig(ctx, request.HostID)
+	if err != nil {
+		return err
+	}
+	if egressCfg == nil {
+		return nil
+	}
+
+	spec := network.HostNetworkSpec{
+		HostID: request.HostID,
+		Egress: egressCfg,
+	}
+	if err := w.provider.PrepareHost(ctx, spec); err != nil {
+		w.recordNetworkError(ctx, request.HostID, err)
+		return fmt.Errorf("prepare existing host network: %w", err)
+	}
 	return nil
 }
 
@@ -1243,6 +1286,18 @@ func (w *Worker) containerExists(ctx context.Context, name string) (bool, error)
 	}
 
 	return true, nil
+}
+
+func (w *Worker) containerRunning(ctx context.Context, name string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "docker", "container", "inspect", "-f", "{{.State.Running}}", name)
+	out, err := cmd.Output()
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() != 0 {
+			return false, nil
+		}
+		return false, fmt.Errorf("inspect docker container running state %s: %w", name, err)
+	}
+	return strings.TrimSpace(string(out)) == "true", nil
 }
 
 func (w *Worker) runDocker(ctx context.Context, args ...string) error {

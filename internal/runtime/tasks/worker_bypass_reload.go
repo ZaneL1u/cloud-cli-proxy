@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -80,6 +81,38 @@ func (w *Worker) handleReloadHostBypass(ctx context.Context, request agentapi.Ho
 	// 4. 健康检查耗尽 → 自动 rollback。
 	cause := fmt.Errorf("health check exhausted after %d attempts: %w", healthCheckRetries, lastCheckErr)
 	return w.markSnapshotFailedAndRollback(ctx, request, snap, cause)
+}
+
+func (w *Worker) reapplyLatestBypassSnapshot(ctx context.Context, hostID string) error {
+	snap, err := w.repo.GetLatestAppliedBypassSnapshot(ctx, hostID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("get latest applied bypass snapshot: %w", err)
+	}
+
+	if err := applyBypassRuleSetHook(ctx, hostID, snap.WhitelistCIDRsJSON, snap.WhitelistDomainsJSON); err != nil {
+		return fmt.Errorf("reapply bypass snapshot %s: %w", snap.ID, err)
+	}
+
+	w.recordBypassReapplyEvent(ctx, hostID, snap, "info", "bypass.reapply_applied", "latest applied bypass snapshot reapplied")
+	return nil
+}
+
+func (w *Worker) recordBypassReapplyEvent(ctx context.Context, hostID string, snap repository.BypassSnapshot, level, eventType, msg string) {
+	_, _ = w.repo.RecordEvent(ctx, repository.RecordEventParams{
+		HostID:  &hostID,
+		Level:   level,
+		Type:    eventType,
+		Message: msg,
+		Metadata: map[string]any{
+			"host_id":     hostID,
+			"snapshot_id": snap.ID,
+			"version":     snap.Version,
+			"config_hash": snap.ConfigHash,
+		},
+	})
 }
 
 func (w *Worker) markSnapshotFailedAndRollback(ctx context.Context, request agentapi.HostActionRequest, current repository.BypassSnapshot, cause error) error {

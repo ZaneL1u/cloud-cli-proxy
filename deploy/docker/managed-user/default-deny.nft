@@ -21,8 +21,8 @@ table inet cloud_proxy_v4 {
         # 放行 tun0（sing-box 接管）
         oifname "tun0" counter accept
 
-        # 放行 sing-box (uid=9000) 通过 eth0 直连代理服务器
-        meta skuid 9000 oifname "eth0" counter accept comment "singbox-direct-egress"
+        # 放行 sing-box (uid=9000) 直连代理服务器；外联网卡名由 Docker 当前路由决定
+        meta skuid 9000 counter accept comment "singbox-direct-egress"
 
         # 显式 drop 外部 DNS（防止用户 dig @8.8.8.8 旁路）
         meta l4proto udp udp dport 53 ip daddr != 127.0.0.0/8 counter drop comment "extdns-udp-drop"
@@ -44,8 +44,8 @@ table inet cloud_proxy_v4 {
         # 反向连接放行
         ct state established,related counter accept
 
-        # 白名单 set：ApplyBypassRuleSet 动态填充，仅 eth0 生效（tun0 已在前面放行）
-        oifname "eth0" ip daddr @whitelist_v4 counter accept comment "bypass-whitelist"
+        # 白名单 set：ApplyBypassRuleSet 动态填充；不依赖 Docker 外联网卡名
+        oifname != "lo" oifname != "tun0" ip daddr @whitelist_v4 counter accept comment "bypass-whitelist"
 
         # 兜底（policy drop 已覆盖，这条 counter 用于可观测）
         counter drop comment "default-deny-tail"

@@ -31,7 +31,7 @@ func buildContainerSingBoxConfig(outboundRaw json.RawMessage, _ /*dnsServer*/, p
 	if err != nil {
 		return nil, err
 	}
-	dnsDirectIn, err := buildContainerDNSDirectInbound()
+	dnsIn, err := buildContainerDNSInbound()
 	if err != nil {
 		return nil, err
 	}
@@ -44,11 +44,11 @@ func buildContainerSingBoxConfig(outboundRaw json.RawMessage, _ /*dnsServer*/, p
 	}
 
 	cfg := map[string]any{
-		"log":      map[string]any{"level": "info"},
-		"dns":      buildContainerDNS(),
-		"inbounds": []json.RawMessage{tunIn, dnsDirectIn, socksIn},
+		"log":       map[string]any{"level": "info"},
+		"dns":       buildContainerDNS(),
+		"inbounds":  []json.RawMessage{tunIn, dnsIn, socksIn},
 		"outbounds": []json.RawMessage{proxyOut, directOut},
-		"route":    buildContainerRoute(proxyServerIP),
+		"route":     buildContainerRoute(proxyServerIP),
 	}
 	return json.MarshalIndent(cfg, "", "  ")
 }
@@ -88,16 +88,15 @@ func buildContainerDNS() map[string]any {
 				"server":   "dns-direct",
 			},
 		},
-		"final":           "dns-proxy",
-		"strategy":        "ipv4_only",
-		"cache_capacity":  256,
+		"final":          "dns-proxy",
+		"strategy":       "ipv4_only",
+		"cache_capacity": 256,
 	}
 }
 
 // buildContainerRoute 渲染 route 块（含 rule_set 定义和引用）。
 func buildContainerRoute(proxyServerIP string) map[string]any {
 	return map[string]any{
-		"default_interface":       "eth0",
 		"default_domain_resolver": map[string]any{"server": "dns-local"},
 		"rules": []map[string]any{
 			{"action": "sniff", "sniffer": []string{"tls", "http", "quic", "dns"}},
@@ -125,17 +124,16 @@ func buildContainerRoute(proxyServerIP string) map[string]any {
 	}
 }
 
-// buildContainerDNSDirectInbound 渲染 direct inbound 监听 127.0.0.1:53。
-func buildContainerDNSDirectInbound() (json.RawMessage, error) {
+// buildContainerDNSInbound 渲染 DNS inbound 监听 127.0.0.1:53。
+func buildContainerDNSInbound() (json.RawMessage, error) {
 	raw, err := json.Marshal(map[string]any{
-		"type":        "direct",
-		"tag":         "dns-direct",
+		"type":        "dns",
+		"tag":         "dns-in",
 		"listen":      "127.0.0.1",
 		"listen_port": 53,
-		"sniff":       true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("marshal container dns direct inbound: %w", err)
+		return nil, fmt.Errorf("marshal container dns inbound: %w", err)
 	}
 	return raw, nil
 }
@@ -224,12 +222,11 @@ func isDomain(s string) bool {
 	return false
 }
 
-// buildGatewayDirectOutbound 渲染 direct outbound (bind eth0)。
+// buildGatewayDirectOutbound 渲染 direct outbound。
 func buildGatewayDirectOutbound() (json.RawMessage, error) {
 	raw, err := json.Marshal(map[string]any{
-		"type":           "direct",
-		"tag":            "direct",
-		"bind_interface": "eth0",
+		"type": "direct",
+		"tag":  "direct",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal direct outbound: %w", err)
