@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CustomRulesTable } from "../custom-rules-table";
@@ -10,7 +10,7 @@ vi.mock("@/lib/api", () => ({
   apiFetch: (...args: unknown[]) => apiFetchMock(...args),
 }));
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
 function renderWithClient(ui: React.ReactNode) {
@@ -90,5 +90,54 @@ describe("CustomRulesTable", () => {
     expect(screen.queryByTestId("rules-row-r-1")).not.toBeInTheDocument();
     // r-2 (keyword abc) 匹配
     expect(screen.getByTestId("rules-row-r-2")).toBeInTheDocument();
+  });
+
+  it("展示规则导出和规则导入按钮", async () => {
+    apiFetchMock.mockResolvedValue({ rules });
+    renderWithClient(<CustomRulesTable hostId="h-1" />);
+
+    await screen.findByTestId("rules-row-r-1");
+
+    expect(screen.getByTestId("export-custom-rules")).toHaveTextContent("规则导出");
+    expect(screen.getByTestId("import-custom-rules")).toHaveTextContent("规则导入");
+  });
+
+  it("上传 JSON 文件后导入规则", async () => {
+    apiFetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/bypass/rules?host_id=h-1") return Promise.resolve({ rules: [] });
+      if (url === "/bypass/rules" && init?.method === "POST") {
+        return Promise.resolve({ rule: rules[0] });
+      }
+      return Promise.reject(new Error("unexpected request"));
+    });
+    const user = userEvent.setup();
+    renderWithClient(<CustomRulesTable hostId="h-1" />);
+
+    await screen.findByText("暂无规则");
+    const input = screen.getByTestId("import-custom-rules-input") as HTMLInputElement;
+    const file = new File(
+      [JSON.stringify({ rules: [{ rule_type: "ip", value: "192.0.2.1", note: "测试" }] })],
+      "rules.json",
+      { type: "application/json" },
+    );
+
+    await user.upload(input, file);
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        "/bypass/rules",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            scope: "host",
+            host_id: "h-1",
+            rule_type: "ip",
+            value: "192.0.2.1",
+            note: "测试",
+            confirm_risky: true,
+          }),
+        }),
+      );
+    });
   });
 });

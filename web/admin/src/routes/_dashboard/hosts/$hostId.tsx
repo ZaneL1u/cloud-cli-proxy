@@ -124,6 +124,7 @@ function HostDetailPage() {
   const [showLayers, setShowLayers] = useState(false);
   const [editingResources, setEditingResources] = useState(false);
   const [editResourcesValue, setEditResourcesValue] = useState<ResourceLimitsValue>({
+    pids_limit: null,
     memory_limit_mb: null,
     cpu_limit: null,
   });
@@ -449,11 +450,21 @@ function HostDetailPage() {
               <div className="px-2 py-2 lg:px-4">
                 <h3 className="mb-1 text-sm font-semibold">资源限制</h3>
                 <p className="mb-4 text-xs text-muted-foreground">
-                  {isRunning ? "运行中不可编辑" : "停止中，可以编辑"}
+                  运行中编辑会立即应用到容器
                 </p>
 
                 {!editingResources ? (
                   <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                      <span className="text-sm">进程数</span>
+                      <span className="font-mono text-sm font-medium">
+                        {host.pids_limit != null
+                          ? host.pids_limit === 0
+                            ? "无限制"
+                            : String(host.pids_limit)
+                          : "默认 (1024)"}
+                      </span>
+                    </div>
                     <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
                       <span className="text-sm">内存</span>
                       <span className="font-mono text-sm font-medium">
@@ -481,10 +492,9 @@ function HostDetailPage() {
                       size="sm"
                       variant="outline"
                       className="mt-2 w-full"
-                      disabled={isRunning}
-                      title={isRunning ? "请先停止主机" : undefined}
                       onClick={() => {
                         setEditResourcesValue({
+                          pids_limit: host.pids_limit,
                           memory_limit_mb: host.memory_limit_mb,
                           cpu_limit: host.cpu_limit,
                         });
@@ -516,6 +526,7 @@ function HostDetailPage() {
                         onClick={() => {
                           patchResourcesMutation.mutate(
                             {
+                              pids_limit: editResourcesValue.pids_limit,
                               memory_limit_mb: editResourcesValue.memory_limit_mb,
                               cpu_limit: editResourcesValue.cpu_limit,
                             },

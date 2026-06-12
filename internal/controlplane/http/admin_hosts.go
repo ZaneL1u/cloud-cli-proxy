@@ -40,7 +40,7 @@ type AdminHostStore interface {
 	ListRunningHosts(ctx context.Context) ([]repository.Host, error)
 	GetHostWithClaudeAccount(ctx context.Context, hostID string) (repository.HostWithClaudeAccount, error) // Phase 33 D-22
 	UpdateHostMounts(ctx context.Context, hostID string, mounts repository.HostMounts) error
-	UpdateHostResources(ctx context.Context, hostID string, memoryLimitMB *int, cpuLimit *float64) error
+	UpdateHostResources(ctx context.Context, hostID string, memoryLimitMB *int, cpuLimit *float64, pidsLimit *int) error
 }
 
 type AdminHostsHandler struct {
@@ -153,6 +153,7 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 			Timezone      string                `json:"timezone"`
 			MemoryLimitMB *int                  `json:"memory_limit_mb"`
 			CPULimit      *float64              `json:"cpu_limit"`
+			PidsLimit     *int                  `json:"pids_limit"`
 			HostMounts    repository.HostMounts `json:"host_mounts"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.UserID == "" {
@@ -161,6 +162,19 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 		}
 		if body.EgressIPID == "" {
 			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "egress_ip_id is required"})
+			return
+		}
+
+		if err := validateMemoryLimit(body.MemoryLimitMB); err != nil {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := validateCPULimit(body.CPULimit); err != nil {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := validatePidsLimit(body.PidsLimit); err != nil {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 
@@ -226,6 +240,7 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 				Hostname:         hostname,
 				MemoryLimitMB:    resolveMemory(body.MemoryLimitMB),
 				CPULimit:         resolveCPU(body.CPULimit),
+				PidsLimit:        resolvePidsLimit(body.PidsLimit),
 				HostMounts:       expandHostMountSources(body.HostMounts),
 			})
 			if err == nil {
@@ -1068,7 +1083,7 @@ func (h *AdminHostsHandler) UpdateMounts() nethttp.Handler {
 			hid := hostID
 			if _, err := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
 				HostID: &hid, Level: "info", Type: "admin.host.update_mounts",
-				Message: "管理员更新主机挂载配置",
+				Message:  "管理员更新主机挂载配置",
 				Metadata: map[string]any{"operator": "admin", "mount_count": len(body.Mounts)},
 			}); err != nil {
 				h.logger.Error("record event failed", "type", "admin.host.update_mounts", "error", err)
@@ -1086,33 +1101,25 @@ func (h *AdminHostsHandler) PatchResources() nethttp.Handler {
 		var body struct {
 			MemoryLimitMB *int     `json:"memory_limit_mb"`
 			CPULimit      *float64 `json:"cpu_limit"`
+			PidsLimit     *int     `json:"pids_limit"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "invalid request body"})
 			return
 		}
 
-		if body.MemoryLimitMB != nil && *body.MemoryLimitMB > 0 {
-			if *body.MemoryLimitMB < 128 {
-				writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "memory_limit_mb 不能小于 128 MB"})
-				return
-			}
-			if *body.MemoryLimitMB > 262144 {
-				writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "memory_limit_mb 不能大于 262144 MB (256 GB)"})
-				return
-			}
+		if err := validateMemoryLimit(body.MemoryLimitMB); err != nil {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
 		}
-		if body.CPULimit != nil && *body.CPULimit > 0 {
-			if *body.CPULimit < 0.1 {
-				writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "cpu_limit 不能小于 0.1 核"})
-				return
-			}
-			if *body.CPULimit > 64 {
-				writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "cpu_limit 不能大于 64 核"})
-				return
-			}
+		if err := validateCPULimit(body.CPULimit); err != nil {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
 		}
-
+		if err := validatePidsLimit(body.PidsLimit); err != nil {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
 
 		host, err := h.store.GetHost(r.Context(), hostID)
 		if err != nil {
@@ -1125,14 +1132,18 @@ func (h *AdminHostsHandler) PatchResources() nethttp.Handler {
 			return
 		}
 
-		if host.Status != "stopped" {
-			writeJSON(w, nethttp.StatusConflict, map[string]string{"error": "主机正在运行中，请先停止"})
-			return
+		if host.Status == "running" || host.Status == "stopped" {
+			if err := dockerUpdateHostResources(r.Context(), "cloudproxy-"+hostID, body.MemoryLimitMB, body.CPULimit, body.PidsLimit); err != nil {
+				h.logger.Error("docker update resources failed", "host_id", hostID, "error", err)
+				writeJSON(w, nethttp.StatusBadGateway, map[string]string{"error": "docker update resources failed"})
+				return
+			}
 		}
 
 		if err := h.store.UpdateHostResources(r.Context(), hostID,
 			resolveResourceMemory(body.MemoryLimitMB),
 			resolveResourceCPU(body.CPULimit),
+			resolveResourcePidsLimit(body.PidsLimit),
 		); err != nil {
 			h.logger.Error("update host resources failed", "host_id", hostID, "error", err)
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "update resources failed"})
@@ -1143,7 +1154,7 @@ func (h *AdminHostsHandler) PatchResources() nethttp.Handler {
 			hid := hostID
 			if _, err := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
 				HostID: &hid, Level: "info", Type: "admin.host.resources_updated",
-				Message: "管理员更新主机资源限制",
+				Message:  "管理员更新主机资源限制",
 				Metadata: map[string]any{"operator": "admin"},
 			}); err != nil {
 				h.logger.Error("record event failed", "type", "admin.host.resources_updated", "error", err)
@@ -1154,7 +1165,46 @@ func (h *AdminHostsHandler) PatchResources() nethttp.Handler {
 	})
 }
 
+func dockerResourcePidsLimitValue(limit int) string {
+	if limit == 0 {
+		return "-1"
+	}
+	return strconv.Itoa(limit)
+}
+
+var dockerUpdateHostResources = func(ctx context.Context, containerName string, memoryLimitMB *int, cpuLimit *float64, pidsLimit *int) error {
+	args := []string{"update"}
+	if memoryLimitMB != nil {
+		if *memoryLimitMB == 0 {
+			args = append(args, "--memory", "0")
+		} else {
+			args = append(args, "--memory", fmt.Sprintf("%dm", *memoryLimitMB))
+		}
+	}
+	if cpuLimit != nil {
+		if *cpuLimit == 0 {
+			args = append(args, "--cpus", "0")
+		} else {
+			args = append(args, "--cpus", fmt.Sprintf("%.1f", *cpuLimit))
+		}
+	}
+	if pidsLimit != nil {
+		args = append(args, "--pids-limit", dockerResourcePidsLimitValue(*pidsLimit))
+	}
+	if len(args) == 1 {
+		return nil
+	}
+	args = append(args, containerName)
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker update: %w (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
 // syncContainerPassword updates the Linux user password inside a running container via docker exec.
+
 // Exposed as a package-level var so unit tests can inject a fake implementation (Phase 29.1).
 var syncContainerPassword = func(containerName, user, password string) error {
 	cmd := exec.CommandContext(context.Background(), "docker", "exec", "-i", containerName,
@@ -1240,8 +1290,47 @@ func (h *AdminHostsHandler) GetLogs() nethttp.Handler {
 	})
 }
 
-func intPtr(v int) *int          { return &v }
+func intPtr(v int) *int           { return &v }
 func floatPtr(v float64) *float64 { return &v }
+
+func validateMemoryLimit(mb *int) error {
+	if mb == nil || *mb == 0 {
+		return nil
+	}
+	if *mb < 128 {
+		return fmt.Errorf("memory_limit_mb 不能小于 128 MB")
+	}
+	if *mb > 262144 {
+		return fmt.Errorf("memory_limit_mb 不能大于 262144 MB (256 GB)")
+	}
+	return nil
+}
+
+func validateCPULimit(cpu *float64) error {
+	if cpu == nil || *cpu == 0 {
+		return nil
+	}
+	if *cpu < 0.1 {
+		return fmt.Errorf("cpu_limit 不能小于 0.1 核")
+	}
+	if *cpu > 64 {
+		return fmt.Errorf("cpu_limit 不能大于 64 核")
+	}
+	return nil
+}
+
+func validatePidsLimit(pids *int) error {
+	if pids == nil || *pids == 0 {
+		return nil
+	}
+	if *pids < 64 {
+		return fmt.Errorf("pids_limit 不能小于 64")
+	}
+	if *pids > 131072 {
+		return fmt.Errorf("pids_limit 不能大于 131072")
+	}
+	return nil
+}
 
 // resolveMemory 三态解析：nil → 默认值(4096) / 0 → 无限制 / >0 → 传值。
 func resolveMemory(mb *int) *int {
@@ -1261,8 +1350,16 @@ func resolveCPU(cpu *float64) *float64 {
 	return cpu
 }
 
-// resolveResourceMemory PATCH 端点的三态解析：nil=不修改，0→NULL(无限制)，>0→传值。
-// 注意：0 不能转 nil，SQL 层需要区分"不传"和"传 0 设无限制"。
+// resolvePidsLimit 三态解析：nil → 默认值(1024) / 0 → 无限制 / >0 → 传值。
+func resolvePidsLimit(pids *int) *int {
+	if pids == nil {
+		def := 1024
+		return &def
+	}
+	return pids
+}
+
+// resolveResourceMemory PATCH 端点的三态解析：nil=不修改，0=无限制，>0=传值。
 func resolveResourceMemory(mb *int) *int {
 	if mb == nil {
 		return nil
@@ -1270,7 +1367,7 @@ func resolveResourceMemory(mb *int) *int {
 	return mb
 }
 
-// resolveResourceCPU PATCH 端点的三态解析：nil=不修改，0→NULL(无限制)，>0→传值。
+// resolveResourceCPU PATCH 端点的三态解析：nil=不修改，0=无限制，>0=传值。
 func resolveResourceCPU(cpu *float64) *float64 {
 	if cpu == nil {
 		return nil
@@ -1278,4 +1375,10 @@ func resolveResourceCPU(cpu *float64) *float64 {
 	return cpu
 }
 
-
+// resolveResourcePidsLimit PATCH 端点的三态解析：nil=不修改，0=无限制，>0=传值。
+func resolveResourcePidsLimit(pids *int) *int {
+	if pids == nil {
+		return nil
+	}
+	return pids
+}

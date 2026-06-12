@@ -360,6 +360,70 @@ func TestExecute_Dispatch_ReloadHostBypass(t *testing.T) {
 	}
 }
 
+// ===== Test 6: reapply latest applied snapshot =====
+
+func TestReapplyLatestBypassSnapshot_AppliesLatestApplied(t *testing.T) {
+	snap := sampleSnapshot("snap-applied", "h-reapply", "v1")
+	snap.AppliedStatus = "applied"
+	repo := &bypassReloadFakeRepo{latestApplied: &snap}
+	w := NewWorker(repo, nil)
+
+	applyCalls := stubApplyHook(t, func(_ context.Context, _ string, _, _ json.RawMessage) error { return nil })
+
+	if err := w.reapplyLatestBypassSnapshot(context.Background(), "h-reapply"); err != nil {
+		t.Fatalf("expected reapply success, got %v", err)
+	}
+
+	if len(*applyCalls) != 1 {
+		t.Fatalf("expected one apply call, got %d", len(*applyCalls))
+	}
+	if (*applyCalls)[0].HostID != "h-reapply" {
+		t.Errorf("host id = %q, want h-reapply", (*applyCalls)[0].HostID)
+	}
+	if !bytesEqual(t, (*applyCalls)[0].CIDRs, snap.WhitelistCIDRsJSON) {
+		t.Errorf("apply CIDRs = %s, want %s", string((*applyCalls)[0].CIDRs), string(snap.WhitelistCIDRsJSON))
+	}
+	if !hasEventType(repo.events, "bypass.reapply_applied") {
+		t.Errorf("expected bypass.reapply_applied event, got %+v", repo.events)
+	}
+}
+
+func TestReapplyLatestBypassSnapshot_NoAppliedIsNoop(t *testing.T) {
+	repo := &bypassReloadFakeRepo{}
+	w := NewWorker(repo, nil)
+
+	applyCalls := stubApplyHook(t, func(_ context.Context, _ string, _, _ json.RawMessage) error { return nil })
+
+	if err := w.reapplyLatestBypassSnapshot(context.Background(), "h-empty"); err != nil {
+		t.Fatalf("expected no-op success, got %v", err)
+	}
+	if len(*applyCalls) != 0 {
+		t.Errorf("expected no apply calls, got %d", len(*applyCalls))
+	}
+	if hasEventType(repo.events, "bypass.reapply_applied") {
+		t.Errorf("no applied snapshot should not record reapply event, got %+v", repo.events)
+	}
+}
+
+func TestReapplyLatestBypassSnapshot_ApplyFailureReturnsError(t *testing.T) {
+	snap := sampleSnapshot("snap-fail", "h-reapply-fail", "v1")
+	snap.AppliedStatus = "applied"
+	repo := &bypassReloadFakeRepo{latestApplied: &snap}
+	w := NewWorker(repo, nil)
+
+	_ = stubApplyHook(t, func(_ context.Context, _ string, _, _ json.RawMessage) error {
+		return errors.New("nft failed")
+	})
+
+	err := w.reapplyLatestBypassSnapshot(context.Background(), "h-reapply-fail")
+	if err == nil || !strings.Contains(err.Error(), "reapply bypass snapshot") {
+		t.Fatalf("expected reapply bypass snapshot error, got %v", err)
+	}
+	if hasEventType(repo.events, "bypass.reapply_applied") {
+		t.Errorf("failed reapply should not record success event, got %+v", repo.events)
+	}
+}
+
 // ===== helpers =====
 
 func bytesEqual(t *testing.T, a, b json.RawMessage) bool {

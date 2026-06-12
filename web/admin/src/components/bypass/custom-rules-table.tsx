@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
-import { Pencil, Trash2, Plus, Search } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Download, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import {
   useBypassRules,
+  useCreateBypassRule,
   useDeleteBypassRule,
 } from "@/hooks/use-bypass-rules";
 import { parseBypassError } from "@/lib/i18n/bypass-error-codes";
@@ -49,6 +50,24 @@ const TYPE_LABELS: Record<BypassRuleType, string> = {
   domain_keyword: "域名关键词",
 };
 
+const VALID_RULE_TYPES = new Set<BypassRuleType>([
+  "ip",
+  "cidr",
+  "domain",
+  "domain_suffix",
+  "domain_keyword",
+]);
+
+interface BypassRulesExportFile {
+  version: number;
+  exported_at: string;
+  rules: Array<{
+    rule_type: BypassRuleType;
+    value: string;
+    note?: string;
+  }>;
+}
+
 interface CustomRulesTableProps {
   hostId: string;
   presetRows?: PresetRuleRow[];
@@ -57,7 +76,9 @@ interface CustomRulesTableProps {
 
 export function CustomRulesTable({ hostId, presetRows, onDeletePreset }: CustomRulesTableProps) {
   const rulesQuery = useBypassRules(hostId);
+  const createMutation = useCreateBypassRule(hostId);
   const deleteMutation = useDeleteBypassRule(hostId);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const [typeFilter, setTypeFilter] = useState<BypassRuleType | "all">("all");
   const [search, setSearch] = useState("");
@@ -68,6 +89,21 @@ export function CustomRulesTable({ hostId, presetRows, onDeletePreset }: CustomR
   const [deletePresetTarget, setDeletePresetTarget] = useState<PresetRuleRow | null>(null);
 
   const customRules = rulesQuery.data?.rules ?? [];
+  const exportableRules = useMemo(
+    () => [
+      ...(presetRows?.map((rule) => ({
+        rule_type: rule.rule_type,
+        value: rule.value,
+        note: rule.note || undefined,
+      })) ?? []),
+      ...customRules.map((rule) => ({
+        rule_type: rule.rule_type,
+        value: rule.value,
+        note: rule.note ?? undefined,
+      })),
+    ],
+    [customRules, presetRows],
+  );
 
   const filtered = useMemo(() => {
     const all = customRules.filter((r) => {
@@ -141,22 +177,129 @@ export function CustomRulesTable({ hostId, presetRows, onDeletePreset }: CustomR
     setDeletePresetTarget(null);
   }
 
+  async function handleExportRules() {
+    if (exportableRules.length === 0) {
+      toast.info("暂无可导出的规则");
+      return;
+    }
+
+    const data: BypassRulesExportFile = {
+      version: 1,
+      exported_at: new Date().toISOString(),
+      rules: exportableRules,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `bypass-rules-${hostId}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast.success("规则已导出");
+  }
+
+  async function handleImportRules(file: File) {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as Partial<BypassRulesExportFile> | BypassRulesExportFile["rules"];
+      const rules = Array.isArray(parsed) ? parsed : parsed.rules;
+
+      if (!Array.isArray(rules) || rules.length === 0) {
+        toast.error("导入文件中没有规则");
+        return;
+      }
+
+      for (const rule of rules) {
+        if (
+          !rule ||
+          !VALID_RULE_TYPES.has(rule.rule_type) ||
+          typeof rule.value !== "string" ||
+          rule.value.trim() === ""
+        ) {
+          toast.error("导入文件格式不正确");
+          return;
+        }
+      }
+
+      await Promise.all(
+        rules.map((rule) =>
+          createMutation.mutateAsync({
+            rule_type: rule.rule_type,
+            value: rule.value.trim(),
+            note: typeof rule.note === "string" ? rule.note : undefined,
+            confirm_risky: true,
+          }),
+        ),
+      );
+      toast.success(`已导入 ${rules.length} 条规则，请点击「应用」生效`);
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        toast.error("导入文件不是有效 JSON");
+        return;
+      }
+      toast.error(parseBypassError(err).message);
+    } finally {
+      if (importInputRef.current) {
+        importInputRef.current.value = "";
+      }
+    }
+  }
+
   const hasAny = (presetRows?.length ?? 0) + customRules.length > 0;
   const filteredTotal = filteredPresets.length + filtered.length;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h3 className="text-base font-semibold">规则</h3>
-        <Button
-          size="sm"
-          className="gap-1.5"
-          onClick={openCreate}
-          data-testid="add-custom-rule"
-        >
-          <Plus className="size-4" />
-          添加规则
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={openCreate}
+            data-testid="add-custom-rule"
+          >
+            <Plus className="size-4" />
+            添加规则
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={handleExportRules}
+            disabled={exportableRules.length === 0}
+            data-testid="export-custom-rules"
+          >
+            <Download className="size-4" />
+            规则导出
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => importInputRef.current?.click()}
+            disabled={createMutation.isPending}
+            data-testid="import-custom-rules"
+          >
+            <Upload className="size-4" />
+            规则导入
+          </Button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void handleImportRules(file);
+            }}
+            data-testid="import-custom-rules-input"
+          />
+        </div>
       </div>
 
       <div className="flex items-center gap-2">

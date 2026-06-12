@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	nethttp "net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,16 +18,19 @@ import (
 )
 
 type stubHostStore struct {
-	hosts         []repository.HostWithUsername
-	detail        repository.HostDetail
-	host          repository.Host
-	runningHosts  []repository.Host
-	hostWithCA    repository.HostWithClaudeAccount
-	hostWithCAErr error
-	listErr       error
-	detailErr     error
-	hostErr       error
-	runningErr    error
+	hosts           []repository.HostWithUsername
+	detail          repository.HostDetail
+	host            repository.Host
+	runningHosts    []repository.Host
+	hostWithCA      repository.HostWithClaudeAccount
+	hostWithCAErr   error
+	listErr         error
+	detailErr       error
+	hostErr         error
+	runningErr      error
+	updatedMemoryMB *int
+	updatedCPU      *float64
+	updatedPids     *int
 }
 
 func (s *stubHostStore) ListHostsWithUsername(_ context.Context) ([]repository.HostWithUsername, error) {
@@ -73,10 +77,12 @@ func (s *stubHostStore) UpdateHostMounts(_ context.Context, _ string, _ reposito
 	return nil
 }
 
-func (s *stubHostStore) UpdateHostResources(_ context.Context, _ string, _ *int, _ *float64) error {
+func (s *stubHostStore) UpdateHostResources(_ context.Context, _ string, memoryLimitMB *int, cpuLimit *float64, pidsLimit *int) error {
+	s.updatedMemoryMB = memoryLimitMB
+	s.updatedCPU = cpuLimit
+	s.updatedPids = pidsLimit
 	return nil
 }
-
 
 func TestAdminHostsHandler(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
@@ -364,5 +370,58 @@ func TestAdminHostList_DoesNotIncludePersistentVolumeName(t *testing.T) {
 	first, _ := hosts[0].(map[string]any)
 	if _, has := first["persistent_volume_name"]; has {
 		t.Errorf("OOS-A19: list endpoint must NOT include persistent_volume_name; got %v", first)
+	}
+}
+
+func TestPatchResources_RunningHostAppliesDockerUpdateAndPersistsPidsLimit(t *testing.T) {
+	orig := dockerUpdateHostResources
+	var dockerContainer string
+	var dockerMemory *int
+	var dockerCPU *float64
+	var dockerPids *int
+	dockerUpdateHostResources = func(_ context.Context, containerName string, memoryLimitMB *int, cpuLimit *float64, pidsLimit *int) error {
+		dockerContainer = containerName
+		dockerMemory = memoryLimitMB
+		dockerCPU = cpuLimit
+		dockerPids = pidsLimit
+		return nil
+	}
+	t.Cleanup(func() { dockerUpdateHostResources = orig })
+
+	store := &stubHostStore{host: repository.Host{ID: "h-1", Status: "running"}}
+	router := adminTestRouter(t, Dependencies{
+		Logger:        slog.Default(),
+		AdminHosts:    store,
+		HostActions:   &stubQueuer{},
+		EventRecorder: &stubEventRecorder{},
+	})
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	req, _ := nethttp.NewRequest("PATCH", srv.URL+"/v1/admin/hosts/h-1/resources", strings.NewReader(`{"pids_limit":2048}`))
+	req.Header.Set("Authorization", "Bearer "+validAdminToken(t))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := nethttp.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		var body map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		t.Fatalf("status=%d, body=%v", resp.StatusCode, body)
+	}
+	if dockerContainer != "cloudproxy-h-1" {
+		t.Fatalf("docker container=%q, want cloudproxy-h-1", dockerContainer)
+	}
+	if dockerMemory != nil || dockerCPU != nil {
+		t.Fatalf("docker update should only receive pids limit, memory=%v cpu=%v", dockerMemory, dockerCPU)
+	}
+	if dockerPids == nil || *dockerPids != 2048 {
+		t.Fatalf("docker pids=%v, want 2048", dockerPids)
+	}
+	if store.updatedPids == nil || *store.updatedPids != 2048 {
+		t.Fatalf("stored pids=%v, want 2048", store.updatedPids)
 	}
 }

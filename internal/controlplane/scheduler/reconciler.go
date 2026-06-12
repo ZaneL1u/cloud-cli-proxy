@@ -24,23 +24,27 @@ type ContainerInspector interface {
 }
 
 type Reconciler struct {
-	logger         *slog.Logger
-	store          ReconcileStore
-	inspector      ContainerInspector
-	queuer         HostActionQueuer
-	staleThreshold time.Duration
+	logger             *slog.Logger
+	store              ReconcileStore
+	inspector          ContainerInspector
+	queuer             HostActionQueuer
+	staleThreshold     time.Duration
+	lastNetworkPrepare map[string]time.Time
 }
+
+const runningHostPrepareInterval = 5 * time.Minute
 
 func NewReconciler(logger *slog.Logger, store ReconcileStore, inspector ContainerInspector, queuer HostActionQueuer, staleThreshold time.Duration) *Reconciler {
 	if staleThreshold == 0 {
 		staleThreshold = 10 * time.Minute
 	}
 	return &Reconciler{
-		logger:         logger,
-		store:          store,
-		inspector:      inspector,
-		queuer:         queuer,
-		staleThreshold: staleThreshold,
+		logger:             logger,
+		store:              store,
+		inspector:          inspector,
+		queuer:             queuer,
+		staleThreshold:     staleThreshold,
+		lastNetworkPrepare: make(map[string]time.Time),
 	}
 }
 
@@ -77,6 +81,10 @@ func (r *Reconciler) reconcileHosts(ctx context.Context) error {
 		}
 
 		if status.Exists && status.Running {
+			if err := r.queueRunningHostNetworkPrepare(ctx, host.ID); err != nil {
+				r.logger.Warn("running host network prepare skipped",
+					"host_id", host.ID, "container", containerName, "error", err)
+			}
 			continue
 		}
 
@@ -117,6 +125,38 @@ func (r *Reconciler) reconcileHosts(ctx context.Context) error {
 		r.recordHostDrift(ctx, host.ID, actualStatus)
 	}
 
+	return nil
+}
+
+func (r *Reconciler) queueRunningHostNetworkPrepare(ctx context.Context, hostID string) error {
+	if r.queuer == nil {
+		return nil
+	}
+
+	now := time.Now()
+	if last, ok := r.lastNetworkPrepare[hostID]; ok && now.Sub(last) < runningHostPrepareInterval {
+		return nil
+	}
+
+	if _, err := r.queuer.QueueHostAction(ctx, hostID, agentapi.ActionPrepareHost, "system", ""); err != nil {
+		return err
+	}
+	r.lastNetworkPrepare[hostID] = now
+
+	r.store.RecordEvent(ctx, repository.RecordEventParams{
+		HostID:  &hostID,
+		Level:   "info",
+		Type:    "reconcile.host.network_prepare",
+		Message: "对账触发运行中主机网络健康恢复",
+		Metadata: map[string]any{
+			"operator":  "system",
+			"db_status": "running",
+			"host_id":   hostID,
+		},
+	})
+
+	r.logger.Info("reconciled running host network prepare queued",
+		"host_id", hostID, "db_status", "running")
 	return nil
 }
 

@@ -72,8 +72,55 @@ func TestBuildContainerSingBoxConfig_DNSStubServers(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(cfg)
-	if !strings.Contains(s, `"tag": "dns-local"`) || !strings.Contains(s, `"tag": "dns-proxy"`) {
-		t.Errorf("dns.servers must include both dns-local + dns-proxy:\n%s", s)
+	if !strings.Contains(s, `"tag": "dns-local"`) || !strings.Contains(s, `"tag": "dns-proxy"`) || !strings.Contains(s, `"tag": "dns-direct"`) {
+		t.Errorf("dns.servers must include dns-local + dns-proxy + dns-direct:\n%s", s)
+	}
+}
+
+func TestBuildContainerSingBoxConfig_DNSInboundIsNotDirect(t *testing.T) {
+	outbound := json.RawMessage(`{"type":"socks","server":"1.2.3.4","server_port":1080}`)
+	cfg, err := buildContainerSingBoxConfig(outbound, "1.1.1.1", "1.2.3.4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(cfg, &m); err != nil {
+		t.Fatal(err)
+	}
+	inbounds, ok := m["inbounds"].([]any)
+	if !ok {
+		t.Fatalf("inbounds missing or wrong type: %#v", m["inbounds"])
+	}
+	for _, inbound := range inbounds {
+		in, ok := inbound.(map[string]any)
+		if !ok {
+			continue
+		}
+		if in["listen"] == "127.0.0.1" && in["listen_port"] == float64(53) {
+			if in["type"] != "dns" {
+				t.Fatalf("127.0.0.1:53 inbound type = %v, want dns", in["type"])
+			}
+			if in["tag"] == "dns-direct" {
+				t.Fatalf("dns inbound tag must not collide with dns-direct server tag")
+			}
+			return
+		}
+	}
+	t.Fatalf("missing DNS inbound listening on 127.0.0.1:53:\n%s", string(cfg))
+}
+
+func TestBuildContainerSingBoxConfig_NoHardcodedEth0(t *testing.T) {
+	outbound := json.RawMessage(`{"type":"socks","server":"1.2.3.4","server_port":1080}`)
+	cfg, err := buildContainerSingBoxConfig(outbound, "1.1.1.1", "1.2.3.4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(cfg)
+	if strings.Contains(s, `"default_interface": "eth0"`) {
+		t.Errorf("route must not pin default_interface to eth0:\n%s", s)
+	}
+	if strings.Contains(s, `"bind_interface": "eth0"`) {
+		t.Errorf("direct outbound must not bind to eth0:\n%s", s)
 	}
 }
 

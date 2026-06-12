@@ -63,7 +63,7 @@ type QueueHostActionRepo interface {
 }
 
 type Service struct {
-	repo QueueHostActionRepo
+	repo       QueueHostActionRepo
 	dispatcher interface {
 		Dispatch(context.Context, agentapi.HostActionRequest) (agentapi.HostActionResponse, error)
 	}
@@ -176,10 +176,11 @@ func (s *Service) QueueHostAction(ctx context.Context, hostID string, action age
 			"cloud-cli-proxy.host_id":  host.ID,
 			"cloud-cli-proxy.slot_key": firstNonEmpty(host.SlotKey, defaultManagedUserSlotKey),
 		},
-		Timezone:      host.Timezone,
-		Hostname:      host.Hostname,
-		MemoryLimitMB: ptrToInt(host.MemoryLimitMB),
-		CPULimit:      ptrToFloat(host.CPULimit),
+		Timezone:        host.Timezone,
+		Hostname:        host.Hostname,
+		MemoryLimitMB:   ptrToInt(host.MemoryLimitMB),
+		CPULimit:        ptrToFloat(host.CPULimit),
+		PidsLimit:       host.PidsLimit,
 		Username:        owner.Username,
 		EntryPassword:   owner.EntryPassword,
 		SSHPublicKey:    "",
@@ -328,7 +329,6 @@ func firstNonEmpty(values ...string) string {
 
 	return ""
 }
-
 
 func ptrToInt(p *int) int {
 	if p == nil {

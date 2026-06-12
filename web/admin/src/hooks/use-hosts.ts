@@ -66,6 +66,7 @@ export interface HostDetail {
     hostname: string;
     memory_limit_mb: number | null;
     cpu_limit: number | null;
+    pids_limit: number | null;
     host_mounts?: HostMount[];
     
     created_at: string;
@@ -122,7 +123,7 @@ export function useHostDetail(hostId: string) {
 export function useCreateHost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { user_id: string; egress_ip_id: string; timezone?: string; memory_limit_mb?: number | null; cpu_limit?: number | null; host_mounts?: HostMount[] }) =>
+    mutationFn: (data: { user_id: string; egress_ip_id: string; timezone?: string; pids_limit?: number | null; memory_limit_mb?: number | null; cpu_limit?: number | null; host_mounts?: HostMount[] }) =>
       apiFetch<{ host: HostWithUsername; task_id: string }>("/hosts", {
         method: "POST",
         body: JSON.stringify(data),
@@ -153,6 +154,7 @@ export function usePatchHostResources(hostId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: {
+      pids_limit?: number | null;
       memory_limit_mb?: number | null;
       cpu_limit?: number | null;
     }) =>

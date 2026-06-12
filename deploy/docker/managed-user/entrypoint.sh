@@ -171,7 +171,7 @@ assert_tmux_version() {
 # ===== v4.0 (Phase 53): sing-box 同容器化启动序列 — fail-closed =====
 # D-V4-1..4 + D-53-2/3/4/5/6 集中实现：
 # - start_singbox_or_die：runuser → uid=9000 + 文件 cap + tun0 waitFor
-# - lock_resolv_conf：DNS 强制走 sing-box direct inbound (127.0.0.1:53)
+# - lock_resolv_conf：DNS 强制走 sing-box DNS inbound (127.0.0.1:53)
 # - apply_nft_or_die：容器内 nft default-deny ruleset
 # - remove_singbox_config：sing-box load 后 shred config 从 fs
 # - monitor_singbox_fail_closed：sing-box 死 → kill PID 1 → 容器死
@@ -272,11 +272,11 @@ start_singbox_or_die() {
 }
 
 lock_resolv_conf() {
-  # v4.0: DNS 指向 127.0.0.1，由 sing-box direct inbound (dns-direct) 接管。
+  # v4.0: DNS 指向 127.0.0.1，由 sing-box DNS inbound 接管。
   # 不能用 tun0 IP (172.19.0.1) —— 内核本地处理该地址的包，tun 设备收不到。
-  echo "[entrypoint] locking /etc/resolv.conf to sing-box dns-direct (127.0.0.1)"
+  echo "[entrypoint] locking /etc/resolv.conf to sing-box DNS inbound (127.0.0.1)"
   cat > /etc/resolv.conf <<'EOF'
-# v4.0: DNS 强制走 sing-box direct inbound (D-V4-3)
+# v4.0: DNS 强制走 sing-box DNS inbound (D-V4-3)
 nameserver 127.0.0.1
 options edns0 trust-ad
 EOF
@@ -428,7 +428,7 @@ fi
 fix_singbox_routing() {
   # v4.0 (Phase 54): sing-box auto_route 默认在规则 9001 上设置
   # suppress_prefixlength 0，该选项会压制 table 2022 中的默认路由，
-  # 导致用户流量回退到 main 表走 eth0 → 被 nft default-deny 丢弃。
+  # 导致用户流量回退到 main 表走 Docker 外联路由 → 被 nft default-deny 丢弃。
   #
   # 修复分三步：
   #   1. 为 sing-box 自身 (uid=9000) 添加优先规则走 main 表，

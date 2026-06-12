@@ -15,6 +15,7 @@ func allPassedBase() VerifyResult {
 	return VerifyResult{
 		EgressIPMatch:     true,
 		DNSCorrect:        true,
+		DNSResolved:       true,
 		LeakBlocked:       true,
 		BypassEgressOK:    true,
 		NonBypassEgressOK: true,
@@ -249,7 +250,51 @@ func TestVerifyDNS_ReportsAllNameservers(t *testing.T) {
 	}
 }
 
-// ─── Phase 47 Plan 03 / 既有单测 ─────────────────────────────────────────────
+func TestVerifyDNSResolution_OK(t *testing.T) {
+	withFakeNsenterRunner(t, func(call fakeNsenterCall) ([]byte, error) {
+		joined := strings.Join(call.args, " ")
+		if !strings.Contains(joined, "getent ahostsv4 example.com") {
+			t.Errorf("expected getent ahostsv4 invocation, got %v", call.args)
+		}
+		return []byte("93.184.216.34 STREAM example.com\n"), nil
+	})
+
+	var result VerifyResult
+	verifyDNSResolution(context.Background(), []string{"nsenter"}, &result)
+	if !result.DNSResolved {
+		t.Fatalf("expected DNSResolved=true, error=%q", result.DNSResolveError)
+	}
+	if result.DNSResolveError != "" {
+		t.Errorf("expected empty DNSResolveError, got %q", result.DNSResolveError)
+	}
+}
+
+func TestVerifyDNSResolution_Failed(t *testing.T) {
+	withFakeNsenterRunner(t, func(call fakeNsenterCall) ([]byte, error) {
+		return nil, errors.New("temporary failure in name resolution")
+	})
+
+	var result VerifyResult
+	verifyDNSResolution(context.Background(), []string{"nsenter"}, &result)
+	if result.DNSResolved {
+		t.Fatalf("expected DNSResolved=false")
+	}
+	if !strings.Contains(result.DNSResolveError, "temporary failure") {
+		t.Errorf("expected resolver error in DNSResolveError, got %q", result.DNSResolveError)
+	}
+}
+
+func TestVerifyDNSResolution_EmptyOutputFails(t *testing.T) {
+	withFakeNsenterRunner(t, func(call fakeNsenterCall) ([]byte, error) {
+		return []byte("\n"), nil
+	})
+
+	var result VerifyResult
+	verifyDNSResolution(context.Background(), []string{"nsenter"}, &result)
+	if result.DNSResolved {
+		t.Fatalf("expected DNSResolved=false on empty output")
+	}
+}
 
 func TestVerifyResult_AllPassed(t *testing.T) {
 	tests := []struct {
@@ -276,6 +321,15 @@ func TestVerifyResult_AllPassed(t *testing.T) {
 			result: func() VerifyResult {
 				r := allPassedBase()
 				r.DNSCorrect = false
+				return r
+			}(),
+			expected: false,
+		},
+		{
+			name: "DNS resolution failed",
+			result: func() VerifyResult {
+				r := allPassedBase()
+				r.DNSResolved = false
 				return r
 			}(),
 			expected: false,
@@ -466,6 +520,15 @@ func TestFirstNetworkError_Priority(t *testing.T) {
 				r.ActualDNS = "8.8.8.8"
 				r.LeakBlocked = false
 				r.BypassEgressOK = false
+			}),
+			expected: ErrDNSLeak,
+		},
+		{
+			name: "DNS resolution failure after resolver config OK",
+			result: withLegacyFail(func(r *VerifyResult) {
+				r.DNSResolved = false
+				r.DNSResolveError = "getent ahostsv4 example.com failed"
+				r.LeakBlocked = false
 			}),
 			expected: ErrDNSLeak,
 		},
@@ -662,6 +725,61 @@ func TestVerifyPublicDNSBlocked_LeakDetected(t *testing.T) {
 	verifyPublicDNSBlocked(context.Background(), []string{"nsenter"}, &result)
 	if result.PublicDNSBlocked {
 		t.Errorf("expected PublicDNSBlocked=false when dig succeeded (public DNS not blocked)")
+	}
+}
+
+func TestVerifyNetworkIntegrityDocker_DNSResolutionFailureFails(t *testing.T) {
+	withFakeNsenterRunner(t, func(call fakeNsenterCall) ([]byte, error) {
+		joined := strings.Join(call.args, " ")
+		switch {
+		case strings.Contains(joined, "getent ahostsv4 example.com"):
+			return nil, errors.New("temporary failure in name resolution")
+		case strings.Contains(joined, "cat /etc/resolv.conf"):
+			return []byte("nameserver 127.0.0.1\n"), nil
+		case strings.Contains(joined, "@8.8.8.8"):
+			return nil, errors.New("blocked")
+		case strings.Contains(joined, "ip.me"), strings.Contains(joined, "ifconfig.io"), strings.Contains(joined, "ipinfo.io"):
+			return []byte("1.2.3.4\n"), nil
+		default:
+			return nil, nil
+		}
+	})
+
+	result, err := VerifyNetworkIntegrityDocker(context.Background(), "worker", EgressConfig{ExpectedIP: "1.2.3.4"})
+	if err == nil {
+		t.Fatalf("expected error when real DNS resolution fails")
+	}
+	if result.DNSCorrect != true {
+		t.Errorf("expected DNSCorrect=true from resolv.conf")
+	}
+	if result.DNSResolved != false {
+		t.Errorf("expected DNSResolved=false")
+	}
+}
+
+func TestVerifyNetworkIntegrityDocker_PublicDNSLeakFails(t *testing.T) {
+	withFakeNsenterRunner(t, func(call fakeNsenterCall) ([]byte, error) {
+		joined := strings.Join(call.args, " ")
+		switch {
+		case strings.Contains(joined, "getent ahostsv4 example.com"):
+			return []byte("93.184.216.34 STREAM example.com\n"), nil
+		case strings.Contains(joined, "cat /etc/resolv.conf"):
+			return []byte("nameserver 127.0.0.1\n"), nil
+		case strings.Contains(joined, "@8.8.8.8"):
+			return []byte("93.184.216.34\n"), nil
+		case strings.Contains(joined, "ip.me"), strings.Contains(joined, "ifconfig.io"), strings.Contains(joined, "ipinfo.io"):
+			return []byte("1.2.3.4\n"), nil
+		default:
+			return nil, nil
+		}
+	})
+
+	result, err := VerifyNetworkIntegrityDocker(context.Background(), "worker", EgressConfig{ExpectedIP: "1.2.3.4"})
+	if err == nil {
+		t.Fatalf("expected error when public DNS query succeeds")
+	}
+	if result.PublicDNSBlocked {
+		t.Errorf("expected PublicDNSBlocked=false when dig succeeds")
 	}
 }
 

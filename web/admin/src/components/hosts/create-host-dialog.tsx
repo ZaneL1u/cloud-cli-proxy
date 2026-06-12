@@ -86,6 +86,7 @@ export function CreateHostDialog({
   const [egressIpId, setEgressIpId] = useState("");
   const [timezone, setTimezone] = useState("America/Los_Angeles");
   const [resources, setResources] = useState<ResourceLimitsValue>({
+    pids_limit: 1024,
     memory_limit_mb: null,
     cpu_limit: null,
   });
@@ -136,7 +137,7 @@ export function CreateHostDialog({
     const mounts = hostMounts
       .filter((m) => m.source && m.target && m.source.startsWith("/") && m.target.startsWith("/"));
     createMutation.mutate(
-      { user_id: userId, egress_ip_id: egressIpId, timezone, memory_limit_mb: resources.memory_limit_mb, cpu_limit: resources.cpu_limit, host_mounts: mounts.length > 0 ? mounts : undefined },
+      { user_id: userId, egress_ip_id: egressIpId, timezone, pids_limit: resources.pids_limit, memory_limit_mb: resources.memory_limit_mb, cpu_limit: resources.cpu_limit, host_mounts: mounts.length > 0 ? mounts : undefined },
       {
         onSuccess: (data) => {
           setTaskId(data.task_id);
@@ -150,7 +151,7 @@ export function CreateHostDialog({
     setUserId("");
     setEgressIpId("");
     setTimezone("America/Los_Angeles");
-    setResources({ memory_limit_mb: null, cpu_limit: null });
+    setResources({ pids_limit: 1024, memory_limit_mb: null, cpu_limit: null });
     setHostMounts([{ source: "", target: "" }]);
     setTaskId(null);
     onOpenChange(false);
@@ -232,7 +233,7 @@ export function CreateHostDialog({
               <div className="space-y-2">
                 <Label>资源限制</Label>
                 <p className="text-xs text-muted-foreground">
-                  不设置则使用默认值（4 GB 内存 / 2 核 CPU / 20 GB 磁盘）。选择"无限制"可使用宿主机全部资源。
+                  不设置则使用默认值（1024 进程 / 4 GB 内存 / 2 核 CPU）。选择“无限制”可使用宿主机对应资源。
                 </p>
                 <ResourceLimitsSelector
                   value={resources}

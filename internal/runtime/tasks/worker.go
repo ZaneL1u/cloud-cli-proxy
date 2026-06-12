@@ -102,7 +102,7 @@ func (w *Worker) Execute(ctx context.Context, request agentapi.HostActionRequest
 	case agentapi.ActionRebuildHost:
 		err = w.rebuildHost(ctx, request)
 	case agentapi.ActionPrepareHost:
-		err = w.validateAndPrepare(ctx, request.HostID)
+		err = w.prepareExistingHost(ctx, request)
 	case agentapi.ActionVolumeRemove:
 		err = w.removeVolumes(ctx, request)
 	case agentapi.ActionReloadHostBypass:
@@ -217,6 +217,16 @@ func actionToHostStatus(action agentapi.HostAction) string {
 	}
 }
 
+func dockerPidsLimitValue(limit *int) string {
+	if limit == nil {
+		return "1024"
+	}
+	if *limit == 0 {
+		return "-1"
+	}
+	return fmt.Sprintf("%d", *limit)
+}
+
 func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerName, hostname string, egressCfg *network.EgressConfig) ([]string, error) {
 	homeDir := firstNonEmpty(request.HomeDir, hostHomeDir(request.HostID))
 
@@ -226,8 +236,8 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 		"--network", "bridge",
 		// unless-stopped：容器进程崩溃时 docker 自动重启，docker daemon 重启后也会恢复运行。
 		"--restart", "unless-stopped",
-		// 防止 fork 炸弹耗尽宿主机 pid；防止容器日志撑满磁盘。
-		"--pids-limit", "512",
+		// 防止 fork 炸弹耗尽宿主机 pid；0 表示不限制。
+		"--pids-limit", dockerPidsLimitValue(request.PidsLimit),
 		"--log-opt", "max-size=10m",
 		"--log-opt", "max-file=3",
 		// Phase 51 QUAL-06 / 闭 Phase 49 GAP-1：worker capability 收紧。
@@ -612,6 +622,49 @@ func (w *Worker) rebuildHost(ctx context.Context, request agentapi.HostActionReq
 		return err
 	}
 
+	return nil
+}
+
+func (w *Worker) prepareExistingHost(ctx context.Context, request agentapi.HostActionRequest) error {
+	containerName := firstNonEmpty(request.ContainerName, containerNameForHost(request.HostID))
+	if exists, err := w.containerExists(ctx, containerName); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("prepare host network: container %s does not exist", containerName)
+	}
+
+	running, err := w.containerRunning(ctx, containerName)
+	if err != nil {
+		return err
+	}
+	if !running {
+		return fmt.Errorf("prepare host network: container %s is not running", containerName)
+	}
+
+	if err := w.connectContainerNetworks(ctx, containerName); err != nil {
+		return fmt.Errorf("connect container networks before prepare: %w", err)
+	}
+
+	if err := w.reapplyLatestBypassSnapshot(ctx, request.HostID); err != nil {
+		return fmt.Errorf("reapply latest bypass snapshot before prepare: %w", err)
+	}
+
+	egressCfg, err := w.buildEgressConfig(ctx, request.HostID)
+	if err != nil {
+		return err
+	}
+	if egressCfg == nil {
+		return nil
+	}
+
+	spec := network.HostNetworkSpec{
+		HostID: request.HostID,
+		Egress: egressCfg,
+	}
+	if err := w.provider.PrepareHost(ctx, spec); err != nil {
+		w.recordNetworkError(ctx, request.HostID, err)
+		return fmt.Errorf("prepare existing host network: %w", err)
+	}
 	return nil
 }
 
@@ -1211,14 +1264,14 @@ func (t *pullProgressTracker) maybeReport() {
 		layersCopy[k] = v
 	}
 	broadcast.BroadcastJSON("tasks", map[string]any{
-		"topic":   "tasks",
-		"action":  "progress",
-		"id":      t.taskID,
+		"topic":  "tasks",
+		"action": "progress",
+		"id":     t.taskID,
 		"payload": map[string]any{
-			"percent":  percent,
-			"message":  message,
-			"host_id":  t.hostID,
-			"layers":   layersCopy,
+			"percent": percent,
+			"message": message,
+			"host_id": t.hostID,
+			"layers":  layersCopy,
 		},
 	})
 }
@@ -1233,6 +1286,18 @@ func (w *Worker) containerExists(ctx context.Context, name string) (bool, error)
 	}
 
 	return true, nil
+}
+
+func (w *Worker) containerRunning(ctx context.Context, name string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "docker", "container", "inspect", "-f", "{{.State.Running}}", name)
+	out, err := cmd.Output()
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() != 0 {
+			return false, nil
+		}
+		return false, fmt.Errorf("inspect docker container running state %s: %w", name, err)
+	}
+	return strings.TrimSpace(string(out)) == "true", nil
 }
 
 func (w *Worker) runDocker(ctx context.Context, args ...string) error {

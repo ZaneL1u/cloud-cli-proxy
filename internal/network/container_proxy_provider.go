@@ -197,9 +197,11 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 			"host_id", spec.HostID,
 			"egress_ip_match", result.EgressIPMatch,
 			"dns_correct", result.DNSCorrect,
+			"dns_resolved", result.DNSResolved,
 			"leak_blocked", result.LeakBlocked,
 			"actual_egress_ip", result.ActualEgressIP,
 			"actual_dns", result.ActualDNS,
+			"dns_resolve_error", result.DNSResolveError,
 		)
 		if netErr, ok := verifyErr.(*NetworkError); ok {
 			netErr.HostID = spec.HostID
@@ -210,6 +212,7 @@ func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetwo
 		"host_id", spec.HostID,
 		"egress_ip", result.ActualEgressIP,
 		"dns_server", result.ActualDNS,
+		"dns_resolved", result.DNSResolved,
 	)
 	return nil
 }
