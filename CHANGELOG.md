@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.6 - 2026-06-15
+## What's Changed
+
+### Backend (Go / API)
+- fix(network): 修正容器 DNS 劫持与网络校验日志 (bd97e0b)
+- Update internal/controlplane/http/admin_hosts.go (698acdf)
+- feat(hosts): 支持配置主机 PIDs 限制 (1f07e46)
+
+### Frontend (Admin Web)
+- feat(hosts): 支持配置主机 PIDs 限制 (1f07e46)
+
+### Runtime & Deployment
+- fix(network): 修正容器 DNS 劫持与网络校验日志 (bd97e0b)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.5...v4.2.6
+
+
 ## v4.2.5 - 2026-06-02
 ## What's Changed
 
