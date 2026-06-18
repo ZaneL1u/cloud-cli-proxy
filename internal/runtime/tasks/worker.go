@@ -210,6 +210,8 @@ func actionToHostStatus(action agentapi.HostAction) string {
 		return "stopped"
 	case agentapi.ActionRebuildHost:
 		return "running"
+	case agentapi.ActionPrepareHost:
+		return ""
 	case agentapi.ActionReloadHostBypass:
 		return "" // 不改变 host 状态
 	default:
