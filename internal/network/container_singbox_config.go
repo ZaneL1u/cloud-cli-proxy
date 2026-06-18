@@ -31,7 +31,7 @@ func buildContainerSingBoxConfig(outboundRaw json.RawMessage, _ /*dnsServer*/, p
 	if err != nil {
 		return nil, err
 	}
-	dnsIn, err := buildContainerDNSInbound()
+	dnsIn, err := buildContainerDNSDirectInbound()
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +98,7 @@ func buildContainerDNS() map[string]any {
 func buildContainerRoute(proxyServerIP string) map[string]any {
 	return map[string]any{
 		"default_domain_resolver": map[string]any{"server": "dns-local"},
+		"default_interface":       "eth0",
 		"rules": []map[string]any{
 			{"action": "sniff", "sniffer": []string{"tls", "http", "quic", "dns"}},
 			{"protocol": "dns", "action": "hijack-dns"},
@@ -124,16 +125,19 @@ func buildContainerRoute(proxyServerIP string) map[string]any {
 	}
 }
 
-// buildContainerDNSInbound 渲染 DNS inbound 监听 127.0.0.1:53。
-func buildContainerDNSInbound() (json.RawMessage, error) {
+// buildContainerDNSDirectInbound 渲染 DNS stub 监听 127.0.0.1:53。
+// sing-box 当前运行时不支持 inbound type=dns；这里用 direct inbound 接收
+// resolv.conf 指向本地 DNS stub 的流量，再由 route 的 hijack-dns 规则接管。
+func buildContainerDNSDirectInbound() (json.RawMessage, error) {
 	raw, err := json.Marshal(map[string]any{
-		"type":        "dns",
-		"tag":         "dns-in",
+		"type":        "direct",
+		"tag":         "dns-direct",
 		"listen":      "127.0.0.1",
 		"listen_port": 53,
+		"sniff":       true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("marshal container dns inbound: %w", err)
+		return nil, fmt.Errorf("marshal container dns direct inbound: %w", err)
 	}
 	return raw, nil
 }
@@ -225,8 +229,9 @@ func isDomain(s string) bool {
 // buildGatewayDirectOutbound 渲染 direct outbound。
 func buildGatewayDirectOutbound() (json.RawMessage, error) {
 	raw, err := json.Marshal(map[string]any{
-		"type": "direct",
-		"tag":  "direct",
+		"type":           "direct",
+		"tag":            "direct",
+		"bind_interface": "eth0",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal direct outbound: %w", err)

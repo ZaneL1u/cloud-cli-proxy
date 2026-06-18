@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.7 - 2026-06-18
+## What's Changed
+
+### Runtime & Deployment
+- fix(network): 恢复容器 DNS stub 为 sing-box 支持的 direct inbound，避免新建主机因 `unknown inbound type: dns` 进入出口连通性校验失败。
+- fix(network): 为容器直连分支显式绑定 `eth0`，确保代理服务器与 bypass 直连流量不被 tun 默认路由回环。
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.6...v4.2.7
+
+
 ## v4.2.6 - 2026-06-15
 ## What's Changed
 
@@ -761,4 +771,3 @@ All notable changes to this project are documented in this file.
 - fix(ci): source pnpm version from root package manager (6cce3f8)
 
 **Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v1.4.3...v1.4.4
-
