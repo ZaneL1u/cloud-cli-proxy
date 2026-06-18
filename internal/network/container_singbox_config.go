@@ -101,7 +101,8 @@ func buildContainerRoute(proxyServerIP string) map[string]any {
 		"default_interface":       "eth0",
 		"rules": []map[string]any{
 			{"action": "sniff", "sniffer": []string{"tls", "http", "quic", "dns"}},
-			{"protocol": "dns", "action": "hijack-dns"},
+			{"inbound": "dns-direct", "protocol": "dns", "action": "hijack-dns"},
+			{"protocol": "dns", "action": "reject"},
 			{"ip_cidr": []string{proxyServerIP + "/32"}, "action": "route", "outbound": "direct"},
 			{"ip_is_private": true, "action": "route", "outbound": "direct"},
 			{"rule_set": "bypass-cidrs", "action": "route", "outbound": "direct"},

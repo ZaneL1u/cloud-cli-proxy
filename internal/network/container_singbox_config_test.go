@@ -151,6 +151,54 @@ func TestBuildContainerSingBoxConfig_DirectRouteUsesEth0(t *testing.T) {
 	t.Fatalf("missing direct outbound:\n%s", string(cfg))
 }
 
+func TestBuildContainerSingBoxConfig_DNSHijackScopedToStubAndRejectsOtherDNS(t *testing.T) {
+	outbound := json.RawMessage(`{"type":"socks","server":"1.2.3.4","server_port":1080}`)
+	cfg, err := buildContainerSingBoxConfig(outbound, "1.1.1.1", "1.2.3.4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(cfg, &m); err != nil {
+		t.Fatal(err)
+	}
+	route, ok := m["route"].(map[string]any)
+	if !ok {
+		t.Fatalf("route missing or wrong type: %#v", m["route"])
+	}
+	rules, ok := route["rules"].([]any)
+	if !ok {
+		t.Fatalf("route.rules missing or wrong type: %#v", route["rules"])
+	}
+	var hijackIndex, rejectIndex = -1, -1
+	for i, rule := range rules {
+		r, ok := rule.(map[string]any)
+		if !ok {
+			continue
+		}
+		if r["protocol"] == "dns" && r["action"] == "hijack-dns" {
+			if r["inbound"] != "dns-direct" {
+				t.Fatalf("dns hijack rule must be scoped to dns-direct inbound, got %#v", r)
+			}
+			hijackIndex = i
+		}
+		if r["protocol"] == "dns" && r["action"] == "reject" {
+			if _, scoped := r["inbound"]; scoped {
+				t.Fatalf("dns reject rule must cover non-stub DNS traffic, got inbound-scoped rule %#v", r)
+			}
+			rejectIndex = i
+		}
+	}
+	if hijackIndex == -1 {
+		t.Fatalf("missing dns-direct hijack-dns rule:\n%s", string(cfg))
+	}
+	if rejectIndex == -1 {
+		t.Fatalf("missing fallback DNS reject rule:\n%s", string(cfg))
+	}
+	if rejectIndex <= hijackIndex {
+		t.Fatalf("DNS reject rule must follow stub hijack rule, hijack=%d reject=%d", hijackIndex, rejectIndex)
+	}
+}
+
 // TestBuildContainerSingBoxConfig_NoEndpointIndependentNAT 锁与 v3.5 gateway
 // 的差异点：v4.0 单容器架构下不需要 endpoint_independent_nat（流量单向）。
 func TestBuildContainerSingBoxConfig_NoEndpointIndependentNAT(t *testing.T) {

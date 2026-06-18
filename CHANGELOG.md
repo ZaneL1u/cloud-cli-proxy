@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.8 - 2026-06-18
+## What's Changed
+
+### Runtime & Deployment
+- fix(network): 将 DNS hijack 限定在本地 DNS stub inbound，并对其他 DNS 协议流量执行 reject，避免公网 DNS 探针被误接管后导致 `net.dns_leak`。
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.7...v4.2.8
+
+
 ## v4.2.7 - 2026-06-18
 ## What's Changed
 
