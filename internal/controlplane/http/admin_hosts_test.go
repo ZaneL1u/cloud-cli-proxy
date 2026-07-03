@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	nethttp "net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,19 +20,24 @@ import (
 )
 
 type stubHostStore struct {
-	hosts           []repository.HostWithUsername
-	detail          repository.HostDetail
-	host            repository.Host
-	runningHosts    []repository.Host
-	hostWithCA      repository.HostWithClaudeAccount
-	hostWithCAErr   error
-	listErr         error
-	detailErr       error
-	hostErr         error
-	runningErr      error
-	updatedMemoryMB *int
-	updatedCPU      *float64
-	updatedPids     *int
+	hosts            []repository.HostWithUsername
+	detail           repository.HostDetail
+	host             repository.Host
+	upsertHost       repository.Host
+	user             repository.User
+	userErr          error
+	existingHosts    []repository.Host
+	existingHostsErr error
+	runningHosts     []repository.Host
+	hostWithCA       repository.HostWithClaudeAccount
+	hostWithCAErr    error
+	listErr          error
+	detailErr        error
+	hostErr          error
+	runningErr       error
+	updatedMemoryMB  *int
+	updatedCPU       *float64
+	updatedPids      *int
 }
 
 func (s *stubHostStore) ListHostsWithUsername(_ context.Context) ([]repository.HostWithUsername, error) {
@@ -45,12 +52,27 @@ func (s *stubHostStore) GetHost(_ context.Context, _ string) (repository.Host, e
 	return s.host, s.hostErr
 }
 
-func (s *stubHostStore) UpsertHost(_ context.Context, _ repository.UpsertHostParams) (repository.Host, error) {
-	return repository.Host{}, nil
+func (s *stubHostStore) UpsertHost(_ context.Context, params repository.UpsertHostParams) (repository.Host, error) {
+	if s.upsertHost.ID != "" {
+		return s.upsertHost, nil
+	}
+	return repository.Host{
+		ID:               "h-created",
+		UserID:           params.UserID,
+		Status:           params.Status,
+		ShortID:          params.ShortID,
+		TemplateImageRef: params.TemplateImageRef,
+		Timezone:         params.Timezone,
+		Hostname:         params.Hostname,
+		MemoryLimitMB:    params.MemoryLimitMB,
+		CPULimit:         params.CPULimit,
+		PidsLimit:        params.PidsLimit,
+		HostMounts:       params.HostMounts,
+	}, nil
 }
 
 func (s *stubHostStore) GetUser(_ context.Context, _ string) (repository.User, error) {
-	return repository.User{}, nil
+	return s.user, s.userErr
 }
 
 func (s *stubHostStore) BindEgressIPToHost(_ context.Context, _ string, _ string) (repository.HostBinding, error) {
@@ -66,7 +88,7 @@ func (s *stubHostStore) ListRunningHosts(_ context.Context) ([]repository.Host, 
 }
 
 func (s *stubHostStore) ListHostsByUserID(_ context.Context, _ string) ([]repository.Host, error) {
-	return nil, nil
+	return s.existingHosts, s.existingHostsErr
 }
 
 func (s *stubHostStore) GetHostWithClaudeAccount(_ context.Context, _ string) (repository.HostWithClaudeAccount, error) {
@@ -82,6 +104,21 @@ func (s *stubHostStore) UpdateHostResources(_ context.Context, _ string, memoryL
 	s.updatedCPU = cpuLimit
 	s.updatedPids = pidsLimit
 	return nil
+}
+
+func writeAdminHostsImageLock(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "image.lock")
+	body := strings.Join([]string{
+		"image_name: test/managed-user:latest",
+		"home_mount: /workspace",
+		"default_user: workspace",
+		"image_version: v-test",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write image.lock: %v", err)
+	}
+	return path
 }
 
 func TestAdminHostsHandler(t *testing.T) {
@@ -242,6 +279,122 @@ func TestAdminHostsHandler(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAdminHostCreate_ReturnsUserSSHCredentials(t *testing.T) {
+	store := &stubHostStore{
+		user: repository.User{
+			ID:            "u-1",
+			Username:      "alice",
+			Status:        "active",
+			ShortID:       "alice1",
+			EntryPassword: "ssh-secret",
+		},
+		upsertHost: repository.Host{
+			ID:               "h-1",
+			UserID:           "u-1",
+			Status:           "pending",
+			ShortID:          "host1",
+			TemplateImageRef: "test/managed-user:latest",
+		},
+	}
+	router := adminTestRouter(t, Dependencies{
+		Logger:        slog.Default(),
+		AdminHosts:    store,
+		HostActions:   &stubQueuer{task: repository.Task{ID: "task-1"}},
+		EventRecorder: &stubEventRecorder{},
+		ImageLockPath: writeAdminHostsImageLock(t),
+	})
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	reqBody := strings.NewReader(`{"user_id":"u-1","egress_ip_id":"e-1"}`)
+	req, _ := nethttp.NewRequest("POST", srv.URL+"/v1/admin/hosts", reqBody)
+	req.Header.Set("Authorization", "Bearer "+validAdminToken(t))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := nethttp.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != nethttp.StatusAccepted {
+		var body map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		t.Fatalf("status=%d, body=%v", resp.StatusCode, body)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	creds, ok := body["ssh_credentials"].(map[string]any)
+	if !ok {
+		t.Fatalf("response missing ssh_credentials: %v", body)
+	}
+	if got := creds["username"]; got != "alice" {
+		t.Fatalf("username=%v, want alice", got)
+	}
+	if got := creds["user_short_id"]; got != "alice1" {
+		t.Fatalf("user_short_id=%v, want alice1", got)
+	}
+	if got := creds["host_short_id"]; got != "host1" {
+		t.Fatalf("host_short_id=%v, want host1", got)
+	}
+	if got := creds["entry_password"]; got != "ssh-secret" {
+		t.Fatalf("entry_password=%v, want ssh-secret", got)
+	}
+	if got, _ := creds["ssh_command"].(string); !strings.Contains(got, "ssh alice@") || !strings.Contains(got, "-p 2222") {
+		t.Fatalf("ssh_command=%q, want ssh command for alice on port 2222", got)
+	}
+	if got, _ := creds["curl_command"].(string); !strings.Contains(got, "/entry/alice") {
+		t.Fatalf("curl_command=%q, want entry curl command for alice", got)
+	}
+}
+
+func TestAdminHostCreate_RejectsUserMissingSSHCredentials(t *testing.T) {
+	store := &stubHostStore{
+		user: repository.User{
+			ID:       "u-1",
+			Username: "alice",
+			Status:   "active",
+			ShortID:  "alice1",
+		},
+	}
+	router := adminTestRouter(t, Dependencies{
+		Logger:        slog.Default(),
+		AdminHosts:    store,
+		HostActions:   &stubQueuer{task: repository.Task{ID: "task-1"}},
+		EventRecorder: &stubEventRecorder{},
+		ImageLockPath: writeAdminHostsImageLock(t),
+	})
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	reqBody := strings.NewReader(`{"user_id":"u-1","egress_ip_id":"e-1"}`)
+	req, _ := nethttp.NewRequest("POST", srv.URL+"/v1/admin/hosts", reqBody)
+	req.Header.Set("Authorization", "Bearer "+validAdminToken(t))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := nethttp.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != nethttp.StatusConflict {
+		var body map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		t.Fatalf("status=%d, want 409; body=%v", resp.StatusCode, body)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !strings.Contains(body["error"], "SSH credentials") {
+		t.Fatalf("error=%q, want SSH credentials guidance", body["error"])
 	}
 }
 
@@ -423,5 +576,71 @@ func TestPatchResources_RunningHostAppliesDockerUpdateAndPersistsPidsLimit(t *te
 	}
 	if store.updatedPids == nil || *store.updatedPids != 2048 {
 		t.Fatalf("stored pids=%v, want 2048", store.updatedPids)
+	}
+}
+
+func TestPatchResources_ZeroValuesResolveToSafeDefaults(t *testing.T) {
+	orig := dockerUpdateHostResources
+	var dockerMemory *int
+	var dockerCPU *float64
+	var dockerPids *int
+	dockerUpdateHostResources = func(_ context.Context, _ string, memoryLimitMB *int, cpuLimit *float64, pidsLimit *int) error {
+		dockerMemory = memoryLimitMB
+		dockerCPU = cpuLimit
+		dockerPids = pidsLimit
+		return nil
+	}
+	t.Cleanup(func() { dockerUpdateHostResources = orig })
+
+	store := &stubHostStore{host: repository.Host{ID: "h-1", Status: "running"}}
+	router := adminTestRouter(t, Dependencies{
+		Logger:        slog.Default(),
+		AdminHosts:    store,
+		HostActions:   &stubQueuer{},
+		EventRecorder: &stubEventRecorder{},
+	})
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	req, _ := nethttp.NewRequest("PATCH", srv.URL+"/v1/admin/hosts/h-1/resources", strings.NewReader(`{"memory_limit_mb":0,"cpu_limit":0,"pids_limit":0}`))
+	req.Header.Set("Authorization", "Bearer "+validAdminToken(t))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := nethttp.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		var body map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		t.Fatalf("status=%d, body=%v", resp.StatusCode, body)
+	}
+	if dockerMemory == nil || *dockerMemory != 4096 {
+		t.Fatalf("docker memory=%v, want 4096", dockerMemory)
+	}
+	if dockerCPU == nil || *dockerCPU != 2.0 {
+		t.Fatalf("docker cpu=%v, want 2.0", dockerCPU)
+	}
+	if dockerPids == nil || *dockerPids != 1024 {
+		t.Fatalf("docker pids=%v, want 1024", dockerPids)
+	}
+	if store.updatedMemoryMB == nil || *store.updatedMemoryMB != 4096 {
+		t.Fatalf("stored memory=%v, want 4096", store.updatedMemoryMB)
+	}
+	if store.updatedCPU == nil || *store.updatedCPU != 2.0 {
+		t.Fatalf("stored cpu=%v, want 2.0", store.updatedCPU)
+	}
+	if store.updatedPids == nil || *store.updatedPids != 1024 {
+		t.Fatalf("stored pids=%v, want 1024", store.updatedPids)
+	}
+}
+
+func TestDockerResourceMemoryArgsSetSwapWithMemory(t *testing.T) {
+	if got := strings.Join(dockerResourceMemoryArgs(0), " "); got != "--memory 4096m --memory-swap 4096m" {
+		t.Fatalf("zero memory args = %q", got)
+	}
+	if got := strings.Join(dockerResourceMemoryArgs(8192), " "); got != "--memory 8192m --memory-swap 8192m" {
+		t.Fatalf("custom memory args = %q", got)
 	}
 }

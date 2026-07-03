@@ -24,8 +24,9 @@ import (
 // 容器的 docker create / start 调用：
 //   - PrepareGateway 负责「mkdir SingBoxConfigDir + 写 sing-box config」，保证
 //     worker 容器启动时 ro bind mount 引用的 /etc/sing-box/config.json 已存在；
-//   - PrepareHost 在 worker 容器 docker start 之后调用，仅负责
-//     verifier.Verify（出口 IP / DNS / leak 三检）。
+//   - PrepareHost 在 worker 容器 docker start 之后调用，当前不再把出口 IP
+//     回显探测作为创建硬门槛，容器内 entrypoint 的 fail-closed 网络初始化负责
+//     阻断泄漏路径。
 //
 // CleanupHost 是反操作：清理 host 端 SingBoxConfigDir 目录（best-effort 幂等）。
 // 容器自身的销毁由 worker.stopHost / rebuildHost 路径上的 docker stop / rm 负责。
@@ -44,9 +45,9 @@ type NetworkVerifier interface {
 // NewProvider 返回平台适配的 Provider 实现。
 //
 // Verifier 选择规则（按优先级）：
-//   1. SKIP_EGRESS_VERIFY=true → NopVerifier（Windows/macOS Docker Desktop 开发环境）
-//   2. runtime.GOOS != "linux" → NopVerifier（非 Linux 原生环境）
-//   3. 默认 → DockerVerifier（Linux 生产环境，通过 docker exec 做真实网络验证）
+//  1. SKIP_EGRESS_VERIFY=true → NopVerifier（Windows/macOS Docker Desktop 开发环境）
+//  2. runtime.GOOS != "linux" → NopVerifier（非 Linux 原生环境）
+//  3. 默认 → DockerVerifier（Linux 生产环境，通过 docker exec 做真实网络验证）
 func NewProvider(logger *slog.Logger) Provider {
 	var verifier NetworkVerifier
 	if os.Getenv("SKIP_EGRESS_VERIFY") == "true" {

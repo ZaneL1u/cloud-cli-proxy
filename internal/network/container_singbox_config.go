@@ -8,6 +8,11 @@ import (
 // bypassRuleSetDir 容器内白名单 rule-set 文件目录，与 bypass_reload_apply.go::bypassContainerDir 对齐。
 const bypassRuleSetDir = "/etc/cloud-claude/bypass"
 
+const (
+	containerTunAddress = "198.18.0.1/30"
+	dnsStubInboundTag   = "dns-stub"
+)
+
 // buildContainerSingBoxConfig 渲染 v4.0 单容器架构 sing-box config JSON。
 //
 // bypass 白名单通过 route.rule_set (type=local) 引用容器内文件：
@@ -101,7 +106,7 @@ func buildContainerRoute(proxyServerIP string) map[string]any {
 		"default_interface":       "eth0",
 		"rules": []map[string]any{
 			{"action": "sniff", "sniffer": []string{"tls", "http", "quic", "dns"}},
-			{"inbound": "dns-direct", "protocol": "dns", "action": "hijack-dns"},
+			{"inbound": dnsStubInboundTag, "action": "hijack-dns"},
 			{"protocol": "dns", "action": "reject"},
 			{"ip_cidr": []string{proxyServerIP + "/32"}, "action": "route", "outbound": "direct"},
 			{"ip_is_private": true, "action": "route", "outbound": "direct"},
@@ -132,7 +137,7 @@ func buildContainerRoute(proxyServerIP string) map[string]any {
 func buildContainerDNSDirectInbound() (json.RawMessage, error) {
 	raw, err := json.Marshal(map[string]any{
 		"type":        "direct",
-		"tag":         "dns-direct",
+		"tag":         dnsStubInboundTag,
 		"listen":      "127.0.0.1",
 		"listen_port": 53,
 		"sniff":       true,
@@ -164,7 +169,7 @@ func buildContainerTunInbound() (json.RawMessage, error) {
 	raw, err := json.Marshal(map[string]any{
 		"type":         "tun",
 		"tag":          "tun-in",
-		"address":      []string{"172.19.0.1/30"},
+		"address":      []string{containerTunAddress},
 		"mtu":          1500,
 		"auto_route":   true,
 		"strict_route": true,

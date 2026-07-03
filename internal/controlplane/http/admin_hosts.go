@@ -98,6 +98,31 @@ type adminHostDetailResponse struct {
 	PersistentVolumeName string                     `json:"persistent_volume_name,omitempty"` // Phase 33 D-22
 }
 
+type adminHostSSHCredentials struct {
+	Username      string `json:"username"`
+	UserShortID   string `json:"user_short_id,omitempty"`
+	HostShortID   string `json:"host_short_id,omitempty"`
+	EntryPassword string `json:"entry_password"`
+	CurlCommand   string `json:"curl_command"`
+	SSHCommand    string `json:"ssh_command"`
+	SSHPort       int    `json:"ssh_port"`
+}
+
+func adminHostConnectionCommands(r *nethttp.Request, username string) (curlCommand, sshCommand string, sshPort int) {
+	scheme := "https"
+	if r.TLS == nil {
+		scheme = "http"
+	}
+	host := r.Host
+	if idx := strings.Index(host, ":"); idx != -1 {
+		host = host[:idx]
+	}
+	baseURL := fmt.Sprintf("%s://%s", scheme, r.Host)
+	return fmt.Sprintf("curl -sSL %s/entry/%s | bash", baseURL, username),
+		fmt.Sprintf("ssh %s@%s -p 2222", username, host),
+		2222
+}
+
 func (h *AdminHostsHandler) Get() nethttp.Handler {
 	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		hostID := r.PathValue("hostID")
@@ -123,20 +148,17 @@ func (h *AdminHostsHandler) Get() nethttp.Handler {
 		resp.User.EntryPassword = ""
 		sshTarget := detail.User.Username
 		if sshTarget != "" {
+			curlCommand, sshCommand, sshPort := adminHostConnectionCommands(r, sshTarget)
+			vncPath := fmt.Sprintf("/v1/admin/hosts/%s/vnc/vnc.html", detail.Host.ID)
 			scheme := "https"
 			if r.TLS == nil {
 				scheme = "http"
 			}
-			host := r.Host
-			if idx := strings.Index(host, ":"); idx != -1 {
-				host = host[:idx]
-			}
 			baseURL := fmt.Sprintf("%s://%s", scheme, r.Host)
-			vncPath := fmt.Sprintf("/v1/admin/hosts/%s/vnc/vnc.html", detail.Host.ID)
 			resp.ConnectionInfo = &repository.ConnectionInfo{
-				CurlCommand: fmt.Sprintf("curl -sSL %s/entry/%s | bash", baseURL, sshTarget),
-				SSHCommand:  fmt.Sprintf("ssh %s@%s -p 2222", sshTarget, host),
-				SSHPort:     2222,
+				CurlCommand: curlCommand,
+				SSHCommand:  sshCommand,
+				SSHPort:     sshPort,
 				VNCURL:      fmt.Sprintf("%s%s", baseURL, vncPath),
 			}
 		}
@@ -201,13 +223,18 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 			return
 		}
 
-		if _, err := h.store.GetUser(r.Context(), body.UserID); err != nil {
+		user, err := h.store.GetUser(r.Context(), body.UserID)
+		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "user not found"})
 				return
 			}
 			h.logger.Error("get user failed", "user_id", body.UserID, "error", err)
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "get user failed"})
+			return
+		}
+		if strings.TrimSpace(user.EntryPassword) == "" {
+			writeJSON(w, nethttp.StatusConflict, map[string]string{"error": "user SSH credentials are missing; regenerate SSH credentials before creating a host"})
 			return
 		}
 
@@ -287,10 +314,20 @@ func (h *AdminHostsHandler) Create() nethttp.Handler {
 			}
 		}
 
+		curlCommand, sshCommand, sshPort := adminHostConnectionCommands(r, user.Username)
 		writeJSON(w, nethttp.StatusAccepted, map[string]any{
 			"host":    host,
 			"task_id": task.ID,
 			"status":  "202 Accepted",
+			"ssh_credentials": adminHostSSHCredentials{
+				Username:      user.Username,
+				UserShortID:   user.ShortID,
+				HostShortID:   host.ShortID,
+				EntryPassword: user.EntryPassword,
+				CurlCommand:   curlCommand,
+				SSHCommand:    sshCommand,
+				SSHPort:       sshPort,
+			},
 		})
 	})
 }
@@ -1132,8 +1169,12 @@ func (h *AdminHostsHandler) PatchResources() nethttp.Handler {
 			return
 		}
 
+		resolvedMemory := resolveResourceMemory(body.MemoryLimitMB)
+		resolvedCPU := resolveResourceCPU(body.CPULimit)
+		resolvedPids := resolveResourcePidsLimit(body.PidsLimit)
+
 		if host.Status == "running" || host.Status == "stopped" {
-			if err := dockerUpdateHostResources(r.Context(), "cloudproxy-"+hostID, body.MemoryLimitMB, body.CPULimit, body.PidsLimit); err != nil {
+			if err := dockerUpdateHostResources(r.Context(), "cloudproxy-"+hostID, resolvedMemory, resolvedCPU, resolvedPids); err != nil {
 				h.logger.Error("docker update resources failed", "host_id", hostID, "error", err)
 				writeJSON(w, nethttp.StatusBadGateway, map[string]string{"error": "docker update resources failed"})
 				return
@@ -1141,9 +1182,9 @@ func (h *AdminHostsHandler) PatchResources() nethttp.Handler {
 		}
 
 		if err := h.store.UpdateHostResources(r.Context(), hostID,
-			resolveResourceMemory(body.MemoryLimitMB),
-			resolveResourceCPU(body.CPULimit),
-			resolveResourcePidsLimit(body.PidsLimit),
+			resolvedMemory,
+			resolvedCPU,
+			resolvedPids,
 		); err != nil {
 			h.logger.Error("update host resources failed", "host_id", hostID, "error", err)
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "update resources failed"})
@@ -1166,24 +1207,32 @@ func (h *AdminHostsHandler) PatchResources() nethttp.Handler {
 }
 
 func dockerResourcePidsLimitValue(limit int) string {
-	if limit == 0 {
-		return "-1"
+	if limit <= 0 {
+		return strconv.Itoa(defaultHostPidsLimit)
 	}
 	return strconv.Itoa(limit)
+}
+
+func dockerResourceMemoryLimitValue(limitMB int) string {
+	if limitMB <= 0 {
+		limitMB = defaultHostMemoryLimitMB
+	}
+	return fmt.Sprintf("%dm", limitMB)
+}
+
+func dockerResourceMemoryArgs(limitMB int) []string {
+	memory := dockerResourceMemoryLimitValue(limitMB)
+	return []string{"--memory", memory, "--memory-swap", memory}
 }
 
 var dockerUpdateHostResources = func(ctx context.Context, containerName string, memoryLimitMB *int, cpuLimit *float64, pidsLimit *int) error {
 	args := []string{"update"}
 	if memoryLimitMB != nil {
-		if *memoryLimitMB == 0 {
-			args = append(args, "--memory", "0")
-		} else {
-			args = append(args, "--memory", fmt.Sprintf("%dm", *memoryLimitMB))
-		}
+		args = append(args, dockerResourceMemoryArgs(*memoryLimitMB)...)
 	}
 	if cpuLimit != nil {
-		if *cpuLimit == 0 {
-			args = append(args, "--cpus", "0")
+		if *cpuLimit <= 0 {
+			args = append(args, "--cpus", fmt.Sprintf("%.1f", defaultHostCPULimit))
 		} else {
 			args = append(args, "--cpus", fmt.Sprintf("%.1f", *cpuLimit))
 		}
@@ -1293,6 +1342,12 @@ func (h *AdminHostsHandler) GetLogs() nethttp.Handler {
 func intPtr(v int) *int           { return &v }
 func floatPtr(v float64) *float64 { return &v }
 
+const (
+	defaultHostMemoryLimitMB = 4096
+	defaultHostCPULimit      = 2.0
+	defaultHostPidsLimit     = 1024
+)
+
 func validateMemoryLimit(mb *int) error {
 	if mb == nil || *mb == 0 {
 		return nil
@@ -1332,53 +1387,65 @@ func validatePidsLimit(pids *int) error {
 	return nil
 }
 
-// resolveMemory 三态解析：nil → 默认值(4096) / 0 → 无限制 / >0 → 传值。
+// resolveMemory 三态解析：nil/0 → 安全默认值 / >0 → 传值。
 func resolveMemory(mb *int) *int {
-	if mb == nil {
-		def := 4096
+	if mb == nil || *mb == 0 {
+		def := defaultHostMemoryLimitMB
 		return &def
 	}
 	return mb
 }
 
-// resolveCPU 三态解析：nil → 默认值(2.0) / 0 → 无限制 / >0 → 传值。
+// resolveCPU 三态解析：nil/0 → 安全默认值 / >0 → 传值。
 func resolveCPU(cpu *float64) *float64 {
-	if cpu == nil {
-		def := 2.0
+	if cpu == nil || *cpu == 0 {
+		def := defaultHostCPULimit
 		return &def
 	}
 	return cpu
 }
 
-// resolvePidsLimit 三态解析：nil → 默认值(1024) / 0 → 无限制 / >0 → 传值。
+// resolvePidsLimit 三态解析：nil/0 → 安全默认值 / >0 → 传值。
 func resolvePidsLimit(pids *int) *int {
-	if pids == nil {
-		def := 1024
+	if pids == nil || *pids == 0 {
+		def := defaultHostPidsLimit
 		return &def
 	}
 	return pids
 }
 
-// resolveResourceMemory PATCH 端点的三态解析：nil=不修改，0=无限制，>0=传值。
+// resolveResourceMemory PATCH 端点的三态解析：nil=不修改，0=安全默认值，>0=传值。
 func resolveResourceMemory(mb *int) *int {
 	if mb == nil {
 		return nil
 	}
+	if *mb == 0 {
+		def := defaultHostMemoryLimitMB
+		return &def
+	}
 	return mb
 }
 
-// resolveResourceCPU PATCH 端点的三态解析：nil=不修改，0=无限制，>0=传值。
+// resolveResourceCPU PATCH 端点的三态解析：nil=不修改，0=安全默认值，>0=传值。
 func resolveResourceCPU(cpu *float64) *float64 {
 	if cpu == nil {
 		return nil
 	}
+	if *cpu == 0 {
+		def := defaultHostCPULimit
+		return &def
+	}
 	return cpu
 }
 
-// resolveResourcePidsLimit PATCH 端点的三态解析：nil=不修改，0=无限制，>0=传值。
+// resolveResourcePidsLimit PATCH 端点的三态解析：nil=不修改，0=安全默认值，>0=传值。
 func resolveResourcePidsLimit(pids *int) *int {
 	if pids == nil {
 		return nil
+	}
+	if *pids == 0 {
+		def := defaultHostPidsLimit
+		return &def
 	}
 	return pids
 }

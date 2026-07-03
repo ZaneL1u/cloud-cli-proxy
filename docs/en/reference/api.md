@@ -363,12 +363,14 @@ curl -s -X POST http://YOUR_HOST:8080/v1/admin/hosts/{hostID}/rebuild \
 
 Destroys and recreates the container from the managed image. Home volume is preserved.
 
-### Rotate SSH Password
+### Regenerate User SSH Credentials
 
 ```bash
-curl -s -X POST http://YOUR_HOST:8080/v1/admin/hosts/{hostID}/rotate-ssh-password \
+curl -s -X POST http://YOUR_HOST:8080/v1/admin/users/{userID}/credentials/regenerate \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+The SSH password is part of the user-level SSH credentials. Host creation returns the selected user's SSH connection details. Regenerate the user's SSH credentials if they were lost.
 
 ### Restart VNC Service (without rebuilding host)
 

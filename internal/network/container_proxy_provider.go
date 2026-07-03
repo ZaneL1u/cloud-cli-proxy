@@ -178,42 +178,30 @@ func isChownPermissionError(err error) bool {
 //   - applyWorkerFirewall（容器内 entrypoint 自己 apply）
 //   - join 控制面到隔离网络（无隔离网络存在）
 //
-// 仅保留 verifier.Verify 做出口 IP / DNS / leak 三检，确认 Phase 53 entrypoint
-// 启动序列真的把流量导到 tun0。
+// 创建 / 启动路径不再把出口 IP 探测作为硬门槛：Phase 53 entrypoint 已经在容器内
+// fail-closed（sing-box / nft 任一步失败即退出），这里仅记录状态并放行，避免代理
+// 端点短暂不可达或出口回显服务抖动导致主机创建失败。
 func (p *ContainerProxyProvider) PrepareHost(ctx context.Context, spec HostNetworkSpec) error {
+	_ = ctx
 	if spec.Egress == nil {
-		p.logger.Info("container-proxy: no egress config, skipping verify", "host_id", spec.HostID)
+		if p.logger != nil {
+			p.logger.Info("container-proxy: no egress config, skipping create-time network verify", "host_id", spec.HostID)
+		}
 		return nil
 	}
 	if spec.Egress.Proxy == nil {
-		p.logger.Warn("container-proxy: no proxy config, skipping verify", "host_id", spec.HostID)
+		if p.logger != nil {
+			p.logger.Warn("container-proxy: no proxy config, skipping create-time network verify", "host_id", spec.HostID)
+		}
 		return nil
 	}
 
-	workerName := workerContainerName(spec.HostID)
-	result, verifyErr := p.verifier.Verify(ctx, workerName, *spec.Egress)
-	if verifyErr != nil {
-		p.logger.Error("container-proxy: network verification failed",
+	if p.logger != nil {
+		p.logger.Info("container-proxy: create-time egress verification skipped",
 			"host_id", spec.HostID,
-			"egress_ip_match", result.EgressIPMatch,
-			"dns_correct", result.DNSCorrect,
-			"dns_resolved", result.DNSResolved,
-			"leak_blocked", result.LeakBlocked,
-			"actual_egress_ip", result.ActualEgressIP,
-			"actual_dns", result.ActualDNS,
-			"dns_resolve_error", result.DNSResolveError,
+			"mode", "fail-closed-entrypoint",
 		)
-		if netErr, ok := verifyErr.(*NetworkError); ok {
-			netErr.HostID = spec.HostID
-		}
-		return verifyErr
 	}
-	p.logger.Info("container-proxy: network verification passed (single-container)",
-		"host_id", spec.HostID,
-		"egress_ip", result.ActualEgressIP,
-		"dns_server", result.ActualDNS,
-		"dns_resolved", result.DNSResolved,
-	)
 	return nil
 }
 

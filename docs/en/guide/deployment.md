@@ -46,8 +46,13 @@ docker compose up -d
 
 After startup:
 
-- Admin dashboard: `http://YOUR_HOST:3000`
+- Admin dashboard: `http://YOUR_HOST:8080`
 - API: `http://YOUR_HOST:8080`
+
+The admin dashboard is embedded in the control-plane service on current
+releases. If you are running an older `v3.4.x` Compose file with a standalone
+`admin` service and port `3000` is unavailable on the host, set `ADMIN_PORT` in
+`.env` to another free port and recreate the service.
 
 Verify:
 

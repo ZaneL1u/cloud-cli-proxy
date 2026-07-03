@@ -19,8 +19,27 @@ func TestBuildContainerSingBoxConfig_TunInboundAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(cfg)
-	if !strings.Contains(s, `"address": [`) || !strings.Contains(s, `"172.19.0.1/30"`) {
+	if !strings.Contains(s, `"address": [`) || !strings.Contains(s, `"198.18.0.1/30"`) {
 		t.Errorf("container tun inbound address mismatch:\n%s", s)
+	}
+}
+
+func TestBuildContainerSingBoxConfig_TunInboundAvoidsDockerBridgeCIDRs(t *testing.T) {
+	raw, err := buildContainerTunInbound()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inbound map[string]any
+	if err := json.Unmarshal(raw, &inbound); err != nil {
+		t.Fatal(err)
+	}
+	addresses, ok := inbound["address"].([]any)
+	if !ok || len(addresses) != 1 {
+		t.Fatalf("tun address missing or wrong type: %#v", inbound["address"])
+	}
+	addr, _ := addresses[0].(string)
+	if strings.HasPrefix(addr, "10.") || strings.HasPrefix(addr, "172.") || strings.HasPrefix(addr, "192.168.") {
+		t.Fatalf("tun address %q must avoid Docker/private bridge CIDRs", addr)
 	}
 }
 
@@ -103,8 +122,8 @@ func TestBuildContainerSingBoxConfig_DNSStubInboundUsesSupportedDirect(t *testin
 			if in["type"] != "direct" {
 				t.Fatalf("127.0.0.1:53 inbound type = %v, want direct", in["type"])
 			}
-			if in["tag"] != "dns-direct" {
-				t.Fatalf("127.0.0.1:53 inbound tag = %v, want dns-direct", in["tag"])
+			if in["tag"] != "dns-stub" {
+				t.Fatalf("127.0.0.1:53 inbound tag = %v, want dns-stub", in["tag"])
 			}
 			if in["sniff"] != true {
 				t.Fatalf("127.0.0.1:53 direct inbound must enable sniff, got %#v", in["sniff"])
@@ -175,9 +194,9 @@ func TestBuildContainerSingBoxConfig_DNSHijackScopedToStubAndRejectsOtherDNS(t *
 		if !ok {
 			continue
 		}
-		if r["protocol"] == "dns" && r["action"] == "hijack-dns" {
-			if r["inbound"] != "dns-direct" {
-				t.Fatalf("dns hijack rule must be scoped to dns-direct inbound, got %#v", r)
+		if r["inbound"] == "dns-stub" && r["action"] == "hijack-dns" {
+			if _, hasProtocol := r["protocol"]; hasProtocol {
+				t.Fatalf("dns stub hijack must not require protocol sniff before hijack, got %#v", r)
 			}
 			hijackIndex = i
 		}
@@ -189,13 +208,39 @@ func TestBuildContainerSingBoxConfig_DNSHijackScopedToStubAndRejectsOtherDNS(t *
 		}
 	}
 	if hijackIndex == -1 {
-		t.Fatalf("missing dns-direct hijack-dns rule:\n%s", string(cfg))
+		t.Fatalf("missing dns-stub hijack-dns rule:\n%s", string(cfg))
 	}
 	if rejectIndex == -1 {
 		t.Fatalf("missing fallback DNS reject rule:\n%s", string(cfg))
 	}
 	if rejectIndex <= hijackIndex {
 		t.Fatalf("DNS reject rule must follow stub hijack rule, hijack=%d reject=%d", hijackIndex, rejectIndex)
+	}
+}
+
+func TestBuildContainerSingBoxConfig_DNSStubHijackPrecedesPrivateDirect(t *testing.T) {
+	route := buildContainerRoute("1.2.3.4")
+	rules, ok := route["rules"].([]map[string]any)
+	if !ok {
+		t.Fatalf("route.rules missing or wrong type: %#v", route["rules"])
+	}
+	var hijackIndex, privateIndex = -1, -1
+	for i, rule := range rules {
+		if rule["inbound"] == "dns-stub" && rule["action"] == "hijack-dns" {
+			hijackIndex = i
+		}
+		if rule["ip_is_private"] == true {
+			privateIndex = i
+		}
+	}
+	if hijackIndex == -1 {
+		t.Fatalf("missing dns-stub hijack rule: %#v", rules)
+	}
+	if privateIndex == -1 {
+		t.Fatalf("missing private direct rule: %#v", rules)
+	}
+	if hijackIndex >= privateIndex {
+		t.Fatalf("dns-stub hijack must precede private direct to avoid 127.0.0.1:53 loop, hijack=%d private=%d", hijackIndex, privateIndex)
 	}
 }
 

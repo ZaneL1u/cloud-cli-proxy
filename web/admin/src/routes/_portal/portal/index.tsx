@@ -34,6 +34,11 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function StatusBadge({ status }: { status: string }) {
+  const cfg = hostStatusConfig[status] ?? defaultHostStatus;
+  return <Badge variant={cfg.badgeVariant}>{cfg.label}</Badge>;
+}
+
 function HostCard({ host }: { host: PortalHost }) {
   const cfg = hostStatusConfig[host.status] ?? defaultHostStatus;
 
@@ -215,12 +220,12 @@ function PortalHostList() {
           <CardHeader className="border-b bg-muted/30">
             <CardTitle className="text-base">SSH 与桌面连接</CardTitle>
             <CardDescription>
-              SSH 密码现在按主机分别管理，不再是用户级共享密码。
+              SSH 密码由用户级 SSH 凭据管理，与登录密码不同。
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="rounded-lg border border-border/60 bg-card p-4 text-sm leading-relaxed text-muted-foreground shadow-sm">
-              每台主机都有独立的 SSH 短 ID 与 SSH 密码。请进入具体主机详情页查看连接命令、VNC 入口和当前主机的接入方式。
+              请进入具体主机详情页查看连接命令、VNC 入口和当前主机的接入方式。手动 SSH 时使用管理员分发的 SSH 密码。
             </div>
           </CardContent>
         </Card>

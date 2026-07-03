@@ -26,7 +26,7 @@ services:
       - /var/lib/cloud-cli-proxy:/var/lib/cloud-cli-proxy
       - cloud-cli-proxy-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/healthz"]
+      test: ["CMD-SHELL", "port=$${CONTROL_PLANE_ADDR:-:8080}; port=$${port##*:}; curl -sf http://127.0.0.1:$${port}/healthz"]
       interval: 10s
       timeout: 5s
       retries: 10

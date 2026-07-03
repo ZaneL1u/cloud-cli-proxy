@@ -26,6 +26,9 @@ const pullImageTimeout = 5 * time.Minute
 const (
 	defaultHostRoot       = "/var/lib/cloud-cli-proxy/hosts/"
 	defaultWorkspaceMount = "/workspace"
+	defaultMemoryLimitMB  = 4096
+	defaultCPULimit       = 2.0
+	defaultPidsLimit      = 1024
 	taskStatePending      = "pending"
 	taskStateRunning      = "running"
 	taskStateSucceeded    = "succeeded"
@@ -220,13 +223,17 @@ func actionToHostStatus(action agentapi.HostAction) string {
 }
 
 func dockerPidsLimitValue(limit *int) string {
-	if limit == nil {
-		return "1024"
-	}
-	if *limit == 0 {
-		return "-1"
+	if limit == nil || *limit <= 0 {
+		return fmt.Sprintf("%d", defaultPidsLimit)
 	}
 	return fmt.Sprintf("%d", *limit)
+}
+
+func dockerMemoryLimitValue(limitMB int) string {
+	if limitMB <= 0 {
+		limitMB = defaultMemoryLimitMB
+	}
+	return fmt.Sprintf("%dm", limitMB)
 }
 
 func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerName, hostname string, egressCfg *network.EgressConfig) ([]string, error) {
@@ -277,12 +284,14 @@ func (w *Worker) buildCreateArgs(request agentapi.HostActionRequest, containerNa
 		args = append(args, "-p", "0:22")
 	}
 
-	if request.MemoryLimitMB > 0 {
-		args = append(args, "--memory", fmt.Sprintf("%dm", request.MemoryLimitMB))
+	memoryLimit := dockerMemoryLimitValue(request.MemoryLimitMB)
+	args = append(args, "--memory", memoryLimit, "--memory-swap", memoryLimit)
+
+	cpuLimit := request.CPULimit
+	if cpuLimit <= 0 {
+		cpuLimit = defaultCPULimit
 	}
-	if request.CPULimit > 0 {
-		args = append(args, "--cpus", fmt.Sprintf("%.1f", request.CPULimit))
-	}
+	args = append(args, "--cpus", fmt.Sprintf("%.1f", cpuLimit))
 
 	if request.EntryPassword == "" {
 		return nil, fmt.Errorf("host %s entry_password is empty; refusing to build create args", request.HostID)

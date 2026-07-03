@@ -46,6 +46,23 @@ export interface ConnectionInfo {
   vnc_url?: string;
 }
 
+export interface CreateHostSSHCredentials {
+  username: string;
+  user_short_id?: string;
+  host_short_id?: string;
+  entry_password: string;
+  curl_command: string;
+  ssh_command: string;
+  ssh_port: number;
+}
+
+export interface CreateHostResponse {
+  host: HostDetail["host"];
+  task_id: string;
+  status: string;
+  ssh_credentials: CreateHostSSHCredentials;
+}
+
 export interface HostMount {
   source: string;
   target: string;
@@ -124,7 +141,7 @@ export function useCreateHost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { user_id: string; egress_ip_id: string; timezone?: string; pids_limit?: number | null; memory_limit_mb?: number | null; cpu_limit?: number | null; host_mounts?: HostMount[] }) =>
-      apiFetch<{ host: HostWithUsername; task_id: string }>("/hosts", {
+      apiFetch<CreateHostResponse>("/hosts", {
         method: "POST",
         body: JSON.stringify(data),
       }),

@@ -460,7 +460,7 @@ function HostDetailPage() {
                       <span className="font-mono text-sm font-medium">
                         {host.pids_limit != null
                           ? host.pids_limit === 0
-                            ? "无限制"
+                            ? "默认 (1024)"
                             : String(host.pids_limit)
                           : "默认 (1024)"}
                       </span>
@@ -470,7 +470,7 @@ function HostDetailPage() {
                       <span className="font-mono text-sm font-medium">
                         {host.memory_limit_mb != null
                           ? host.memory_limit_mb === 0
-                            ? "无限制"
+                            ? "默认 (4 GB)"
                             : host.memory_limit_mb >= 1024
                               ? `${host.memory_limit_mb / 1024} GB`
                               : `${host.memory_limit_mb} MB`
@@ -482,7 +482,7 @@ function HostDetailPage() {
                       <span className="font-mono text-sm font-medium">
                         {host.cpu_limit != null
                           ? host.cpu_limit === 0
-                            ? "无限制"
+                            ? "默认 (2 核)"
                             : `${host.cpu_limit} 核`
                           : "默认 (2 核)"}
                       </span>

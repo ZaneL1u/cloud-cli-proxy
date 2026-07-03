@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,6 +16,38 @@ func TestWorkerContainerName(t *testing.T) {
 	want := "cloudproxy-my-host"
 	if got != want {
 		t.Errorf("workerContainerName = %q, want %q", got, want)
+	}
+}
+
+type countingVerifier struct {
+	calls int
+	err   error
+}
+
+func (v *countingVerifier) Verify(ctx context.Context, containerName string, egress EgressConfig) (VerifyResult, error) {
+	v.calls++
+	return VerifyResult{ActualEgressIP: "203.0.113.10"}, v.err
+}
+
+func TestContainerProxyProvider_PrepareHostSkipsCreateTimeEgressVerification(t *testing.T) {
+	verifier := &countingVerifier{err: errors.New("egress probe should not run during create")}
+	p := NewContainerProxyProvider(slog.Default(), verifier)
+
+	err := p.PrepareHost(context.Background(), HostNetworkSpec{
+		HostID: "h-no-create-probe",
+		Egress: &EgressConfig{
+			EgressIPID: "eip", ExpectedIP: "9.9.9.9", TunnelType: TunnelTypeProxy,
+			Proxy: &ProxySpec{
+				OutboundConfig: json.RawMessage(`{"type":"socks","server":"1.2.3.4","server_port":1080}`),
+				DNSServer:      "1.1.1.1",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PrepareHost should allow host creation without egress IP probe, got: %v", err)
+	}
+	if verifier.calls != 0 {
+		t.Fatalf("PrepareHost must not run create-time verifier, calls=%d", verifier.calls)
 	}
 }
 

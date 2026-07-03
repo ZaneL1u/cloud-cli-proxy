@@ -365,12 +365,14 @@ curl -s -X POST http://YOUR_HOST:8080/v1/admin/hosts/{hostID}/rebuild \
 
 重建会销毁当前容器并基于受管镜像重新创建，用户 home volume 会保留。
 
-### 轮换 SSH 密码
+### 重新生成用户 SSH 凭据
 
 ```bash
-curl -s -X POST http://YOUR_HOST:8080/v1/admin/hosts/{hostID}/rotate-ssh-password \
+curl -s -X POST http://YOUR_HOST:8080/v1/admin/users/{userID}/credentials/regenerate \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+SSH 密码属于用户级 SSH 凭据，主机创建成功时会返回当前用户的 SSH 接入信息。丢失后请重新生成用户 SSH 凭据。
 
 ### 重启 VNC 服务（不中断主机）
 

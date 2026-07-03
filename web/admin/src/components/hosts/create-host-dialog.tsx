@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, XCircle, AlertCircle, X } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, AlertCircle, X, Copy, Check } from "lucide-react";
 import { useUsers } from "@/hooks/use-users";
-import { useCreateHost } from "@/hooks/use-hosts";
+import { useCreateHost, type CreateHostSSHCredentials } from "@/hooks/use-hosts";
 import { useEgressIPs } from "@/hooks/use-egress-ips";
 import { useTaskPolling } from "@/hooks/use-tasks";
+import { ApiError } from "@/lib/api";
 import { PathAutocomplete } from "@/components/hosts/path-autocomplete";
 import { ResourceLimitsSelector, type ResourceLimitsValue } from "@/components/hosts/resource-limits-selector";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,66 @@ const statusDisplay: Record<
   },
 };
 
+function parseCreateHostError(err: unknown): string {
+  if (err instanceof ApiError) {
+    const msg = err.parsedError();
+    if (msg.includes("SSH credentials")) {
+      return "该用户缺少 SSH 凭据，请先到用户详情页重新生成 SSH 凭据";
+    }
+    if (msg === "user already has an active host") {
+      return "该用户已经有一台未归档主机";
+    }
+    if (msg === "egress_ip_id is required") {
+      return "请选择出口 IP";
+    }
+    if (msg === "user_id is required") {
+      return "请选择用户";
+    }
+    return msg;
+  }
+  return "提交失败";
+}
+
+function CopyValue({
+  label,
+  value,
+  multiline = false,
+}: {
+  label: string;
+  value: string;
+  multiline?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  function copy() {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="flex items-start gap-2">
+        <code
+          className={`flex-1 rounded bg-muted px-3 py-2 font-mono text-sm ${
+            multiline ? "break-all whitespace-pre-wrap" : "truncate"
+          }`}
+        >
+          {value}
+        </code>
+        <Button type="button" variant="ghost" size="icon" onClick={copy}>
+          {copied ? (
+            <Check className="h-4 w-4 text-green-500" />
+          ) : (
+            <Copy className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function CreateHostDialog({
   open,
   onOpenChange,
@@ -94,6 +155,8 @@ export function CreateHostDialog({
     { source: "", target: "" },
   ]);
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [sshCredentials, setSSHCredentials] =
+    useState<CreateHostSSHCredentials | null>(null);
   const { data: usersData, isLoading: loadingUsers } = useUsers();
   const { data: egressData, isLoading: loadingEgress } = useEgressIPs();
   const createMutation = useCreateHost();
@@ -141,8 +204,9 @@ export function CreateHostDialog({
       {
         onSuccess: (data) => {
           setTaskId(data.task_id);
+          setSSHCredentials(data.ssh_credentials ?? null);
         },
-        onError: () => toast.error("提交失败"),
+        onError: (err) => toast.error(parseCreateHostError(err)),
       },
     );
   }
@@ -154,6 +218,7 @@ export function CreateHostDialog({
     setResources({ pids_limit: 1024, memory_limit_mb: null, cpu_limit: null });
     setHostMounts([{ source: "", target: "" }]);
     setTaskId(null);
+    setSSHCredentials(null);
     onOpenChange(false);
   }
 
@@ -233,7 +298,7 @@ export function CreateHostDialog({
               <div className="space-y-2">
                 <Label>资源限制</Label>
                 <p className="text-xs text-muted-foreground">
-                  不设置则使用默认值（1024 进程 / 4 GB 内存 / 2 核 CPU）。选择“无限制”可使用宿主机对应资源。
+                  不设置则使用默认值（1024 进程 / 4 GB 内存 / 2 核 CPU）。
                 </p>
                 <ResourceLimitsSelector
                   value={resources}
@@ -389,6 +454,33 @@ export function CreateHostDialog({
                   </pre>
                 </details>
               )}
+
+            {taskStatus === "succeeded" && sshCredentials && (
+              <div className="space-y-3 rounded-md border bg-muted/20 p-4">
+                <div>
+                  <p className="text-sm font-medium">SSH 接入凭据（请保存）</p>
+                  <p className="text-xs text-muted-foreground">
+                    SSH 密码来自用户级凭据；丢失后到用户详情页重新生成 SSH 凭据。
+                  </p>
+                </div>
+                <CopyValue label="用户名" value={sshCredentials.username} />
+                {sshCredentials.user_short_id && (
+                  <CopyValue label="用户短 ID" value={sshCredentials.user_short_id} />
+                )}
+                {sshCredentials.host_short_id && (
+                  <CopyValue label="主机短 ID" value={sshCredentials.host_short_id} />
+                )}
+                <CopyValue label="SSH 密码" value={sshCredentials.entry_password} />
+                <CopyValue label="一键连接命令" value={sshCredentials.curl_command} multiline />
+                <CopyValue label="SSH 命令" value={sshCredentials.ssh_command} multiline />
+              </div>
+            )}
+
+            {taskStatus === "succeeded" && !sshCredentials && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                主机已创建，但接口未返回 SSH 凭据。请到用户详情页重新生成 SSH 凭据后再分发给用户。
+              </div>
+            )}
 
             <DialogFooter>
               {isDone && (

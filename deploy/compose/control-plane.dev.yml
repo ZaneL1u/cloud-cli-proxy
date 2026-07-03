@@ -7,7 +7,7 @@ services:
       - DATABASE_URL=file:/data/cloud-cli-proxy.db
       - CONTROL_PLANE_ADDR=:8080
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail http://127.0.0.1:8080/healthz"]
+      test: ["CMD-SHELL", "port=$${CONTROL_PLANE_ADDR:-:8080}; port=$${port##*:}; curl --fail http://127.0.0.1:$${port}/healthz"]
       interval: 5s
       timeout: 5s
       retries: 20

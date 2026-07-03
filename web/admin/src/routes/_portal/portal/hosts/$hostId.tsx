@@ -263,7 +263,7 @@ function PortalHostDetail() {
                 command={host.connection_info.curl_command}
               />
               <ConnectionBlock
-                label="SSH 直连（需要用入口密码）"
+                label="SSH 直连（需要 SSH 密码）"
                 command={host.connection_info.ssh_command}
               />
             </div>

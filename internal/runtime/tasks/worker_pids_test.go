@@ -14,7 +14,7 @@ func TestBuildCreateArgs_PidsLimit(t *testing.T) {
 		want string
 	}{
 		{name: "default", set: func(_ *int) *int { return nil }, want: "1024"},
-		{name: "unlimited", set: func(v *int) *int { *v = 0; return v }, want: "-1"},
+		{name: "zero_uses_default", set: func(v *int) *int { *v = 0; return v }, want: "1024"},
 		{name: "custom", set: func(v *int) *int { *v = 2048; return v }, want: "2048"},
 	}
 
