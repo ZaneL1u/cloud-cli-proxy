@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.10 - 2026-07-03
+## What's Changed
+
+### Backend (Go / API)
+- fix(hosts): harden provisioning and resource limits (acad581)
+
+### Frontend (Admin Web)
+- fix(hosts): harden provisioning and resource limits (acad581)
+
+### Runtime & Deployment
+- fix(hosts): harden provisioning and resource limits (acad581)
+
+### Docs
+- fix(hosts): harden provisioning and resource limits (acad581)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.9...v4.2.10
+
+
 ## v4.2.9 - 2026-06-18
 ## What's Changed
 
