@@ -389,7 +389,7 @@ function HostsPage() {
                                         `v1/admin/hosts/${host.id}/vnc/`,
                                       );
                                       window.open(
-                                        `/v1/admin/hosts/${host.id}/vnc/vnc.html?autoconnect=true&resize=remote&path=${wsPath}&token=${token}`,
+                                        `/v1/admin/hosts/${host.id}/vnc/vnc.html?autoconnect=true&resize=remote&enable_ime=1&path=${wsPath}&token=${token}`,
                                         "_blank",
                                       );
                                     }}
@@ -498,4 +498,3 @@ function HostsPage() {
     </div>
   );
 }
-

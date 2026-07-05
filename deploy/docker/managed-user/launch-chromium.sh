@@ -3,6 +3,12 @@ set -euo pipefail
 
 export DISPLAY="${DISPLAY:-:99}"
 export HOME="${HOME:-/workspace}"
+export LANG="${DESKTOP_LANG:-${LANG:-en_US.UTF-8}}"
+export LANGUAGE="${DESKTOP_LANGUAGE:-${LANGUAGE:-en_US:en}}"
+export LC_ALL="${DESKTOP_LC_ALL:-${LC_ALL:-$LANG}}"
+
+CHROMIUM_LANG="${CHROMIUM_LANG:-zh-CN}"
+CHROMIUM_ACCEPT_LANG="${CHROMIUM_ACCEPT_LANG:-zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7}"
 
 browser_cmd=""
 for candidate in chromium chromium-browser google-chrome; do
@@ -25,6 +31,8 @@ exec "${browser_cmd}" \
   --no-sandbox \
   --disable-dev-shm-usage \
   --user-data-dir=/workspace/.chrome-data \
+  --lang="${CHROMIUM_LANG}" \
+  --accept-lang="${CHROMIUM_ACCEPT_LANG}" \
   --start-maximized \
   --no-first-run \
   --disable-gpu \
