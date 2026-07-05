@@ -36,6 +36,11 @@ const (
 	taskStateCanceled     = "canceled"
 )
 
+const containerDNSLockContent = `# v4.0: DNS forced through in-container sing-box DNS inbound
+nameserver 127.0.0.1
+options edns0 trust-ad
+`
+
 const (
 	sshManagedBeginMarker = "# >>> cloud-cli-proxy managed keys (do not edit) >>>"
 	sshManagedEndMarker   = "# <<< cloud-cli-proxy managed keys <<<"
@@ -543,6 +548,10 @@ func (w *Worker) startHost(ctx context.Context, request agentapi.HostActionReque
 
 	if err := w.runDocker(ctx, "start", containerName); err != nil {
 		return err
+	}
+
+	if err := w.connectContainerNetworks(ctx, containerName); err != nil {
+		return fmt.Errorf("connect container networks: %w", err)
 	}
 
 	if egressCfg != nil {
@@ -1312,13 +1321,17 @@ func (w *Worker) containerRunning(ctx context.Context, name string) (bool, error
 }
 
 func (w *Worker) runDocker(ctx context.Context, args ...string) error {
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	output, err := cmd.CombinedOutput()
+	output, err := dockerRunner(ctx, args...)
 	if err != nil {
 		return fmt.Errorf("docker %s: %w (%s)", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
 	}
 
 	return nil
+}
+
+var dockerRunner = func(ctx context.Context, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	return cmd.CombinedOutput()
 }
 
 // connectContainerNetworks 将容器接入 compose 网络（控制面 VNC 访问需要）。
@@ -1338,6 +1351,24 @@ func (w *Worker) connectContainerNetworks(ctx context.Context, containerName str
 			"network", composeNetwork,
 			"error", err,
 		)
+	}
+	if err := lockContainerDNS(ctx, containerName); err != nil {
+		return fmt.Errorf("re-lock container DNS after network connect: %w", err)
+	}
+	return nil
+}
+
+func lockContainerDNS(ctx context.Context, containerName string) error {
+	script := strings.Join([]string{
+		"set -e",
+		"chattr -i /etc/resolv.conf 2>/dev/null || true",
+		"cat > /etc/resolv.conf",
+		"chmod 0644 /etc/resolv.conf",
+		"chattr +i /etc/resolv.conf 2>/dev/null || true",
+	}, "\n")
+	out, err := execInContainer(ctx, containerName, script, containerDNSLockContent)
+	if err != nil {
+		return fmt.Errorf("write /etc/resolv.conf: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
