@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.12 - 2026-07-05
+## What's Changed
+
+### Backend (Go / API)
+- fix(runtime): start SSH before desktop stack (c38189f)
+
+### Runtime & Deployment
+- fix(runtime): start SSH before desktop stack (c38189f)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.11...v4.2.12
+
+
 ## v4.2.11 - 2026-07-05
 ## What's Changed
 
