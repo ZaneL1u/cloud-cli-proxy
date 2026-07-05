@@ -182,6 +182,7 @@ NFT_RULESET="/etc/cloud-claude/default-deny.nft"
 BYPASS_DIR="/etc/cloud-claude/bypass"
 TUN_READY_TIMEOUT_S=30
 SING_BOX_PID=""
+SSHD_PID=""
 
 prepare_bypass_rule_sets() {
   # v4.1: sing-box rule_set 引用白名单文件，必须预先存在。
@@ -352,6 +353,124 @@ monitor_singbox_fail_closed() {
   echo "[entrypoint] sing-box fail-closed monitor armed (monitor pid=$!, sing-box pid=$SING_BOX_PID)"
 }
 
+start_sshd_or_die() {
+  mkdir -p /run/sshd /var/run/sshd
+  echo "[entrypoint] starting sshd"
+  /usr/sbin/sshd -D -e &
+  SSHD_PID=$!
+
+  local deadline=$((SECONDS + 10))
+  while (( SECONDS < deadline )); do
+    if ! kill -0 "$SSHD_PID" 2>/dev/null; then
+      echo "[entrypoint] FATAL: sshd exited during startup" >&2
+      exit 1
+    fi
+    if bash -lc '</dev/tcp/127.0.0.1/22' >/dev/null 2>&1; then
+      echo "[entrypoint] sshd ready (pid=$SSHD_PID)"
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  echo "[entrypoint] FATAL: sshd not ready within 10s" >&2
+  kill "$SSHD_PID" 2>/dev/null || true
+  exit 1
+}
+
+start_desktop_stack() {
+  mkdir -p /workspace/.vnc
+  cat > /workspace/.vnc/kasmvnc.yaml <<'YAML'
+network:
+  protocol: http
+  websocket_port: 6080
+  ssl:
+    require_ssl: false
+    pem_certificate:
+    pem_key:
+  udp:
+    public_ip: 127.0.0.1
+    stun_server:
+desktop:
+  resolution:
+    width: 1920
+    height: 1080
+  allow_resize: true
+  pixel_depth: 24
+keyboard:
+  remap_keys:
+  ignore_numlock: false
+  raw_keyboard: false
+pointer:
+  enabled: true
+runtime_configuration:
+  allow_client_to_override_kasm_server_settings: true
+  allow_override_standard_vnc_server_settings: true
+  allow_override_list:
+    - pointer.enabled
+    - desktop.allow_resize
+    - desktop.resolution
+encoding:
+  max_frame_rate: 60
+  rect_encoding_mode:
+    min_quality: 7
+    max_quality: 10
+    consider_lossless_quality: 10
+    rectangle_compress_threads: 4
+YAML
+  chown -R "${RUN_USER}:${RUN_USER}" /workspace/.vnc
+  touch "${XVNC_LOG}" "${FLUXBOX_LOG}" "${DESKTOP_LOG}" "${CHROMIUM_LOG}"
+  chown "${RUN_USER}:${RUN_USER}" "${XVNC_LOG}" "${FLUXBOX_LOG}" "${DESKTOP_LOG}" "${CHROMIUM_LOG}"
+
+  echo -e "kasmpass\nkasmpass\n" | kasmvncpasswd -u "${RUN_USER}" -w /workspace/.vnc/passwd 2>/dev/null || true
+  chown "${RUN_USER}:${RUN_USER}" /workspace/.vnc/passwd
+
+  mkdir -p /tmp/.X11-unix
+  chmod 1777 /tmp/.X11-unix
+  rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
+
+  export DISPLAY=:99
+  su "${RUN_USER}" -c 'Xvnc :99 \
+    -geometry 1920x1080 \
+    -depth 24 \
+    -websocketPort 6080 \
+    -SecurityTypes None \
+    -interface 0.0.0.0 \
+    -BlacklistThreshold 0 \
+    -FreeKeyMappings \
+    -disableBasicAuth \
+    -publicIP 127.0.0.1 \
+    -httpd /usr/share/kasmvnc/www' >>"${XVNC_LOG}" 2>&1 &
+
+  if ! wait_for_x_display ":99" 30; then
+    echo "Xvnc did not become ready on DISPLAY :99 within 30 seconds" >>"${XVNC_LOG}"
+    return 1
+  fi
+
+  write_desktop_config
+
+  su "${RUN_USER}" -c 'DISPLAY=:99 xsetroot -solid "#17324d"' >/dev/null 2>&1 || true
+  su "${RUN_USER}" -c 'DISPLAY=:99 fluxbox' >>"${FLUXBOX_LOG}" 2>&1 &
+  su "${RUN_USER}" -c 'DISPLAY=:99 HOME=/workspace pcmanfm --desktop --profile default' >>"${DESKTOP_LOG}" 2>&1 &
+  su "${RUN_USER}" -c 'HOME=/workspace /usr/local/bin/launch-chromium.sh --version' >>"${CHROMIUM_LOG}" 2>&1 || true
+
+  prepare_workspace_dirs
+  prepare_persistent_state
+  prepare_container_disguise
+  prepare_mergerfs_check
+  assert_tmux_version
+
+  echo "[entrypoint] desktop stack ready (display=:99 websocket=6080)"
+}
+
+start_desktop_stack_async() {
+  (
+    if ! start_desktop_stack; then
+      echo "[entrypoint] WARN: desktop stack failed; SSH remains available" >&2
+    fi
+  ) &
+  echo "[entrypoint] desktop stack starting in background (pid=$!)"
+}
+
 # SSH setup
 mkdir -p /var/run/sshd
 if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
@@ -482,103 +601,13 @@ fix_singbox_routing
 lock_resolv_conf
 remove_singbox_config
 monitor_singbox_fail_closed
+start_sshd_or_die
 
 # MODE 检测：remote（默认）= 完整桌面栈，local = 仅 sshd
 MODE="${MODE:-remote}"
 
 if [ "$MODE" != "local" ]; then
-# KasmVNC 配置（无密码认证——由控制面反代保护）
-mkdir -p /workspace/.vnc
-cat > /workspace/.vnc/kasmvnc.yaml <<'YAML'
-network:
-  protocol: http
-  websocket_port: 6080
-  ssl:
-    require_ssl: false
-    pem_certificate:
-    pem_key:
-  udp:
-    public_ip: 127.0.0.1
-    stun_server:
-desktop:
-  resolution:
-    width: 1920
-    height: 1080
-  allow_resize: true
-  pixel_depth: 24
-keyboard:
-  remap_keys:
-  ignore_numlock: false
-  raw_keyboard: false
-pointer:
-  enabled: true
-runtime_configuration:
-  allow_client_to_override_kasm_server_settings: true
-  allow_override_standard_vnc_server_settings: true
-  allow_override_list:
-    - pointer.enabled
-    - desktop.allow_resize
-    - desktop.resolution
-encoding:
-  max_frame_rate: 60
-  rect_encoding_mode:
-    min_quality: 7
-    max_quality: 10
-    consider_lossless_quality: 10
-    rectangle_compress_threads: 4
-YAML
-chown -R "${RUN_USER}:${RUN_USER}" /workspace/.vnc
-touch "${XVNC_LOG}" "${FLUXBOX_LOG}" "${DESKTOP_LOG}" "${CHROMIUM_LOG}"
-chown "${RUN_USER}:${RUN_USER}" "${XVNC_LOG}" "${FLUXBOX_LOG}" "${DESKTOP_LOG}" "${CHROMIUM_LOG}"
-
-# 创建 KasmVNC 用户（非交互，避免卡在 TUI 提示）
-echo -e "kasmpass\nkasmpass\n" | kasmvncpasswd -u "${RUN_USER}" -w /workspace/.vnc/passwd 2>/dev/null || true
-chown "${RUN_USER}:${RUN_USER}" /workspace/.vnc/passwd
-
-# 创建 /tmp/.X11-unix（非 root 用户启动 Xvnc 需要）
-mkdir -p /tmp/.X11-unix
-chmod 1777 /tmp/.X11-unix
-
-# 清理可能残留的 X11 lock 文件（容器 restart 后 /tmp 可能仍保留上次运行的 lock）
-rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
-
-# 启动 KasmVNC（Xvnc 直接启动，跳过 vncserver perl 脚本的交互提示）
-export DISPLAY=:99
-su "${RUN_USER}" -c 'Xvnc :99 \
-  -geometry 1920x1080 \
-  -depth 24 \
-  -websocketPort 6080 \
-  -SecurityTypes None \
-  -interface 0.0.0.0 \
-  -BlacklistThreshold 0 \
-  -FreeKeyMappings \
-  -disableBasicAuth \
-  -publicIP 127.0.0.1 \
-  -httpd /usr/share/kasmvnc/www' >>"${XVNC_LOG}" 2>&1 &
-
-if ! wait_for_x_display ":99" 30; then
-  echo "Xvnc did not become ready on DISPLAY :99 within 30 seconds" >>"${XVNC_LOG}"
-  exit 1
+  start_desktop_stack_async
 fi
 
-write_desktop_config
-
-# 提前设置根窗口背景，pcmanfm 接管前也不会闪成纯黑。
-DISPLAY=:99 xsetroot -solid "#17324d" >/dev/null 2>&1 || true
-
-su "${RUN_USER}" -c 'DISPLAY=:99 fluxbox' >>"${FLUXBOX_LOG}" 2>&1 &
-su "${RUN_USER}" -c 'DISPLAY=:99 HOME=/workspace pcmanfm --desktop --profile default' >>"${DESKTOP_LOG}" 2>&1 &
-
-# 预热一遍 Chromium 检测，方便排查图标点击失败。
-su "${RUN_USER}" -c 'HOME=/workspace /usr/local/bin/launch-chromium.sh --version' >>"${CHROMIUM_LOG}" 2>&1 || true
-
-prepare_workspace_dirs
-prepare_persistent_state
-prepare_container_disguise
-prepare_mergerfs_check
-assert_tmux_version
-
-fi # end MODE != "local"
-
-# Foreground: sshd
-exec /usr/sbin/sshd -D -e
+wait "$SSHD_PID"

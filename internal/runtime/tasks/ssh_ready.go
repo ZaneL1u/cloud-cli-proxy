@@ -29,7 +29,7 @@ type SSHReadyConfig struct {
 
 var DefaultSSHReadyConfig = SSHReadyConfig{
 	PollInterval: 1 * time.Second,
-	Timeout:      30 * time.Second,
+	Timeout:      120 * time.Second,
 	Check:        DockerExecSSHCheck,
 }
 
@@ -48,7 +48,7 @@ func WaitForSSHReady(ctx context.Context, containerName string, cfg SSHReadyConf
 		cfg.PollInterval = 1 * time.Second
 	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = 30 * time.Second
+		cfg.Timeout = 120 * time.Second
 	}
 
 	var lastErr error
