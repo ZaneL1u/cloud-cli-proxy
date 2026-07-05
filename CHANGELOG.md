@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.13 - 2026-07-05
+## What's Changed
+
+### Frontend (Admin Web)
+- fix(desktop): localize VNC desktop session (d832638)
+
+### Runtime & Deployment
+- fix(desktop): localize VNC desktop session (d832638)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.12...v4.2.13
+
+
 ## v4.2.12 - 2026-07-05
 ## What's Changed
 
