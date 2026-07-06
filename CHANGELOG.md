@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.14 - 2026-07-06
+## What's Changed
+
+### Frontend (Admin Web)
+- fix(desktop): restore english desktop locale defaults (cbd4a72)
+
+### Runtime & Deployment
+- fix(desktop): restore english desktop locale defaults (cbd4a72)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.13...v4.2.14
+
+
 ## v4.2.13 - 2026-07-05
 ## What's Changed
 
