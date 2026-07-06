@@ -34,7 +34,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         procps \
         iproute2 \
         locales \
-        language-pack-zh-hans \
         fluxbox \
         pcmanfm \
         dbus-x11 \
@@ -111,7 +110,7 @@ RUN mkdir -p /etc/cloud-claude \
     && echo "${MERGERFS_VERSION}" > /etc/cloud-claude/mergerfs.version \
     && echo "runtime-filled" > /etc/cloud-claude/tmux.version
 
-RUN locale-gen en_US.UTF-8 zh_CN.UTF-8
+RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
 ENV LC_ALL=en_US.UTF-8

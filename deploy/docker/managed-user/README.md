@@ -6,7 +6,6 @@
 
 - 主目录持久化挂载点固定为 `/workspace`
 - 默认用户固定为 `workspace`
-- 系统默认 locale 保持 `en_US.UTF-8`；VNC 桌面会话默认使用 `zh_CN.UTF-8`，可通过 `DESKTOP_LANG` / `DESKTOP_LANGUAGE` / `DESKTOP_LC_ALL` / `CHROMIUM_LANG` 覆盖
 - 控制面与 host-agent 必须统一读取 `image.lock` 中的同一个镜像全名
 - 默认重建模式是 `preserve-home`，即重建系统层但保留 `/workspace`
 - `factory_reset_mode: wipe-/workspace` 仅作为后续显式工厂重置入口的契约，不在 Phase 1 自动执行

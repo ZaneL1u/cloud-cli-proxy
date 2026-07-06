@@ -26,8 +26,8 @@ DESKTOP_LOG="${LOG_DIR}/desktop.log"
 CHROMIUM_LOG="${LOG_DIR}/chromium.log"
 DESKTOP_DIR=/workspace/Desktop
 PCMANFM_PROFILE_DIR=/workspace/.config/pcmanfm/default
-DESKTOP_LANG="${DESKTOP_LANG:-zh_CN.UTF-8}"
-DESKTOP_LANGUAGE="${DESKTOP_LANGUAGE:-zh_CN:zh}"
+DESKTOP_LANG="${DESKTOP_LANG:-en_US.UTF-8}"
+DESKTOP_LANGUAGE="${DESKTOP_LANGUAGE:-en_US:en}"
 DESKTOP_LC_ALL="${DESKTOP_LC_ALL:-$DESKTOP_LANG}"
 
 write_desktop_config() {
@@ -38,9 +38,7 @@ write_desktop_config() {
 Version=1.0
 Type=Application
 Name=Browser
-Name[zh_CN]=浏览器
 Comment=Open the browser
-Comment[zh_CN]=打开浏览器
 Exec=/usr/local/bin/launch-chromium.sh
 Icon=chromium
 Terminal=false

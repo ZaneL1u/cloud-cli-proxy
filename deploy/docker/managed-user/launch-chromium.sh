@@ -7,8 +7,8 @@ export LANG="${DESKTOP_LANG:-${LANG:-en_US.UTF-8}}"
 export LANGUAGE="${DESKTOP_LANGUAGE:-${LANGUAGE:-en_US:en}}"
 export LC_ALL="${DESKTOP_LC_ALL:-${LC_ALL:-$LANG}}"
 
-CHROMIUM_LANG="${CHROMIUM_LANG:-zh-CN}"
-CHROMIUM_ACCEPT_LANG="${CHROMIUM_ACCEPT_LANG:-zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7}"
+CHROMIUM_LANG="${CHROMIUM_LANG:-en-US}"
+CHROMIUM_ACCEPT_LANG="${CHROMIUM_ACCEPT_LANG:-en-US,en;q=0.9}"
 
 browser_cmd=""
 for candidate in chromium chromium-browser google-chrome; do
