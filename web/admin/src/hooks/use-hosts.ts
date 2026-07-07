@@ -46,6 +46,18 @@ export interface ConnectionInfo {
   vnc_url?: string;
 }
 
+export interface VNCServiceStatus {
+  status: string;
+  running: boolean;
+  can_start: boolean;
+  can_restart: boolean;
+  auto_restart_limited: boolean;
+  display?: string;
+  websocket_port?: number;
+  last_error?: string;
+  checked_at?: string;
+}
+
 export interface CreateHostSSHCredentials {
   username: string;
   user_short_id?: string;
@@ -238,6 +250,30 @@ export function useRestartHostVNC() {
       }),
     onSuccess: (_data, hostId) => {
       qc.invalidateQueries({ queryKey: ["hosts", hostId] });
+      qc.invalidateQueries({ queryKey: ["hosts", hostId, "vnc-status"] });
+    },
+  });
+}
+
+export function useHostVNCStatus(hostId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["hosts", hostId, "vnc-status"],
+    queryFn: () => apiFetch<VNCServiceStatus>(`/hosts/${hostId}/vnc/status`),
+    enabled: !!hostId && enabled,
+    refetchInterval: enabled ? 5000 : false,
+  });
+}
+
+export function useStartHostVNC() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (hostId: string) =>
+      apiFetch<{ status: string }>(`/hosts/${hostId}/vnc/start`, {
+        method: "POST",
+      }),
+    onSuccess: (_data, hostId) => {
+      qc.invalidateQueries({ queryKey: ["hosts", hostId] });
+      qc.invalidateQueries({ queryKey: ["hosts", hostId, "vnc-status"] });
     },
   });
 }

@@ -374,7 +374,25 @@ curl -s -X POST http://YOUR_HOST:8080/v1/admin/users/{userID}/credentials/regene
 
 SSH 密码属于用户级 SSH 凭据，主机创建成功时会返回当前用户的 SSH 接入信息。丢失后请重新生成用户 SSH 凭据。
 
-### 重启 VNC 服务（不中断主机）
+### VNC 状态与控制（不中断主机）
+
+查看状态：
+
+```bash
+curl -s http://YOUR_HOST:8080/v1/admin/hosts/{hostID}/vnc/status \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+响应字段包括 `status`、`running`、`can_start`、`can_restart`、`auto_restart_limited`、`display` 和 `websocket_port`。
+
+启动 VNC：
+
+```bash
+curl -s -X POST http://YOUR_HOST:8080/v1/admin/hosts/{hostID}/vnc/start \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+重启 VNC：
 
 ```bash
 curl -s -X POST http://YOUR_HOST:8080/v1/admin/hosts/{hostID}/vnc/restart \
@@ -448,7 +466,23 @@ curl -s -X POST http://YOUR_HOST:8080/v1/user/hosts/{hostID}/rebuild \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### 重启自己的 VNC 服务
+### 自己主机的 VNC 状态与控制
+
+查看状态：
+
+```bash
+curl -s http://YOUR_HOST:8080/v1/user/hosts/{hostID}/vnc/status \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+启动 VNC：
+
+```bash
+curl -s -X POST http://YOUR_HOST:8080/v1/user/hosts/{hostID}/vnc/start \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+重启 VNC：
 
 ```bash
 curl -s -X POST http://YOUR_HOST:8080/v1/user/hosts/{hostID}/vnc/restart \

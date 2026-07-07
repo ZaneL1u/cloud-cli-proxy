@@ -5,7 +5,7 @@ milestone_name: 容器合并 · SQLite 迁移 · 配置统一
 status: Awaiting next milestone
 stopped_at: Phase 58 context gathered
 last_updated: "2026-06-02T00:00:00.000Z"
-last_activity: 2026-06-02 — Completed quick task 260602: 规则导入导出按钮
+last_activity: 2026-07-07 — Completed quick task 260707-qw2: VNC 状态展示、启动重启控制、容器内自动拉起与 Chromium 窗口适配
 progress:
   total_phases: 5
   completed_phases: 1
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 Phase: Milestone v4.2.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-06-02 — Completed quick task 260602: 规则导入导出按钮
+Last activity: 2026-07-07 — Completed quick task 260707-qw2: VNC 状态展示、启动重启控制、容器内自动拉起与 Chromium 窗口适配
 
 ## Accumulated Context
 
@@ -79,6 +79,7 @@ v3.6 关键技术决策（已落地，可作为后续里程碑参考）：
 | 260513-gii | 修复 UpsertHost SQL 占位符不匹配（移除孤立的 $13，POST /v1/admin/hosts 500） | 2026-05-13 | 04636fd | [260513-gii-upserthost-sql](./quick/260513-gii-upserthost-sql/) |
 | 260513-kru | 修复 worker netns 获取失败（增加重试 + 容器状态检查 + 延迟） | 2026-05-13 | f1c3a35 | [260513-kru-worker-netns](./quick/260513-kru-worker-netns/) |
 | 260602 | 规则导入导出按钮 | 2026-06-02 | pending | [260602-rules-import-export](./quick/260602-rules-import-export/) |
+| 260707-qw2 | VNC 状态展示、启动重启控制、容器内自动拉起与 Chromium 窗口适配 | 2026-07-07 | pending | [260707-qw2-vnc-chromium](./quick/260707-qw2-vnc-chromium/) |
 
 ### Roadmap Evolution
 

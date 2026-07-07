@@ -3,8 +3,11 @@ import {
   Check,
   Copy,
   Globe,
+  Loader2,
   Monitor,
   PanelTop,
+  Play,
+  RefreshCw,
   Shield,
   Terminal,
 } from "lucide-react";
@@ -13,8 +16,10 @@ import { toast } from "sonner";
 import { getToken } from "@/lib/auth";
 import {
   useMyHostDetail,
+  useMyHostVNCStatus,
   useRebuildHost,
   useRestartMyHostVNC,
+  useStartMyHostVNC,
 } from "@/hooks/use-portal-hosts";
 import {
   useMySSHKeys,
@@ -67,10 +72,42 @@ const statusConfig: Record<
   pending: { label: "等待中", variant: "outline" },
 };
 
+const vncStatusConfig: Record<
+  string,
+  { label: string; className: string; dot: string }
+> = {
+  running: {
+    label: "VNC 运行中",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    dot: "bg-emerald-500",
+  },
+  stopped: {
+    label: "VNC 已关闭",
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+    dot: "bg-amber-500",
+  },
+  host_stopped: {
+    label: "主机未运行",
+    className: "border-slate-200 bg-slate-50 text-slate-600",
+    dot: "bg-slate-400",
+  },
+  unavailable: {
+    label: "状态不可用",
+    className: "border-red-200 bg-red-50 text-red-700",
+    dot: "bg-red-500",
+  },
+  loading: {
+    label: "检测中",
+    className: "border-slate-200 bg-slate-50 text-slate-600",
+    dot: "bg-slate-400",
+  },
+};
+
 
 function PortalHostDetail() {
   const { hostId } = Route.useParams();
   const rebuildMutation = useRebuildHost();
+  const startVNCMutation = useStartMyHostVNC();
   const restartVNCMutation = useRestartMyHostVNC();
   const sshKeysQuery = useMySSHKeys();
   const createSSHKey = useMyCreateSSHKey();
@@ -85,6 +122,7 @@ function PortalHostDetail() {
       return status && isRebuilding(status) ? 3000 : false;
     },
   });
+  const vncStatusQuery = useMyHostVNCStatus(hostId, !!host);
 
   if (isLoading) {
     return (
@@ -110,10 +148,16 @@ function PortalHostDetail() {
     );
   }
 
-  const sc = statusConfig[host.status] ?? {
-    label: host.status,
+  const currentHost = host;
+  const sc = statusConfig[currentHost.status] ?? {
+    label: currentHost.status,
     variant: "outline" as const,
   };
+  const vncStatus = vncStatusQuery.data;
+  const vncSC = vncStatus
+    ? (vncStatusConfig[vncStatus.status] || vncStatusConfig.unavailable)
+    : vncStatusConfig.loading;
+  const isVNCBusy = startVNCMutation.isPending || restartVNCMutation.isPending;
 
   function handleRebuild() {
     rebuildMutation.mutate(hostId, {
@@ -126,7 +170,30 @@ function PortalHostDetail() {
     });
   }
 
-  const displayName = host.hostname || "未命名主机";
+  function openVNC() {
+    const token = getToken() || "";
+    const wsPath = encodeURIComponent(`v1/user/hosts/${currentHost.id}/vnc/`);
+    window.open(
+      `/v1/user/hosts/${currentHost.id}/vnc/vnc.html?autoconnect=true&resize=remote&path=${wsPath}&token=${token}`,
+      "_blank"
+    );
+  }
+
+  function handleStartVNC() {
+    startVNCMutation.mutate(currentHost.id, {
+      onSuccess: () => toast.success("VNC 服务已启动"),
+      onError: () => toast.error("启动 VNC 失败，请稍后重试"),
+    });
+  }
+
+  function handleRestartVNC() {
+    restartVNCMutation.mutate(currentHost.id, {
+      onSuccess: () => toast.success("VNC 服务已重启"),
+      onError: () => toast.error("重启 VNC 失败，请稍后重试"),
+    });
+  }
+
+  const displayName = currentHost.hostname || "未命名主机";
 
   return (
     <div className="space-y-6">
@@ -211,18 +278,10 @@ function PortalHostDetail() {
           </CardHeader>
           <CardContent className="space-y-4 pt-6">
             <Button
-              onClick={() => {
-                const token = getToken() || "";
-                const wsPath = encodeURIComponent(
-                  `v1/user/hosts/${host.id}/vnc/`
-                );
-                window.open(
-                  `/v1/user/hosts/${host.id}/vnc/vnc.html?autoconnect=true&resize=remote&path=${wsPath}&token=${token}`,
-                  "_blank"
-                );
-              }}
+              onClick={openVNC}
               className="h-auto w-full flex-col gap-2 py-5 sm:flex-row sm:justify-start"
               variant="secondary"
+              disabled={!vncStatus?.running}
             >
               <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-background shadow-sm ring-1 ring-border">
                 <PanelTop className="h-6 w-6 text-muted-foreground/80" />
@@ -230,19 +289,37 @@ function PortalHostDetail() {
               </div>
               <span className="text-sm font-medium">打开浏览器桌面（VNC）</span>
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={restartVNCMutation.isPending}
-              onClick={() =>
-                restartVNCMutation.mutate(host.id, {
-                  onSuccess: () => toast.success("VNC 服务已重启"),
-                  onError: () => toast.error("重启 VNC 失败，请稍后重试"),
-                })
-              }
-            >
-              {restartVNCMutation.isPending ? "重启中..." : "重启 VNC 服务"}
-            </Button>
+            <div className="flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${vncSC.className}`}>
+                  <span className={`h-2 w-2 rounded-full ${vncSC.dot}`} />
+                  {vncSC.label}
+                </span>
+                {vncStatus?.auto_restart_limited && (
+                  <span className="text-xs text-amber-700">自动拉起已暂停，手动启动会重置</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isVNCBusy || !vncStatus?.can_start}
+                  onClick={handleStartVNC}
+                >
+                  {startVNCMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />}
+                  启动 VNC
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isVNCBusy || !vncStatus?.can_restart}
+                  onClick={handleRestartVNC}
+                >
+                  {restartVNCMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  重启 VNC
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

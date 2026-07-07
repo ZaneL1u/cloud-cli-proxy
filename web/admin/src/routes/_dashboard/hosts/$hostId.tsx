@@ -37,6 +37,9 @@ import {
   useHostAction,
   useDeleteHost,
   usePatchHostResources,
+  useHostVNCStatus,
+  useRestartHostVNC,
+  useStartHostVNC,
 } from "@/hooks/use-hosts";
 import { useTaskPolling } from "@/hooks/use-tasks";
 import { useSSE } from "@/hooks/use-sse";
@@ -96,17 +99,28 @@ const statusConfig: Record<string, { label: string; color: string; dot: string; 
   failed: { label: "失败", color: "text-red-700", dot: "bg-red-500", bg: "bg-red-50", border: "border-red-200" },
 };
 
+const vncStatusConfig: Record<string, { label: string; color: string; dot: string; bg: string; border: string }> = {
+  running: { label: "VNC 运行中", color: "text-emerald-700", dot: "bg-emerald-500", bg: "bg-emerald-50", border: "border-emerald-200" },
+  stopped: { label: "VNC 已关闭", color: "text-amber-700", dot: "bg-amber-500", bg: "bg-amber-50", border: "border-amber-200" },
+  host_stopped: { label: "主机未运行", color: "text-slate-600", dot: "bg-slate-400", bg: "bg-slate-50", border: "border-slate-200" },
+  unavailable: { label: "状态不可用", color: "text-red-700", dot: "bg-red-500", bg: "bg-red-50", border: "border-red-200" },
+  loading: { label: "检测中", color: "text-slate-600", dot: "bg-slate-400", bg: "bg-slate-50", border: "border-slate-200" },
+};
+
 type ConnTab = "ssh" | "curl" | "vnc";
 
 function HostDetailPage() {
   const { hostId } = Route.useParams();
   const { data, isLoading } = useHostDetail(hostId);
+  const vncStatusQuery = useHostVNCStatus(hostId, !!data?.host);
   const { data: imageInfo } = useHostImageInfo(hostId, !!data?.host);
   const importConfigMutation = useImportHostConfig();
   const exportConfigMutation = useExportHostConfig();
   const actionMutation = useHostAction();
   const deleteMutation = useDeleteHost();
   const patchResourcesMutation = usePatchHostResources(hostId);
+  const startVNCMutation = useStartHostVNC();
+  const restartVNCMutation = useRestartHostVNC();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<ConnTab>("ssh");
@@ -173,6 +187,11 @@ function HostDetailPage() {
   const { host, user, bindings } = data;
   const sc = statusConfig[host.status] || { label: host.status, color: "text-slate-600", dot: "bg-slate-400", bg: "bg-slate-50", border: "border-slate-200" };
   const isRunning = host.status === "running";
+  const vncStatus = vncStatusQuery.data;
+  const vncSC = vncStatus
+    ? (vncStatusConfig[vncStatus.status] || vncStatusConfig.unavailable)
+    : vncStatusConfig.loading;
+  const isVNCBusy = startVNCMutation.isPending || restartVNCMutation.isPending;
   const displayName = host.hostname || user.username || host.id.slice(0, 8);
 
   const sshPort = data.connection_info?.ssh_port;
@@ -196,6 +215,20 @@ function HostDetailPage() {
         onError: () => toast.error("操作失败"),
       },
     );
+  }
+
+  function handleStartVNC() {
+    startVNCMutation.mutate(host.id, {
+      onSuccess: () => toast.success("VNC 服务已启动"),
+      onError: () => toast.error("启动 VNC 失败，请稍后重试"),
+    });
+  }
+
+  function handleRestartVNC() {
+    restartVNCMutation.mutate(host.id, {
+      onSuccess: () => toast.success("VNC 服务已重启"),
+      onError: () => toast.error("重启 VNC 失败，请稍后重试"),
+    });
   }
 
   function handleDelete(force: boolean) {
@@ -249,7 +282,7 @@ function HostDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           {/* 主操作 */}
           {isRunning ? (
-            <Button size="sm" className="h-9 gap-2 bg-primary text-primary-foreground hover:bg-primary/90" onClick={openVNC}>
+            <Button size="sm" className="h-9 gap-2 bg-primary text-primary-foreground hover:bg-primary/90" onClick={openVNC} disabled={vncStatus ? !vncStatus.running : false}>
               <Monitor className="h-4 w-4" /> VNC 桌面
             </Button>
           ) : null}
@@ -374,9 +407,54 @@ function HostDetailPage() {
             )}
 
             {activeTab === "vnc" && (
-              <Button size="sm" className="h-8 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90" onClick={openVNC}>
-                <ExternalLink className="h-3.5 w-3.5" /> 打开 VNC 桌面
-              </Button>
+              <div className="flex flex-col gap-3 border-t border-border/60 pt-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full border ${vncSC.border} ${vncSC.bg} px-2.5 py-1 text-xs font-semibold ${vncSC.color}`}>
+                      <span className={`h-2 w-2 rounded-full ${vncSC.dot}`} />
+                      {vncSC.label}
+                    </span>
+                    {vncStatus?.auto_restart_limited && (
+                      <span className="text-xs text-amber-700">自动拉起已暂停，手动启动会重置</span>
+                    )}
+                    {vncStatus?.display && vncStatus?.websocket_port ? (
+                      <span className="text-xs text-muted-foreground">
+                        {vncStatus.display} · {vncStatus.websocket_port}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="h-8 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+                      onClick={openVNC}
+                      disabled={!vncStatus?.running}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" /> 打开桌面
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5"
+                      onClick={handleStartVNC}
+                      disabled={isVNCBusy || !vncStatus?.can_start}
+                    >
+                      {startVNCMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+                      启动
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5"
+                      onClick={handleRestartVNC}
+                      disabled={isVNCBusy || !vncStatus?.can_restart}
+                    >
+                      {restartVNCMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      重启
+                    </Button>
+                  </div>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

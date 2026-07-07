@@ -372,7 +372,25 @@ curl -s -X POST http://YOUR_HOST:8080/v1/admin/users/{userID}/credentials/regene
 
 The SSH password is part of the user-level SSH credentials. Host creation returns the selected user's SSH connection details. Regenerate the user's SSH credentials if they were lost.
 
-### Restart VNC Service (without rebuilding host)
+### VNC Status and Control (without rebuilding host)
+
+Check status:
+
+```bash
+curl -s http://YOUR_HOST:8080/v1/admin/hosts/{hostID}/vnc/status \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+The response includes `status`, `running`, `can_start`, `can_restart`, `auto_restart_limited`, `display`, and `websocket_port`.
+
+Start VNC:
+
+```bash
+curl -s -X POST http://YOUR_HOST:8080/v1/admin/hosts/{hostID}/vnc/start \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Restart VNC:
 
 ```bash
 curl -s -X POST http://YOUR_HOST:8080/v1/admin/hosts/{hostID}/vnc/restart \
@@ -446,7 +464,23 @@ curl -s -X POST http://YOUR_HOST:8080/v1/user/hosts/{hostID}/rebuild \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Restart Own VNC Service
+### Own Host VNC Status and Control
+
+Check status:
+
+```bash
+curl -s http://YOUR_HOST:8080/v1/user/hosts/{hostID}/vnc/status \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Start VNC:
+
+```bash
+curl -s -X POST http://YOUR_HOST:8080/v1/user/hosts/{hostID}/vnc/start \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Restart VNC:
 
 ```bash
 curl -s -X POST http://YOUR_HOST:8080/v1/user/hosts/{hostID}/vnc/restart \

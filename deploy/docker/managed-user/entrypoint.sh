@@ -24,6 +24,11 @@ XVNC_LOG="${LOG_DIR}/xvnc.log"
 FLUXBOX_LOG="${LOG_DIR}/fluxbox.log"
 DESKTOP_LOG="${LOG_DIR}/desktop.log"
 CHROMIUM_LOG="${LOG_DIR}/chromium.log"
+VNC_WATCHDOG_LOG="${LOG_DIR}/watchdog.log"
+VNC_WATCH_STATE="${VNC_WATCH_STATE:-/run/cloud-cli-proxy-vnc-watch.state}"
+VNC_AUTOSTART_WINDOW_SECONDS=30
+VNC_AUTOSTART_MAX_ATTEMPTS=3
+VNC_WATCH_INTERVAL_SECONDS="${VNC_WATCH_INTERVAL_SECONDS:-5}"
 DESKTOP_DIR=/workspace/Desktop
 PCMANFM_PROFILE_DIR=/workspace/.config/pcmanfm/default
 DESKTOP_LANG="${DESKTOP_LANG:-en_US.UTF-8}"
@@ -485,6 +490,89 @@ start_desktop_stack_async() {
   echo "[entrypoint] desktop stack starting in background (pid=$!)"
 }
 
+write_vnc_watch_state() {
+  mkdir -p "$(dirname "${VNC_WATCH_STATE}")"
+  cat > "${VNC_WATCH_STATE}" <<STATE
+window_start=${window_start:-0}
+attempts=${attempts:-0}
+auto_restart_limited=${auto_restart_limited:-0}
+last_success=${last_success:-0}
+STATE
+}
+
+load_vnc_watch_state() {
+  window_start=0
+  attempts=0
+  auto_restart_limited=0
+  last_success=0
+  if [ -f "${VNC_WATCH_STATE}" ]; then
+    # shellcheck source=/dev/null
+    . "${VNC_WATCH_STATE}" 2>/dev/null || true
+  fi
+  window_start="${window_start:-0}"
+  attempts="${attempts:-0}"
+  auto_restart_limited="${auto_restart_limited:-0}"
+  last_success="${last_success:-0}"
+}
+
+vnc_status_running() {
+  /usr/local/bin/vnc-status --json 2>/dev/null | grep -q '"running":true'
+}
+
+start_vnc_watchdog_async() {
+  (
+    mkdir -p "${LOG_DIR}"
+    touch "${VNC_WATCHDOG_LOG}"
+    chown "${RUN_USER}:${RUN_USER}" "${VNC_WATCHDOG_LOG}" 2>/dev/null || true
+    echo "[vnc-watchdog] started (window=${VNC_AUTOSTART_WINDOW_SECONDS}s max_attempts=${VNC_AUTOSTART_MAX_ATTEMPTS})" >>"${VNC_WATCHDOG_LOG}"
+
+    while true; do
+      sleep "${VNC_WATCH_INTERVAL_SECONDS}"
+      now="$(date +%s)"
+
+      if vnc_status_running; then
+        load_vnc_watch_state
+        if [ "${auto_restart_limited}" != "1" ] && [ "${attempts}" -gt 0 ] && [ "${last_success}" -gt 0 ] && [ $((now - last_success)) -ge "${VNC_AUTOSTART_WINDOW_SECONDS}" ]; then
+          window_start=0
+          attempts=0
+          auto_restart_limited=0
+          write_vnc_watch_state
+          echo "[vnc-watchdog] stable for ${VNC_AUTOSTART_WINDOW_SECONDS}s; auto-start budget reset" >>"${VNC_WATCHDOG_LOG}"
+        fi
+        continue
+      fi
+
+      load_vnc_watch_state
+      if [ "${auto_restart_limited}" = "1" ]; then
+        continue
+      fi
+
+      if [ "${window_start}" -eq 0 ] || [ $((now - window_start)) -gt "${VNC_AUTOSTART_WINDOW_SECONDS}" ]; then
+        window_start="${now}"
+        attempts=0
+      fi
+
+      if [ "${attempts}" -ge "${VNC_AUTOSTART_MAX_ATTEMPTS}" ]; then
+        auto_restart_limited=1
+        write_vnc_watch_state
+        echo "[vnc-watchdog] auto-start limited after ${attempts} attempts in ${VNC_AUTOSTART_WINDOW_SECONDS}s" >>"${VNC_WATCHDOG_LOG}"
+        continue
+      fi
+
+      attempts=$((attempts + 1))
+      write_vnc_watch_state
+      echo "[vnc-watchdog] VNC down; auto-start attempt ${attempts}/${VNC_AUTOSTART_MAX_ATTEMPTS}" >>"${VNC_WATCHDOG_LOG}"
+
+      if VNC_AUTO_START=1 /usr/local/bin/restart-vnc start >>"${VNC_WATCHDOG_LOG}" 2>&1; then
+        load_vnc_watch_state
+        last_success="$(date +%s)"
+        write_vnc_watch_state
+      fi
+    done
+  ) &
+  echo "[entrypoint] VNC watchdog starting in background (pid=$!)"
+}
+
 # SSH setup
 mkdir -p /var/run/sshd
 if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
@@ -622,6 +710,7 @@ MODE="${MODE:-remote}"
 
 if [ "$MODE" != "local" ]; then
   start_desktop_stack_async
+  start_vnc_watchdog_async
 fi
 
 wait "$SSHD_PID"

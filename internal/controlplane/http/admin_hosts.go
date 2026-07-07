@@ -437,7 +437,7 @@ func (h *AdminHostsHandler) Delete() nethttp.Handler {
 	})
 }
 
-func (h *AdminHostsHandler) RestartVNC() nethttp.Handler {
+func (h *AdminHostsHandler) VNCStatus() nethttp.Handler {
 	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		hostID := r.PathValue("hostID")
 
@@ -447,7 +447,42 @@ func (h *AdminHostsHandler) RestartVNC() nethttp.Handler {
 				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
 				return
 			}
-			h.logger.Error("get host for vnc restart failed", "host_id", hostID, "error", err)
+			h.logger.Error("get host for vnc status failed", "host_id", hostID, "error", err)
+			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "get host failed"})
+			return
+		}
+
+		containerName := "cloudproxy-" + hostID
+		status, err := inspectContainerVNC(r.Context(), containerName, host.Status == "running")
+		if err != nil {
+			h.logger.Error("inspect vnc failed", "host_id", hostID, "container", containerName, "error", err)
+			writeJSON(w, nethttp.StatusBadGateway, map[string]string{"error": "inspect vnc failed"})
+			return
+		}
+
+		writeJSON(w, nethttp.StatusOK, status)
+	})
+}
+
+func (h *AdminHostsHandler) StartVNC() nethttp.Handler {
+	return h.vncControl("start")
+}
+
+func (h *AdminHostsHandler) RestartVNC() nethttp.Handler {
+	return h.vncControl("restart")
+}
+
+func (h *AdminHostsHandler) vncControl(action string) nethttp.Handler {
+	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		hostID := r.PathValue("hostID")
+
+		host, err := h.store.GetHost(r.Context(), hostID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeJSON(w, nethttp.StatusNotFound, map[string]string{"error": "host not found"})
+				return
+			}
+			h.logger.Error("get host for vnc control failed", "host_id", hostID, "action", action, "error", err)
 			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "get host failed"})
 			return
 		}
@@ -457,25 +492,35 @@ func (h *AdminHostsHandler) RestartVNC() nethttp.Handler {
 		}
 
 		containerName := "cloudproxy-" + hostID
-		if err := restartContainerVNC(containerName); err != nil {
-			h.logger.Error("restart vnc failed", "host_id", hostID, "container", containerName, "error", err)
-			writeJSON(w, nethttp.StatusBadGateway, map[string]string{"error": "restart vnc failed"})
+		if err := controlContainerVNC(r.Context(), containerName, action); err != nil {
+			h.logger.Error("vnc control failed", "host_id", hostID, "container", containerName, "action", action, "error", err)
+			writeJSON(w, nethttp.StatusBadGateway, map[string]string{"error": "vnc control failed"})
 			return
 		}
 
 		if h.events != nil {
+			eventType := "admin.host.vnc_restarted"
+			message := "管理员重启 VNC 服务"
+			if action == "start" {
+				eventType = "admin.host.vnc_started"
+				message = "管理员启动 VNC 服务"
+			}
 			if _, err := h.events.RecordEvent(r.Context(), repository.RecordEventParams{
 				HostID:   &hostID,
 				Level:    "info",
-				Type:     "admin.host.vnc_restarted",
-				Message:  "管理员重启 VNC 服务",
-				Metadata: map[string]any{"operator": "admin"},
+				Type:     eventType,
+				Message:  message,
+				Metadata: map[string]any{"operator": "admin", "action": action},
 			}); err != nil {
-				h.logger.Error("record event failed", "type", "admin.host.vnc_restarted", "error", err)
+				h.logger.Error("record event failed", "type", eventType, "error", err)
 			}
 		}
 
-		writeJSON(w, nethttp.StatusOK, map[string]any{"status": "restarted"})
+		status := "restarted"
+		if action == "start" {
+			status = "started"
+		}
+		writeJSON(w, nethttp.StatusOK, map[string]any{"status": status})
 	})
 }
 

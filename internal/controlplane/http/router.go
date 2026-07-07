@@ -26,25 +26,25 @@ type AgentHealthChecker interface {
 }
 
 type Dependencies struct {
-	Logger          *slog.Logger
-	Health          HealthChecker
-	AgentHealth     AgentHealthChecker
-	Users           UserLister
-	Hosts           HostLister
-	HostActions     HostActionQueuer
-	Tasks           TaskLister
-	TasksHandler    nethttp.Handler
-	BootstrapUsers  BootstrapUserLookup
-	BootstrapHosts  BootstrapHostLookup
-	BootstrapTasks  TaskGetter
-	BootstrapEvents EventLister
-	ScriptPath      string
-	Admin           *repository.AdminConfig
-	AuthStore       AuthUserStore
-	DashboardStats  DashboardStatsGetter
-	AdminUsers      AdminUserStore
-	AdminEgressIPs  AdminEgressIPStore
-	AdminBindings   AdminBindingStore
+	Logger              *slog.Logger
+	Health              HealthChecker
+	AgentHealth         AgentHealthChecker
+	Users               UserLister
+	Hosts               HostLister
+	HostActions         HostActionQueuer
+	Tasks               TaskLister
+	TasksHandler        nethttp.Handler
+	BootstrapUsers      BootstrapUserLookup
+	BootstrapHosts      BootstrapHostLookup
+	BootstrapTasks      TaskGetter
+	BootstrapEvents     EventLister
+	ScriptPath          string
+	Admin               *repository.AdminConfig
+	AuthStore           AuthUserStore
+	DashboardStats      DashboardStatsGetter
+	AdminUsers          AdminUserStore
+	AdminEgressIPs      AdminEgressIPStore
+	AdminBindings       AdminBindingStore
 	AdminBypassPresets  AdminBypassPresetStore
 	AdminBypassRules    AdminBypassRuleStore
 	AdminBypassBindings AdminBypassBindingStore
@@ -52,18 +52,18 @@ type Dependencies struct {
 	// Phase 46 Plan 02：snapshot / audit-log 写读分离。
 	AdminBypassSnapshots AdminBypassSnapshotStore
 	AdminBypassAuditLog  AdminBypassAuditLogStore
-	AdminHosts          AdminHostStore
-	AdminClaudeAccounts AdminClaudeAccountStore // Phase 33 D-17
-	AgentClient         HostActionRunner        // Phase 33 D-17 — interface 兼容 embedded + 远端两种模式
-	AdminEvents         AdminEventStore
-	EventRecorder   EventRecorder
-	EntryStore      EntryStore
-	EntryBaseURL    string
-	ImageLockPath   string
-	UserHosts       UserHostStore
-	SSHKeys         SSHKeyStore
-	ImageCache      ImageCacheManager
-	AdminUIHandler  nethttp.Handler
+	AdminHosts           AdminHostStore
+	AdminClaudeAccounts  AdminClaudeAccountStore // Phase 33 D-17
+	AgentClient          HostActionRunner        // Phase 33 D-17 — interface 兼容 embedded + 远端两种模式
+	AdminEvents          AdminEventStore
+	EventRecorder        EventRecorder
+	EntryStore           EntryStore
+	EntryBaseURL         string
+	ImageLockPath        string
+	UserHosts            UserHostStore
+	SSHKeys              SSHKeyStore
+	ImageCache           ImageCacheManager
+	AdminUIHandler       nethttp.Handler
 }
 
 type HealthChecker interface {
@@ -301,6 +301,8 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			mux.Handle("POST /v1/admin/hosts/{hostID}/start", adminGuard(hostsHandler.Start()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/stop", adminGuard(hostsHandler.Stop()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/rebuild", adminGuard(hostsHandler.Rebuild()))
+			mux.Handle("GET /v1/admin/hosts/{hostID}/vnc/status", adminGuard(hostsHandler.VNCStatus()))
+			mux.Handle("POST /v1/admin/hosts/{hostID}/vnc/start", adminGuard(hostsHandler.StartVNC()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/vnc/restart", adminGuard(hostsHandler.RestartVNC()))
 			mux.Handle("POST /v1/admin/hosts/{hostID}/change-root-password", adminGuard(hostsHandler.ChangeRootPassword()))
 			mux.Handle("GET /v1/admin/hosts/{hostID}/claude/settings", adminGuard(hostsHandler.GetClaudeSettings()))
@@ -327,11 +329,11 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			mux.Handle("DELETE /v1/admin/claude-accounts/{accountID}", adminGuard(claudeHandler.Delete()))
 		}
 
-			if deps.ImageCache != nil {
-				imageHandler := NewAdminImageHandler(deps.Logger, deps.ImageCache)
-				mux.Handle("GET /v1/admin/image/status", adminGuard(imageHandler.Status()))
-				mux.Handle("POST /v1/admin/image/refresh", adminGuard(imageHandler.Refresh()))
-			}
+		if deps.ImageCache != nil {
+			imageHandler := NewAdminImageHandler(deps.Logger, deps.ImageCache)
+			mux.Handle("GET /v1/admin/image/status", adminGuard(imageHandler.Status()))
+			mux.Handle("POST /v1/admin/image/refresh", adminGuard(imageHandler.Refresh()))
+		}
 
 		if deps.AdminEvents != nil {
 			eventsHandler := NewAdminEventsHandler(deps.Logger, deps.AdminEvents)
@@ -368,6 +370,8 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 			mux.Handle("GET /v1/user/hosts", userGuard(userHostsHandler.List()))
 			mux.Handle("GET /v1/user/hosts/{hostID}", userGuard(userHostsHandler.Get()))
 			mux.Handle("POST /v1/user/hosts/{hostID}/rebuild", userGuard(userHostsHandler.Rebuild()))
+			mux.Handle("GET /v1/user/hosts/{hostID}/vnc/status", userGuard(userHostsHandler.VNCStatus()))
+			mux.Handle("POST /v1/user/hosts/{hostID}/vnc/start", userGuard(userHostsHandler.StartVNC()))
 			mux.Handle("POST /v1/user/hosts/{hostID}/vnc/restart", userGuard(userHostsHandler.RestartVNC()))
 
 			userVNCProxy := NewUserVNCProxyHandler(deps.Logger, deps.UserHosts)

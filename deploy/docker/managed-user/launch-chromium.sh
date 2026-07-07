@@ -9,6 +9,7 @@ export LC_ALL="${DESKTOP_LC_ALL:-${LC_ALL:-$LANG}}"
 
 CHROMIUM_LANG="${CHROMIUM_LANG:-en-US}"
 CHROMIUM_ACCEPT_LANG="${CHROMIUM_ACCEPT_LANG:-en-US,en;q=0.9}"
+CHROMIUM_WINDOW_SIZE="${CHROMIUM_WINDOW_SIZE:-1880,1000}"
 
 browser_cmd=""
 for candidate in chromium chromium-browser google-chrome; do
@@ -40,5 +41,5 @@ exec "${browser_cmd}" \
   --enforce-webrtc-ip-permission-check \
   --force-webrtc-ip-handling-policy=disable_non_proxied_udp \
   --window-position=0,0 \
-  --window-size=1920,1080 \
+  --window-size="${CHROMIUM_WINDOW_SIZE}" \
   "https://www.google.com"

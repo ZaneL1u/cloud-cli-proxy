@@ -221,13 +221,14 @@ COPY deploy/docker/managed-user/profile.d-cloud-claude.sh /etc/profile.d/cloud-c
 COPY deploy/docker/managed-user/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY deploy/docker/managed-user/launch-chromium.sh /usr/local/bin/launch-chromium.sh
 COPY deploy/docker/managed-user/restart-vnc.sh /usr/local/bin/restart-vnc
+COPY deploy/docker/managed-user/vnc-status.sh /usr/local/bin/vnc-status
 
 # v4.0: 容器内 nft default-deny 规则集（D-V4-3 / NET-01 / NET-02）
 COPY deploy/docker/managed-user/default-deny.nft /etc/cloud-claude/default-deny.nft
 RUN chmod 0644 /etc/cloud-claude/default-deny.nft
 
 RUN chmod 0644 /etc/tmux.conf /etc/profile.d/cloud-claude.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/launch-chromium.sh /usr/local/bin/restart-vnc
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/launch-chromium.sh /usr/local/bin/restart-vnc /usr/local/bin/vnc-status
 
 WORKDIR /workspace
 
