@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.15 - 2026-07-07
+## What's Changed
+
+### Backend (Go / API)
+- feat(vnc): add status controls and auto recovery (64f539f)
+
+### Frontend (Admin Web)
+- feat(vnc): add status controls and auto recovery (64f539f)
+
+### Runtime & Deployment
+- feat(vnc): add status controls and auto recovery (64f539f)
+
+### Docs
+- feat(vnc): add status controls and auto recovery (64f539f)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.14...v4.2.15
+
+
 ## v4.2.14 - 2026-07-06
 ## What's Changed
 
