@@ -429,12 +429,12 @@ runtime_configuration:
     - desktop.allow_resize
     - desktop.resolution
 encoding:
-  max_frame_rate: 60
+  max_frame_rate: 30
   rect_encoding_mode:
     min_quality: 7
-    max_quality: 10
+    max_quality: 8
     consider_lossless_quality: 10
-    rectangle_compress_threads: 4
+    rectangle_compress_threads: 2
 YAML
   chown -R "${RUN_USER}:${RUN_USER}" /workspace/.vnc
   touch "${XVNC_LOG}" "${FLUXBOX_LOG}" "${DESKTOP_LOG}" "${CHROMIUM_LOG}"

@@ -10,6 +10,7 @@ export LC_ALL="${DESKTOP_LC_ALL:-${LC_ALL:-$LANG}}"
 CHROMIUM_LANG="${CHROMIUM_LANG:-en-US}"
 CHROMIUM_ACCEPT_LANG="${CHROMIUM_ACCEPT_LANG:-en-US,en;q=0.9}"
 CHROMIUM_WINDOW_SIZE="${CHROMIUM_WINDOW_SIZE:-1880,1000}"
+CHROMIUM_RENDERER_PROCESS_LIMIT="${CHROMIUM_RENDERER_PROCESS_LIMIT:-6}"
 
 browser_cmd=""
 for candidate in chromium chromium-browser google-chrome; do
@@ -35,6 +36,7 @@ exec "${browser_cmd}" \
   --lang="${CHROMIUM_LANG}" \
   --accept-lang="${CHROMIUM_ACCEPT_LANG}" \
   --start-maximized \
+  --renderer-process-limit="${CHROMIUM_RENDERER_PROCESS_LIMIT}" \
   --no-first-run \
   --disable-gpu \
   --disable-features=WebRtcHideLocalIpsWithMdns \

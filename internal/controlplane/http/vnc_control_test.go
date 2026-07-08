@@ -223,6 +223,23 @@ func TestVNCScriptsDeclareWatcherLimitAndSafeChromiumWindow(t *testing.T) {
 	if !strings.Contains(restartScript, `if [ "${VNC_AUTO_START:-0}" != "1" ]`) {
 		t.Fatal("restart-vnc must preserve the retry budget for watchdog auto-starts")
 	}
+	for _, script := range []struct {
+		name string
+		body string
+	}{
+		{name: "entrypoint", body: entrypoint},
+		{name: "restart-vnc", body: restartScript},
+	} {
+		if !strings.Contains(script.body, "max_frame_rate: 30") {
+			t.Fatalf("%s must lower KasmVNC max_frame_rate to 30", script.name)
+		}
+		if !strings.Contains(script.body, "max_quality: 8") {
+			t.Fatalf("%s must lower KasmVNC max_quality to 8", script.name)
+		}
+		if !strings.Contains(script.body, "rectangle_compress_threads: 2") {
+			t.Fatalf("%s must lower KasmVNC rectangle_compress_threads to 2", script.name)
+		}
+	}
 
 	chromium := readRepoFile(t, "deploy/docker/managed-user/launch-chromium.sh")
 	if strings.Contains(chromium, "--window-size=1920,1080") {
@@ -233,6 +250,12 @@ func TestVNCScriptsDeclareWatcherLimitAndSafeChromiumWindow(t *testing.T) {
 	}
 	if !strings.Contains(chromium, `--window-size="${CHROMIUM_WINDOW_SIZE}"`) {
 		t.Fatal("Chromium launch must use CHROMIUM_WINDOW_SIZE")
+	}
+	if !strings.Contains(chromium, `CHROMIUM_RENDERER_PROCESS_LIMIT="${CHROMIUM_RENDERER_PROCESS_LIMIT:-6}"`) {
+		t.Fatal("Chromium renderer process limit must default to 6 and remain env-overridable")
+	}
+	if !strings.Contains(chromium, `--renderer-process-limit="${CHROMIUM_RENDERER_PROCESS_LIMIT}"`) {
+		t.Fatal("Chromium launch must use CHROMIUM_RENDERER_PROCESS_LIMIT")
 	}
 }
 
