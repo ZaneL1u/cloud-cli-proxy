@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.16 - 2026-07-08
+## What's Changed
+
+### Backend (Go / API)
+- fix(vnc): reduce desktop resource pressure (a753053)
+
+### Runtime & Deployment
+- fix(vnc): reduce desktop resource pressure (a753053)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.15...v4.2.16
+
+
 ## v4.2.15 - 2026-07-07
 ## What's Changed
 
