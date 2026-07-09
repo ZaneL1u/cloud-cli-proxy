@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.18 - 2026-07-09
+## What's Changed
+
+### Backend (Go / API)
+- fix(sqlite): scan json text columns safely (25ece82)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.17...v4.2.18
+
+
 ## v4.2.17 - 2026-07-09
 ## What's Changed
 
