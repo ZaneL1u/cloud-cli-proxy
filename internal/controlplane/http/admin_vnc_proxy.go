@@ -3,15 +3,12 @@ package http
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
-	"net"
 	nethttp "net/http"
 	"net/http/httputil"
 	"net/url"
 	"os/exec"
 	"strings"
-	"time"
 )
 
 type AdminVNCProxyHandler struct {
@@ -48,11 +45,10 @@ func (h *AdminVNCProxyHandler) ServeHTTP(w nethttp.ResponseWriter, r *nethttp.Re
 		return
 	}
 
-	if isWebSocketUpgrade(r) {
-		h.proxyWebSocket(w, r, containerIP)
-		return
-	}
-
+	// WebSocket(RFB)与普通 HTTP 统一交给标准库 ReverseProxy。
+	// ReverseProxy 自 Go 1.12 起原生支持 Connection: Upgrade 透传，会完整、正确地
+	// 转发 Sec-WebSocket-* 握手头；早前手写的 proxyWebSocket 逐字段写裸连接且不校验
+	// 写入错误，会在中途丢失 Sec-WebSocket-Key，导致 KasmVNC 无法升级、随机 1006，已移除。
 	target, _ := url.Parse(fmt.Sprintf("http://%s:6080", containerIP))
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.Director = func(req *nethttp.Request) {
@@ -73,65 +69,6 @@ func (h *AdminVNCProxyHandler) ServeHTTP(w nethttp.ResponseWriter, r *nethttp.Re
 	}
 
 	proxy.ServeHTTP(w, r)
-}
-
-func (h *AdminVNCProxyHandler) proxyWebSocket(w nethttp.ResponseWriter, r *nethttp.Request, containerIP string) {
-	targetAddr := fmt.Sprintf("%s:6080", containerIP)
-
-	targetConn, err := net.DialTimeout("tcp", targetAddr, 5*time.Second)
-	if err != nil {
-		h.logger.Error("vnc websocket dial failed", "addr", targetAddr, "error", err)
-		nethttp.Error(w, "cannot connect to VNC", nethttp.StatusBadGateway)
-		return
-	}
-	defer targetConn.Close()
-
-	hijacker, ok := w.(nethttp.Hijacker)
-	if !ok {
-		nethttp.Error(w, "websocket hijack not supported", nethttp.StatusInternalServerError)
-		return
-	}
-
-	clientConn, clientBuf, err := hijacker.Hijack()
-	if err != nil {
-		nethttp.Error(w, "websocket hijack failed", nethttp.StatusInternalServerError)
-		return
-	}
-	defer clientConn.Close()
-
-	// 重写路径：去掉 /v1/admin/hosts/{id}/vnc 前缀
-	path := r.URL.Path
-	if idx := strings.Index(path, "/vnc/"); idx != -1 {
-		path = "/" + path[idx+5:]
-	}
-	if r.URL.RawQuery != "" {
-		path += "?" + r.URL.RawQuery
-	}
-
-	// 重写 Host 头指向容器
-	r.Header.Set("Host", targetAddr)
-	r.Host = targetAddr
-
-	reqLine := fmt.Sprintf("%s %s %s\r\n", r.Method, path, r.Proto)
-	targetConn.Write([]byte(reqLine))
-	r.Header.Write(targetConn)
-	targetConn.Write([]byte("\r\n"))
-
-	// 如果客户端 buffer 里有未读数据，先写过去
-	if clientBuf.Reader.Buffered() > 0 {
-		buffered := make([]byte, clientBuf.Reader.Buffered())
-		clientBuf.Read(buffered)
-		targetConn.Write(buffered)
-	}
-
-	done := make(chan struct{}, 2)
-	go func() { io.Copy(targetConn, clientConn); done <- struct{}{} }()
-	go func() { io.Copy(clientConn, targetConn); done <- struct{}{} }()
-	<-done
-}
-
-func isWebSocketUpgrade(r *nethttp.Request) bool {
-	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
 }
 
 func getContainerIP(ctx context.Context, containerName string) (string, error) {
