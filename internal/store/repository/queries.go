@@ -129,7 +129,7 @@ func (r *Repository) ListHostsByUserID(ctx context.Context, userID string) ([]Ho
 	hosts := make([]Host, 0)
 	for rows.Next() {
 		var item Host
-		var rawMounts json.RawMessage
+		var rawMounts jsonText
 		if err := rows.Scan(
 			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.TemplateImageRef,
 			&item.HomeVolumeName, &item.SlotKey, &item.Timezone, &item.Hostname,
@@ -140,7 +140,7 @@ func (r *Repository) ListHostsByUserID(ctx context.Context, userID string) ([]Ho
 			return nil, fmt.Errorf("scan host: %w", err)
 		}
 		if len(rawMounts) > 0 {
-			_ = json.Unmarshal(rawMounts, &item.HostMounts)
+			_ = json.Unmarshal([]byte(rawMounts), &item.HostMounts)
 		}
 		hosts = append(hosts, item)
 	}
@@ -209,7 +209,7 @@ func (r *Repository) ListHosts(ctx context.Context) ([]Host, error) {
 	hosts := make([]Host, 0)
 	for rows.Next() {
 		var item Host
-		var rawMounts json.RawMessage
+		var rawMounts jsonText
 		if err := rows.Scan(
 			&item.ID,
 			&item.UserID,
@@ -230,7 +230,7 @@ func (r *Repository) ListHosts(ctx context.Context) ([]Host, error) {
 			return nil, fmt.Errorf("scan host: %w", err)
 		}
 		if len(rawMounts) > 0 {
-			_ = json.Unmarshal(rawMounts, &item.HostMounts)
+			_ = json.Unmarshal([]byte(rawMounts), &item.HostMounts)
 		}
 		hosts = append(hosts, item)
 	}
@@ -263,7 +263,7 @@ func (r *Repository) GetBootstrapUserByUsername(ctx context.Context, username st
 
 func (r *Repository) GetPrimaryHostByUserID(ctx context.Context, userID string) (Host, error) {
 	var item Host
-	var rawMounts json.RawMessage
+	var rawMounts jsonText
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT id, user_id, status, COALESCE(short_id, ''), template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, pids_limit, host_mounts, created_at, updated_at
 		FROM hosts
@@ -289,7 +289,7 @@ func (r *Repository) GetPrimaryHostByUserID(ctx context.Context, userID string) 
 		return Host{}, fmt.Errorf("get primary host by user: %w", err)
 	}
 	if len(rawMounts) > 0 {
-		_ = json.Unmarshal(rawMounts, &item.HostMounts)
+		_ = json.Unmarshal([]byte(rawMounts), &item.HostMounts)
 	}
 
 	return item, nil
@@ -365,7 +365,7 @@ func (r *Repository) UpsertHost(ctx context.Context, params UpsertHostParams) (H
 		return Host{}, fmt.Errorf("marshal host mounts: %w", err)
 	}
 	var item Host
-	var rawMounts json.RawMessage
+	var rawMounts jsonText
 	if err := r.db.QueryRowContext(ctx, `
 		INSERT INTO hosts (id, user_id, status, short_id, template_image_ref, home_volume_name, slot_key, timezone, hostname, memory_limit_mb, cpu_limit, pids_limit, host_mounts)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -418,7 +418,7 @@ func (r *Repository) UpsertHost(ctx context.Context, params UpsertHostParams) (H
 		return Host{}, fmt.Errorf("upsert host: %w", err)
 	}
 	if len(rawMounts) > 0 {
-		_ = json.Unmarshal(rawMounts, &item.HostMounts)
+		_ = json.Unmarshal([]byte(rawMounts), &item.HostMounts)
 	}
 
 	return item, nil
@@ -467,12 +467,14 @@ func (r *Repository) ListEgressIPs(ctx context.Context) ([]EgressIP, error) {
 	items := make([]EgressIP, 0)
 	for rows.Next() {
 		var item EgressIP
+		var proxyConfig jsonText
 		if err := rows.Scan(
 			&item.ID, &item.Label, &item.IPAddress, &item.DetectedIPAddress, &item.Provider, &item.Status,
-			&item.ProxyConfig, &item.CreatedAt, &item.UpdatedAt,
+			&proxyConfig, &item.CreatedAt, &item.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan egress ip: %w", err)
 		}
+		item.ProxyConfig = proxyConfig.RawMessage()
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -483,6 +485,7 @@ func (r *Repository) ListEgressIPs(ctx context.Context) ([]EgressIP, error) {
 
 func (r *Repository) CreateEgressIP(ctx context.Context, params CreateEgressIPParams) (EgressIP, error) {
 	var item EgressIP
+	var proxyConfig jsonText
 	if err := r.db.QueryRowContext(ctx, `
 		INSERT INTO egress_ips (id, label, ip_address, provider, status, proxy_config)
 		VALUES (?, ?, ?, ?, 'available', ?)
@@ -493,10 +496,11 @@ func (r *Repository) CreateEgressIP(ctx context.Context, params CreateEgressIPPa
 		params.ProxyConfig,
 	).Scan(
 		&item.ID, &item.Label, &item.IPAddress, &item.DetectedIPAddress, &item.Provider, &item.Status,
-		&item.ProxyConfig, &item.CreatedAt, &item.UpdatedAt,
+		&proxyConfig, &item.CreatedAt, &item.UpdatedAt,
 	); err != nil {
 		return EgressIP{}, fmt.Errorf("create egress ip: %w", err)
 	}
+	item.ProxyConfig = proxyConfig.RawMessage()
 	return item, nil
 }
 
@@ -522,6 +526,7 @@ func (r *Repository) UpdateEgressIPDetectedAddress(ctx context.Context, egressIP
 
 func (r *Repository) UpdateEgressIP(ctx context.Context, egressIPID string, params UpdateEgressIPParams) (EgressIP, error) {
 	var item EgressIP
+	var proxyConfig jsonText
 	if err := r.db.QueryRowContext(ctx, `
 		UPDATE egress_ips SET
 			label = ?, ip_address = ?, provider = ?, status = ?,
@@ -536,10 +541,11 @@ func (r *Repository) UpdateEgressIP(ctx context.Context, egressIPID string, para
 		egressIPID,
 	).Scan(
 		&item.ID, &item.Label, &item.IPAddress, &item.DetectedIPAddress, &item.Provider, &item.Status,
-		&item.ProxyConfig, &item.CreatedAt, &item.UpdatedAt,
+		&proxyConfig, &item.CreatedAt, &item.UpdatedAt,
 	); err != nil {
 		return EgressIP{}, fmt.Errorf("update egress ip: %w", err)
 	}
+	item.ProxyConfig = proxyConfig.RawMessage()
 	return item, nil
 }
 
@@ -630,13 +636,15 @@ func (r *Repository) GetHostDetail(ctx context.Context, hostID string) (HostDeta
 	bindings := make([]BindingWithIP, 0)
 	for rows.Next() {
 		var b BindingWithIP
+		var proxyConfig jsonText
 		if err := rows.Scan(
 			&b.BindingID,
 			&b.EgressIP.ID, &b.EgressIP.Label, &b.EgressIP.IPAddress, &b.EgressIP.DetectedIPAddress, &b.EgressIP.Provider, &b.EgressIP.Status,
-			&b.EgressIP.ProxyConfig, &b.EgressIP.CreatedAt, &b.EgressIP.UpdatedAt, &b.CreatedAt,
+			&proxyConfig, &b.EgressIP.CreatedAt, &b.EgressIP.UpdatedAt, &b.CreatedAt,
 		); err != nil {
 			return HostDetail{}, fmt.Errorf("scan binding with ip: %w", err)
 		}
+		b.EgressIP.ProxyConfig = proxyConfig.RawMessage()
 		bindings = append(bindings, b)
 	}
 	if err := rows.Err(); err != nil {
@@ -670,7 +678,7 @@ func (r *Repository) ListHostsWithUsername(ctx context.Context) ([]HostWithUsern
 	items := make([]HostWithUsername, 0)
 	for rows.Next() {
 		var item HostWithUsername
-		var rawMounts json.RawMessage
+		var rawMounts jsonText
 		if err := rows.Scan(
 			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.TemplateImageRef,
 			&item.HomeVolumeName, &item.SlotKey, &item.Timezone, &item.Hostname,
@@ -683,7 +691,7 @@ func (r *Repository) ListHostsWithUsername(ctx context.Context) ([]HostWithUsern
 			return nil, fmt.Errorf("scan host with username: %w", err)
 		}
 		if len(rawMounts) > 0 {
-			_ = json.Unmarshal(rawMounts, &item.HostMounts)
+			_ = json.Unmarshal([]byte(rawMounts), &item.HostMounts)
 		}
 		items = append(items, item)
 	}
@@ -695,6 +703,7 @@ func (r *Repository) ListHostsWithUsername(ctx context.Context) ([]HostWithUsern
 
 func (r *Repository) GetEgressIP(ctx context.Context, egressIPID string) (EgressIP, error) {
 	var item EgressIP
+	var proxyConfig jsonText
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT id, label, ip_address, detected_ip_address, provider, status,
 			proxy_config, created_at, updated_at
@@ -707,18 +716,20 @@ func (r *Repository) GetEgressIP(ctx context.Context, egressIPID string) (Egress
 		&item.DetectedIPAddress,
 		&item.Provider,
 		&item.Status,
-		&item.ProxyConfig,
+		&proxyConfig,
 		&item.CreatedAt,
 		&item.UpdatedAt,
 	); err != nil {
 		return EgressIP{}, fmt.Errorf("get egress ip: %w", err)
 	}
+	item.ProxyConfig = proxyConfig.RawMessage()
 
 	return item, nil
 }
 
 func (r *Repository) GetEgressIPByHost(ctx context.Context, hostID string) (EgressIP, error) {
 	var item EgressIP
+	var proxyConfig jsonText
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT e.id, e.label, e.ip_address, e.detected_ip_address, e.provider, e.status,
 			e.proxy_config, e.created_at, e.updated_at
@@ -734,12 +745,13 @@ func (r *Repository) GetEgressIPByHost(ctx context.Context, hostID string) (Egre
 		&item.DetectedIPAddress,
 		&item.Provider,
 		&item.Status,
-		&item.ProxyConfig,
+		&proxyConfig,
 		&item.CreatedAt,
 		&item.UpdatedAt,
 	); err != nil {
 		return EgressIP{}, fmt.Errorf("get egress ip by host: %w", err)
 	}
+	item.ProxyConfig = proxyConfig.RawMessage()
 
 	return item, nil
 }
@@ -753,7 +765,7 @@ const getHostSQL = `
 
 func (r *Repository) GetHost(ctx context.Context, hostID string) (Host, error) {
 	var item Host
-	var rawMounts json.RawMessage
+	var rawMounts jsonText
 	if err := r.db.QueryRowContext(ctx, getHostSQL, hostID).Scan(
 		&item.ID,
 		&item.UserID,
@@ -774,7 +786,7 @@ func (r *Repository) GetHost(ctx context.Context, hostID string) (Host, error) {
 		return Host{}, fmt.Errorf("get host: %w", err)
 	}
 	if len(rawMounts) > 0 {
-		_ = json.Unmarshal(rawMounts, &item.HostMounts)
+		_ = json.Unmarshal([]byte(rawMounts), &item.HostMounts)
 	}
 
 	return item, nil
@@ -999,7 +1011,7 @@ func (r *Repository) ListRunningHostsByUserID(ctx context.Context, userID string
 	hosts := make([]Host, 0)
 	for rows.Next() {
 		var item Host
-		var rawMounts json.RawMessage
+		var rawMounts jsonText
 		if err := rows.Scan(
 			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.TemplateImageRef,
 			&item.HomeVolumeName, &item.SlotKey, &item.Timezone, &item.Hostname,
@@ -1010,7 +1022,7 @@ func (r *Repository) ListRunningHostsByUserID(ctx context.Context, userID string
 			return nil, fmt.Errorf("scan running host: %w", err)
 		}
 		if len(rawMounts) > 0 {
-			_ = json.Unmarshal(rawMounts, &item.HostMounts)
+			_ = json.Unmarshal([]byte(rawMounts), &item.HostMounts)
 		}
 		hosts = append(hosts, item)
 	}
@@ -1046,7 +1058,7 @@ func (r *Repository) ListRunningHosts(ctx context.Context) ([]Host, error) {
 	hosts := make([]Host, 0)
 	for rows.Next() {
 		var item Host
-		var rawMounts json.RawMessage
+		var rawMounts jsonText
 		if err := rows.Scan(
 			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.TemplateImageRef,
 			&item.HomeVolumeName, &item.SlotKey, &item.Timezone, &item.Hostname,
@@ -1057,7 +1069,7 @@ func (r *Repository) ListRunningHosts(ctx context.Context) ([]Host, error) {
 			return nil, fmt.Errorf("scan running host: %w", err)
 		}
 		if len(rawMounts) > 0 {
-			_ = json.Unmarshal(rawMounts, &item.HostMounts)
+			_ = json.Unmarshal([]byte(rawMounts), &item.HostMounts)
 		}
 		hosts = append(hosts, item)
 	}
@@ -1077,7 +1089,7 @@ func (r *Repository) ListFailedHosts(ctx context.Context) ([]Host, error) {
 	hosts := make([]Host, 0)
 	for rows.Next() {
 		var item Host
-		var rawMounts json.RawMessage
+		var rawMounts jsonText
 		if err := rows.Scan(
 			&item.ID, &item.UserID, &item.Status, &item.ShortID, &item.TemplateImageRef,
 			&item.HomeVolumeName, &item.SlotKey, &item.Timezone, &item.Hostname,
@@ -1088,7 +1100,7 @@ func (r *Repository) ListFailedHosts(ctx context.Context) ([]Host, error) {
 			return nil, fmt.Errorf("scan failed host: %w", err)
 		}
 		if len(rawMounts) > 0 {
-			_ = json.Unmarshal(rawMounts, &item.HostMounts)
+			_ = json.Unmarshal([]byte(rawMounts), &item.HostMounts)
 		}
 		hosts = append(hosts, item)
 	}
@@ -1608,7 +1620,7 @@ const getHostWithClaudeAccountSQL = `
 // GetHostWithClaudeAccount D-23：单次 LEFT JOIN 返回 host + 可能 NULL 的 persistent_volume_name。
 func (r *Repository) GetHostWithClaudeAccount(ctx context.Context, hostID string) (HostWithClaudeAccount, error) {
 	var item HostWithClaudeAccount
-	var rawMounts json.RawMessage
+	var rawMounts jsonText
 	if err := r.db.QueryRowContext(ctx, getHostWithClaudeAccountSQL, hostID).Scan(
 		&item.ID, &item.UserID, &item.Status, &item.ShortID,
 		&item.TemplateImageRef, &item.HomeVolumeName,
@@ -1621,7 +1633,7 @@ func (r *Repository) GetHostWithClaudeAccount(ctx context.Context, hostID string
 		return HostWithClaudeAccount{}, fmt.Errorf("get host with claude_account: %w", err)
 	}
 	if len(rawMounts) > 0 {
-		_ = json.Unmarshal(rawMounts, &item.HostMounts)
+		_ = json.Unmarshal([]byte(rawMounts), &item.HostMounts)
 	}
 	return item, nil
 }

@@ -4,8 +4,8 @@ milestone: v4.2.0
 milestone_name: 容器合并 · SQLite 迁移 · 配置统一
 status: Awaiting next milestone
 stopped_at: Phase 58 context gathered
-last_updated: "2026-07-08T18:47:40+08:00"
-last_activity: 2026-07-08 — Completed quick task 260708-q1b: 降低 VNC 与 Chromium 默认资源占用
+last_updated: "2026-07-09T15:02:05+08:00"
+last_activity: 2026-07-09 — Completed quick task 260709-kqq: 修复 SQLite JSON TEXT 扫描失败
 progress:
   total_phases: 5
   completed_phases: 1
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 Phase: Milestone v4.2.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-07-08 — Completed quick task 260708-q1b: 降低 VNC 与 Chromium 默认资源占用
+Last activity: 2026-07-09 — Completed quick task 260709-kqq: 修复 SQLite JSON TEXT 扫描失败
 
 ## Accumulated Context
 
@@ -81,6 +81,7 @@ v3.6 关键技术决策（已落地，可作为后续里程碑参考）：
 | 260602 | 规则导入导出按钮 | 2026-06-02 | pending | [260602-rules-import-export](./quick/260602-rules-import-export/) |
 | 260707-qw2 | VNC 状态展示、启动重启控制、容器内自动拉起与 Chromium 窗口适配 | 2026-07-07 | pending | [260707-qw2-vnc-chromium](./quick/260707-qw2-vnc-chromium/) |
 | 260708-q1b | 降低 VNC 与 Chromium 默认资源占用 | 2026-07-08 | pending | [260708-q1b-vnc-chromium-vnc](./quick/260708-q1b-vnc-chromium-vnc/) |
+| 260709-kqq | 修复 SQLite JSON TEXT 扫描失败 | 2026-07-09 | pending | [260709-kqq-bypass-preset-rules-sqlite](./quick/260709-kqq-bypass-preset-rules-sqlite/) |
 
 ### Roadmap Evolution
 

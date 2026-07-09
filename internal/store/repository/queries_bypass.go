@@ -200,7 +200,7 @@ const listBypassAuditLogByTargetSQL = `
 // ---------------------------------------------------------------------------
 
 func scanBypassPreset(row scanner, out *BypassPreset) error {
-	var rawRules json.RawMessage
+	var rawRules jsonText
 	if err := row.Scan(
 		&out.ID, &out.Slug, &out.Name, &out.Description,
 		&out.IsSystem, &out.IsForceOn, &out.IsActive, &rawRules,
@@ -209,7 +209,7 @@ func scanBypassPreset(row scanner, out *BypassPreset) error {
 		return err
 	}
 	if len(rawRules) > 0 {
-		_ = json.Unmarshal(rawRules, &out.Rules)
+		_ = json.Unmarshal([]byte(rawRules), &out.Rules)
 	}
 	return nil
 }
@@ -229,11 +229,17 @@ func scanBypassBinding(row scanner, out *BypassBinding) error {
 }
 
 func scanBypassSnapshot(row scanner, out *BypassSnapshot) error {
-	return row.Scan(
+	var cidrs, domains jsonText
+	if err := row.Scan(
 		&out.ID, &out.HostID, &out.Version, &out.ConfigHash,
-		&out.WhitelistCIDRsJSON, &out.WhitelistDomainsJSON,
+		&cidrs, &domains,
 		&out.AppliedStatus, &out.Source, &out.CreatedBy, &out.CreatedAt,
-	)
+	); err != nil {
+		return err
+	}
+	out.WhitelistCIDRsJSON = cidrs.RawMessage()
+	out.WhitelistDomainsJSON = domains.RawMessage()
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -612,12 +618,15 @@ func (r *Repository) ListBypassAuditLogByTarget(ctx context.Context, targetKind,
 	out := make([]BypassAuditLog, 0)
 	for rows.Next() {
 		var it BypassAuditLog
+		var before, after jsonText
 		if err := rows.Scan(
 			&it.ID, &it.ActorID, &it.ActorIP, &it.Action, &it.TargetKind,
-			&it.TargetID, &it.Before, &it.After, &it.Note, &it.CreatedAt,
+			&it.TargetID, &before, &after, &it.Note, &it.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan bypass audit log: %w", err)
 		}
+		it.Before = before.RawMessage()
+		it.After = after.RawMessage()
 		out = append(out, it)
 	}
 	if err := rows.Err(); err != nil {

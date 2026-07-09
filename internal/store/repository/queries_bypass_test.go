@@ -1,9 +1,17 @@
 package repository
 
 import (
+	"context"
+	"database/sql"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/zanel1u/cloud-cli-proxy/internal/store/migrations"
+	"github.com/zanel1u/cloud-cli-proxy/internal/store/migrator"
+
+	_ "modernc.org/sqlite"
 )
 
 // expectedBypassMethod 列出 Repository 必须暴露的 Bypass* 方法签名。
@@ -18,26 +26,26 @@ type expectedBypassMethod struct {
 // 让 Phase 46 admin handler 可以按签名直接调用，签名漂移立即被发现。
 func TestBypassRepository_Signatures(t *testing.T) {
 	expected := []expectedBypassMethod{
-		{"ListBypassPresets", 2, 2},                // (r, ctx) -> ([]BypassPreset, error)
-		{"GetBypassPresetBySlug", 3, 2},            // (r, ctx, slug) -> (BypassPreset, error)
-		{"GetBypassPresetByID", 3, 2},              // (r, ctx, id)   -> (BypassPreset, error)
-		{"CreateBypassPreset", 3, 2},               // (r, ctx, params) -> (BypassPreset, error)
-		{"UpdateBypassPreset", 4, 2},               // (r, ctx, id, params) -> (BypassPreset, error)
-		{"DeleteBypassPreset", 3, 1},               // (r, ctx, id) -> error
-		{"ListBypassRules", 3, 2},                  // (r, ctx, *string) -> ([]BypassRule, error)
+		{"ListBypassPresets", 2, 2},     // (r, ctx) -> ([]BypassPreset, error)
+		{"GetBypassPresetBySlug", 3, 2}, // (r, ctx, slug) -> (BypassPreset, error)
+		{"GetBypassPresetByID", 3, 2},   // (r, ctx, id)   -> (BypassPreset, error)
+		{"CreateBypassPreset", 3, 2},    // (r, ctx, params) -> (BypassPreset, error)
+		{"UpdateBypassPreset", 4, 2},    // (r, ctx, id, params) -> (BypassPreset, error)
+		{"DeleteBypassPreset", 3, 1},    // (r, ctx, id) -> error
+		{"ListBypassRules", 3, 2},       // (r, ctx, *string) -> ([]BypassRule, error)
 		{"CreateBypassRule", 3, 2},
 		{"UpdateBypassRule", 4, 2},
 		{"DeleteBypassRule", 3, 1},
-		{"GetBypassRuleByID", 3, 2},                // Phase 46 Plan 01 Task 4 扩展（audit log before 字段）
+		{"GetBypassRuleByID", 3, 2}, // Phase 46 Plan 01 Task 4 扩展（audit log before 字段）
 		{"ListBypassBindingsByHost", 3, 2},
 		{"CreateBypassBinding", 3, 2},
 		{"DeleteBypassBinding", 3, 1},
-		{"ListBypassSnapshotsByHost", 4, 2},        // (r, ctx, hostID, limit) -> ([]BypassSnapshot, error)
+		{"ListBypassSnapshotsByHost", 4, 2}, // (r, ctx, hostID, limit) -> ([]BypassSnapshot, error)
 		{"CreateBypassSnapshot", 3, 2},
-		{"UpdateBypassSnapshotStatus", 4, 2},       // (r, ctx, id, status) -> (BypassSnapshot, error)
-		{"GetLatestAppliedBypassSnapshot", 3, 2},   // (r, ctx, hostID) -> (BypassSnapshot, error)
-		{"InsertBypassAuditLog", 3, 2},             // (r, ctx, params) -> (string, error)
-		{"ListBypassAuditLogByTarget", 4, 2},       // (r, ctx, kind, id) -> ([]BypassAuditLog, error)
+		{"UpdateBypassSnapshotStatus", 4, 2},     // (r, ctx, id, status) -> (BypassSnapshot, error)
+		{"GetLatestAppliedBypassSnapshot", 3, 2}, // (r, ctx, hostID) -> (BypassSnapshot, error)
+		{"InsertBypassAuditLog", 3, 2},           // (r, ctx, params) -> (string, error)
+		{"ListBypassAuditLogByTarget", 4, 2},     // (r, ctx, kind, id) -> ([]BypassAuditLog, error)
 	}
 	typ := reflect.TypeOf(&Repository{})
 	ctxIface := reflect.TypeOf((*interface{ Deadline() })(nil)) // 占位，下面真正用 String 比对
@@ -121,6 +129,117 @@ func TestBypassRepository_ErrSystemPresetImmutable(t *testing.T) {
 			t.Errorf("ErrSystemBypassPresetImmutable.Error() 应包含 %q, got: %s", want, msg)
 		}
 	}
+}
+
+func TestBypassRepository_ListPresetsScansSQLiteTextRules(t *testing.T) {
+	db := newRepositorySQLiteDB(t)
+	repo := New(db)
+
+	presets, err := repo.ListBypassPresets(context.Background())
+	if err != nil {
+		t.Fatalf("ListBypassPresets must scan SQLite TEXT rules JSON: %v", err)
+	}
+	if len(presets) < 2 {
+		t.Fatalf("ListBypassPresets returned %d presets, want seeded system presets", len(presets))
+	}
+
+	var loopback BypassPreset
+	for _, preset := range presets {
+		if preset.Slug == "loopback" {
+			loopback = preset
+			break
+		}
+	}
+	if loopback.ID == "" {
+		t.Fatal("seeded loopback preset not found")
+	}
+	if len(loopback.Rules) != 2 {
+		t.Fatalf("loopback rules length = %d, want 2", len(loopback.Rules))
+	}
+	if loopback.Rules[0].RuleType != "cidr" || loopback.Rules[0].Value != "127.0.0.0/8" {
+		t.Fatalf("unexpected first loopback rule: %#v", loopback.Rules[0])
+	}
+}
+
+func TestRepository_ScansSQLiteTextJSONForHostAndEgress(t *testing.T) {
+	db := newRepositorySQLiteDB(t)
+	repo := New(db)
+	ctx := context.Background()
+
+	user, err := repo.CreateUser(ctx, CreateUserParams{
+		Username:      "alice",
+		PasswordHash:  "hash",
+		EntryPassword: "entry-pass",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	pidsLimit := 1024
+	host, err := repo.UpsertHost(ctx, UpsertHostParams{
+		UserID:           user.ID,
+		Status:           "running",
+		ShortID:          "h1",
+		TemplateImageRef: "ghcr.io/example/managed-user:test",
+		HomeVolumeName:   "home-h1",
+		SlotKey:          "primary",
+		Timezone:         "Asia/Shanghai",
+		Hostname:         "h1",
+		PidsLimit:        &pidsLimit,
+		HostMounts: HostMounts{{
+			Source: "/workspace",
+			Target: "/workspace",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("UpsertHost: %v", err)
+	}
+
+	proxyConfig := json.RawMessage(`{"type":"socks5","server":"127.0.0.1","server_port":1080}`)
+	egress, err := repo.CreateEgressIP(ctx, CreateEgressIPParams{
+		Label:       "test-egress",
+		IPAddress:   "203.0.113.10",
+		Provider:    "manual",
+		ProxyConfig: proxyConfig,
+	})
+	if err != nil {
+		t.Fatalf("CreateEgressIP: %v", err)
+	}
+	if _, err := repo.BindEgressIPToHost(ctx, host.ID, egress.ID); err != nil {
+		t.Fatalf("BindEgressIPToHost: %v", err)
+	}
+
+	gotHost, err := repo.GetHost(ctx, host.ID)
+	if err != nil {
+		t.Fatalf("GetHost must scan SQLite TEXT host_mounts JSON: %v", err)
+	}
+	if len(gotHost.HostMounts) != 1 || gotHost.HostMounts[0].Target != "/workspace" {
+		t.Fatalf("unexpected host mounts: %#v", gotHost.HostMounts)
+	}
+
+	gotEgress, err := repo.GetEgressIPByHost(ctx, host.ID)
+	if err != nil {
+		t.Fatalf("GetEgressIPByHost must scan SQLite TEXT proxy_config JSON: %v", err)
+	}
+	if string(gotEgress.ProxyConfig) != string(proxyConfig) {
+		t.Fatalf("proxy_config = %s, want %s", gotEgress.ProxyConfig, proxyConfig)
+	}
+}
+
+func newRepositorySQLiteDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if err := migrator.RunMigrations(context.Background(), db, migrations.FS); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+
+	return db
 }
 
 // TestNullableUUIDArg_HandlesNilAndEmpty 验证 Phase 45 CR-01 修复：
