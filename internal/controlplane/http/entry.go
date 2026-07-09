@@ -98,7 +98,7 @@ if [ "$STATUS" != "ready" ]; then
 fi
 echo "Connecting to your cloud machine..."
 if command -v sshpass >/dev/null 2>&1; then
-  exec sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p "$SSH_PORT" "$SSH_USER@$SSH_HOST"
+  exec sshpass -p "$SSH_PASS" ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" < /dev/tty
 else
   ASKPASS=$(mktemp); trap "rm -f $ASKPASS" EXIT
   printf '#!/bin/sh\necho "%%s"\n' "$SSH_PASS" > "$ASKPASS"; chmod +x "$ASKPASS"
