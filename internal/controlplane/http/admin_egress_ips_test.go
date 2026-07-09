@@ -249,6 +249,49 @@ func TestAdminEgressIPsHandler(t *testing.T) {
 			store:      &stubEgressIPStore{},
 			wantStatus: 400,
 		},
+		{
+			name:   "Create 空 ip_address 成功 201",
+			method: "POST",
+			path:   "/v1/admin/egress-ips",
+			body: map[string]any{
+				"label":    "vless-10042",
+				"provider": "manual",
+				"proxy_config": map[string]any{
+					"type": "vless", "server": "proxy.example.com", "server_port": 443,
+					"uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+				},
+			},
+			store:      &stubEgressIPStore{createIP: sampleIP},
+			wantStatus: 201,
+			wantField:  "egress_ip",
+		},
+		{
+			name:   "Create label 重复返回 409 label already exists",
+			method: "POST",
+			path:   "/v1/admin/egress-ips",
+			body: map[string]any{
+				"label":    "dup-label",
+				"provider": "manual",
+				"proxy_config": map[string]any{
+					"type": "socks", "server": "proxy.example.com", "server_port": 1080,
+				},
+			},
+			store:      &stubEgressIPStore{createErr: fmt.Errorf("UNIQUE constraint failed: egress_ips.label")},
+			wantStatus: 409,
+		},
+		{
+			name:   "Update label 重复返回 409",
+			method: "PUT",
+			path:   "/v1/admin/egress-ips/ip1",
+			body: map[string]any{
+				"label": "dup-label",
+				"proxy_config": map[string]any{
+					"type": "socks", "server": "proxy.example.com", "server_port": 1080,
+				},
+			},
+			store:      &stubEgressIPStore{updateErr: fmt.Errorf("UNIQUE constraint failed: egress_ips.label")},
+			wantStatus: 409,
+		},
 	}
 
 	for _, tt := range tests {

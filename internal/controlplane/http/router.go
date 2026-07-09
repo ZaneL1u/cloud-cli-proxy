@@ -96,11 +96,6 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 	if tasksHandler == nil {
 		tasksHandler = NewTasksHandler(TasksHandlerDependencies{Logger: deps.Logger, Tasks: deps.Tasks})
 	}
-	hostActionsHandler := NewHostActionsHandler(HostActionHandlerDependencies{
-		Logger: deps.Logger,
-		Queue:  deps.HostActions,
-	})
-
 	mux.HandleFunc("GET /healthz", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
@@ -137,36 +132,6 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 		})
 	})
 
-	mux.HandleFunc("GET /v1/users", func(w nethttp.ResponseWriter, r *nethttp.Request) {
-		if deps.Users == nil {
-			writeJSON(w, nethttp.StatusServiceUnavailable, map[string]string{"error": "users repository unavailable"})
-			return
-		}
-
-		users, err := deps.Users.ListUsers(r.Context())
-		if err != nil {
-			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "list users failed"})
-			return
-		}
-
-		writeJSON(w, nethttp.StatusOK, map[string]any{"users": users})
-	})
-
-	mux.HandleFunc("GET /v1/hosts", func(w nethttp.ResponseWriter, r *nethttp.Request) {
-		if deps.Hosts == nil {
-			writeJSON(w, nethttp.StatusServiceUnavailable, map[string]string{"error": "hosts repository unavailable"})
-			return
-		}
-
-		hosts, err := deps.Hosts.ListHosts(r.Context())
-		if err != nil {
-			writeJSON(w, nethttp.StatusInternalServerError, map[string]string{"error": "list hosts failed"})
-			return
-		}
-
-		writeJSON(w, nethttp.StatusOK, map[string]any{"hosts": hosts})
-	})
-
 	bootstrapAuthHandler := NewBootstrapAuthHandler(BootstrapAuthDependencies{
 		Logger: deps.Logger,
 		Users:  deps.BootstrapUsers,
@@ -179,11 +144,6 @@ func NewRouter(deps Dependencies) nethttp.Handler {
 		ScriptPath: deps.ScriptPath,
 	})
 
-	mux.Handle("GET /v1/tasks", tasksHandler)
-	mux.Handle("POST /v1/hosts/{hostID}/create", hostActionsHandler.Create())
-	mux.Handle("POST /v1/hosts/{hostID}/start", hostActionsHandler.Start())
-	mux.Handle("POST /v1/hosts/{hostID}/stop", hostActionsHandler.Stop())
-	mux.Handle("POST /v1/hosts/{hostID}/rebuild", hostActionsHandler.Rebuild())
 	bootstrapStatusHandler := NewBootstrapStatusHandler(BootstrapStatusDependencies{
 		Logger: deps.Logger,
 		Tasks:  deps.BootstrapTasks,

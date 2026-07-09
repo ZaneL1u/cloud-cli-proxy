@@ -59,12 +59,8 @@ func (h *UserVNCProxyHandler) ServeHTTP(w nethttp.ResponseWriter, r *nethttp.Req
 		return
 	}
 
-	if isWebSocketUpgrade(r) {
-		wsProxy := &AdminVNCProxyHandler{logger: h.logger}
-		wsProxy.proxyWebSocket(w, r, containerIP)
-		return
-	}
-
+	// WebSocket(RFB)与普通 HTTP 统一交给标准库 ReverseProxy 处理，
+	// 由其原生的 Connection: Upgrade 透传完成握手（详见 admin_vnc_proxy.go 的说明）。
 	target, _ := url.Parse(fmt.Sprintf("http://%s:6080", containerIP))
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.Director = func(req *nethttp.Request) {
