@@ -195,11 +195,14 @@ assert_tmux_version() {
 # - remove_singbox_config：sing-box load 后 shred config 从 fs
 # - monitor_singbox_fail_closed：sing-box 死 → kill PID 1 → 容器死
 
-SING_BOX_CONFIG="/etc/sing-box/config.json"
+SING_BOX_CONFIG_SOURCE="${SING_BOX_CONFIG_SOURCE:-/etc/sing-box/config.json}"
+SING_BOX_CONFIG="${SING_BOX_CONFIG:-/run/sing-box/config.json}"
+SING_BOX_INTERFACE_SYNC="/usr/local/bin/cloud-cli-proxy-sync-singbox-interface"
 SING_BOX_USER="singbox"
 NFT_RULESET="/etc/cloud-claude/default-deny.nft"
 BYPASS_DIR="/etc/cloud-claude/bypass"
 TUN_READY_TIMEOUT_S=30
+NETWORK_SETTLE_TIMEOUT_S="${NETWORK_SETTLE_TIMEOUT_S:-8}"
 SING_BOX_PID=""
 SSHD_PID=""
 
@@ -213,9 +216,54 @@ prepare_bypass_rule_sets() {
   echo "[entrypoint] bypass rule_set files ready"
 }
 
+network_fingerprint() {
+  {
+    ip -4 route show default 2>/dev/null || true
+    ip -o -4 addr show scope global 2>/dev/null | awk '{print $2, $4}' || true
+  } | sort
+}
+
+wait_network_settled() {
+  echo "[entrypoint] waiting for container network to settle (timeout=${NETWORK_SETTLE_TIMEOUT_S}s)"
+  local deadline=$((SECONDS + NETWORK_SETTLE_TIMEOUT_S))
+  local previous="" current="" stable=0
+  while (( SECONDS < deadline )); do
+    current="$(network_fingerprint)"
+    if [ -n "$current" ] && [ "$current" = "$previous" ]; then
+      stable=$((stable + 1))
+      if [ "$stable" -ge 2 ]; then
+        echo "[entrypoint] network settled"
+        return 0
+      fi
+    else
+      stable=0
+      previous="$current"
+    fi
+    sleep 0.5
+  done
+  echo "[entrypoint] WARN: network settle timeout, continuing with current routes" >&2
+}
+
+prepare_singbox_runtime_config_or_die() {
+  if [ ! -f "$SING_BOX_CONFIG_SOURCE" ]; then
+    echo "[entrypoint] FATAL: sing-box config source 不存在: $SING_BOX_CONFIG_SOURCE" >&2
+    exit 1
+  fi
+  if [ ! -x "$SING_BOX_INTERFACE_SYNC" ]; then
+    echo "[entrypoint] FATAL: sing-box interface sync helper 不存在或不可执行: $SING_BOX_INTERFACE_SYNC" >&2
+    exit 1
+  fi
+
+  wait_network_settled
+  if ! "$SING_BOX_INTERFACE_SYNC" --source "$SING_BOX_CONFIG_SOURCE" --config "$SING_BOX_CONFIG"; then
+    echo "[entrypoint] FATAL: sing-box egress interface detection failed" >&2
+    exit 1
+  fi
+}
+
 start_singbox_or_die() {
   if [ ! -f "$SING_BOX_CONFIG" ]; then
-    echo "[entrypoint] FATAL: sing-box config 不存在: $SING_BOX_CONFIG" >&2
+    echo "[entrypoint] FATAL: sing-box runtime config 不存在: $SING_BOX_CONFIG" >&2
     exit 1
   fi
 
@@ -694,11 +742,13 @@ fix_singbox_routing() {
 
 # ===== v4.0: sing-box 启动序列（所有 MODE 都跑，fail-fast）=====
 # 顺序固定，任一步失败 entrypoint 非 0 退出 → tini 关停容器（EP-01 / D-V4-4）
-# H8: nft 尽早应用（start_singbox → apply_nft → fix_routing → lock_resolv），
-# 避免 sing-box 启动后 nft 应用前的泄漏窗口。
+# H8/H9: nft 必须先于 sing-box 接口检测与启动应用，确保选网卡期间
+# 容器已经处于 fail-closed。随后再生成 runtime config、启动 sing-box、
+# 修正 auto_route 规则并锁 DNS。
 prepare_bypass_rule_sets
-start_singbox_or_die
 apply_nft_or_die
+prepare_singbox_runtime_config_or_die
+start_singbox_or_die
 fix_singbox_routing
 lock_resolv_conf
 remove_singbox_config

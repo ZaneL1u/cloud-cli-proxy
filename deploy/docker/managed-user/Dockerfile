@@ -219,6 +219,7 @@ COPY deploy/docker/managed-user/sshd_config /etc/ssh/sshd_config
 COPY deploy/docker/managed-user/tmux.conf /etc/tmux.conf
 COPY deploy/docker/managed-user/profile.d-cloud-claude.sh /etc/profile.d/cloud-claude.sh
 COPY deploy/docker/managed-user/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY deploy/docker/managed-user/sync-singbox-interface.sh /usr/local/bin/cloud-cli-proxy-sync-singbox-interface
 COPY deploy/docker/managed-user/launch-chromium.sh /usr/local/bin/launch-chromium.sh
 COPY deploy/docker/managed-user/restart-vnc.sh /usr/local/bin/restart-vnc
 COPY deploy/docker/managed-user/vnc-status.sh /usr/local/bin/vnc-status
@@ -228,7 +229,11 @@ COPY deploy/docker/managed-user/default-deny.nft /etc/cloud-claude/default-deny.
 RUN chmod 0644 /etc/cloud-claude/default-deny.nft
 
 RUN chmod 0644 /etc/tmux.conf /etc/profile.d/cloud-claude.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/launch-chromium.sh /usr/local/bin/restart-vnc /usr/local/bin/vnc-status
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+    /usr/local/bin/cloud-cli-proxy-sync-singbox-interface \
+    /usr/local/bin/launch-chromium.sh \
+    /usr/local/bin/restart-vnc \
+    /usr/local/bin/vnc-status
 
 WORKDIR /workspace
 

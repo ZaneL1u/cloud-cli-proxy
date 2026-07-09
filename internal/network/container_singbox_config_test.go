@@ -134,7 +134,7 @@ func TestBuildContainerSingBoxConfig_DNSStubInboundUsesSupportedDirect(t *testin
 	t.Fatalf("missing DNS inbound listening on 127.0.0.1:53:\n%s", string(cfg))
 }
 
-func TestBuildContainerSingBoxConfig_DirectRouteUsesEth0(t *testing.T) {
+func TestBuildContainerSingBoxConfig_DoesNotHardcodeDockerInterface(t *testing.T) {
 	outbound := json.RawMessage(`{"type":"socks","server":"1.2.3.4","server_port":1080}`)
 	cfg, err := buildContainerSingBoxConfig(outbound, "1.1.1.1", "1.2.3.4")
 	if err != nil {
@@ -148,8 +148,8 @@ func TestBuildContainerSingBoxConfig_DirectRouteUsesEth0(t *testing.T) {
 	if !ok {
 		t.Fatalf("route missing or wrong type: %#v", m["route"])
 	}
-	if got := route["default_interface"]; got != "eth0" {
-		t.Fatalf("route.default_interface = %v, want eth0", got)
+	if got, ok := route["default_interface"]; ok {
+		t.Fatalf("route.default_interface must be runtime-detected, got %v", got)
 	}
 	outbounds, ok := m["outbounds"].([]any)
 	if !ok {
@@ -160,14 +160,10 @@ func TestBuildContainerSingBoxConfig_DirectRouteUsesEth0(t *testing.T) {
 		if !ok {
 			continue
 		}
-		if out["tag"] == "direct" {
-			if got := out["bind_interface"]; got != "eth0" {
-				t.Fatalf("direct outbound bind_interface = %v, want eth0", got)
-			}
-			return
+		if got, ok := out["bind_interface"]; ok {
+			t.Fatalf("outbound %q bind_interface must be runtime-detected, got %v", out["tag"], got)
 		}
 	}
-	t.Fatalf("missing direct outbound:\n%s", string(cfg))
 }
 
 func TestBuildContainerSingBoxConfig_DNSHijackScopedToStubAndRejectsOtherDNS(t *testing.T) {

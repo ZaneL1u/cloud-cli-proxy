@@ -43,6 +43,37 @@ func TestConnectContainerNetworks_RelocksDNSAfterNetworkConnect(t *testing.T) {
 	}
 }
 
+func TestConnectContainerNetworks_SyncsSingBoxInterfaceAfterNetworkConnect(t *testing.T) {
+	t.Setenv("COMPOSE_NETWORK", "test-compose-net")
+
+	prevDockerRunner := dockerRunner
+	dockerRunner = func(_ context.Context, args ...string) ([]byte, error) {
+		return nil, nil
+	}
+	t.Cleanup(func() { dockerRunner = prevDockerRunner })
+
+	fc := newFakeContainer()
+	prevExec := execInContainer
+	execInContainer = fc.runner
+	t.Cleanup(func() { execInContainer = prevExec })
+
+	w := &Worker{}
+	if err := w.connectContainerNetworks(context.Background(), "cloudproxy-h1"); err != nil {
+		t.Fatalf("connectContainerNetworks: %v", err)
+	}
+
+	found := false
+	for _, script := range fc.log {
+		if strings.Contains(script, "cloud-cli-proxy-sync-singbox-interface") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected sing-box egress interface sync after network connect, scripts=%#v", fc.log)
+	}
+}
+
 func TestConnectContainerNetworks_ReturnsDNSRelockError(t *testing.T) {
 	prevDockerRunner := dockerRunner
 	dockerRunner = func(_ context.Context, args ...string) ([]byte, error) {

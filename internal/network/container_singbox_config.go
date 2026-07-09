@@ -103,7 +103,6 @@ func buildContainerDNS() map[string]any {
 func buildContainerRoute(proxyServerIP string) map[string]any {
 	return map[string]any{
 		"default_domain_resolver": map[string]any{"server": "dns-local"},
-		"default_interface":       "eth0",
 		"rules": []map[string]any{
 			{"action": "sniff", "sniffer": []string{"tls", "http", "quic", "dns"}},
 			{"inbound": dnsStubInboundTag, "action": "hijack-dns"},
@@ -235,9 +234,8 @@ func isDomain(s string) bool {
 // buildGatewayDirectOutbound 渲染 direct outbound。
 func buildGatewayDirectOutbound() (json.RawMessage, error) {
 	raw, err := json.Marshal(map[string]any{
-		"type":           "direct",
-		"tag":            "direct",
-		"bind_interface": "eth0",
+		"type": "direct",
+		"tag":  "direct",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal direct outbound: %w", err)

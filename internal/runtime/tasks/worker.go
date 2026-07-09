@@ -483,12 +483,14 @@ func (w *Worker) createHost(ctx context.Context, request agentapi.HostActionRequ
 		return err
 	}
 
+	w.connectComposeNetwork(ctx, containerName, false)
+
 	if err := w.runDocker(ctx, "start", containerName); err != nil {
 		return fmt.Errorf("start container after create: %w", err)
 	}
 
-	// 容器以 --network none 创建，避免网络泄漏窗口；start 后显式接入所需网络。
-	// bridge 用于出站流量，compose 网络用于控制面访问容器。
+	// 容器以 bridge 网络创建用于出站流量；compose 网络用于控制面访问容器。
+	// start 前后都尝试接入 compose 网络，确保 entrypoint 能尽量看到最终网卡拓扑。
 	if err := w.connectContainerNetworks(ctx, containerName); err != nil {
 		return fmt.Errorf("connect container networks: %w", err)
 	}
@@ -545,6 +547,8 @@ func (w *Worker) startHost(ctx context.Context, request agentapi.HostActionReque
 			return fmt.Errorf("prepare gateway before start: %w", err)
 		}
 	}
+
+	w.connectComposeNetwork(ctx, containerName, false)
 
 	if err := w.runDocker(ctx, "start", containerName); err != nil {
 		return err
@@ -1334,9 +1338,9 @@ var dockerRunner = func(ctx context.Context, args ...string) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
-// connectContainerNetworks 将容器接入 compose 网络（控制面 VNC 访问需要）。
+// connectComposeNetwork 将容器接入 compose 网络（控制面 VNC 访问需要）。
 // 容器已经在 create 时通过 --network bridge 接入了 bridge 网络。
-func (w *Worker) connectContainerNetworks(ctx context.Context, containerName string) error {
+func (w *Worker) connectComposeNetwork(ctx context.Context, containerName string, warnOnError bool) {
 	composeNetwork := os.Getenv("COMPOSE_NETWORK")
 	if composeNetwork == "" {
 		composeNetwork = "cloud-cli-proxy_default"
@@ -1345,6 +1349,9 @@ func (w *Worker) connectContainerNetworks(ctx context.Context, containerName str
 	// compose 网络允许控制面通过容器 IP 直连 VNC/SSH 等端口。
 	// docker network connect 对已连接容器幂等，不需额外判重。
 	if err := w.runDocker(ctx, "network", "connect", composeNetwork, containerName); err != nil {
+		if !warnOnError {
+			return
+		}
 		// compose 网络不存在时降级为警告（非 compose 部署场景）
 		slog.Warn("connect container to compose network failed, continuing",
 			"container", containerName,
@@ -1352,8 +1359,38 @@ func (w *Worker) connectContainerNetworks(ctx context.Context, containerName str
 			"error", err,
 		)
 	}
+}
+
+// connectContainerNetworks 做 start 后的网络收尾：
+//   - 再次尝试接入 compose 网络，兼容 Docker 不允许 stopped container connect 的环境；
+//   - 触发新镜像内的 sing-box egress interface 同步脚本；
+//   - 重新锁定 resolv.conf，覆盖 Docker network connect 注入的 127.0.0.11。
+func (w *Worker) connectContainerNetworks(ctx context.Context, containerName string) error {
+	w.connectComposeNetwork(ctx, containerName, true)
+	if err := syncContainerSingBoxInterface(ctx, containerName); err != nil {
+		slog.Warn("sync container sing-box egress interface failed, continuing",
+			"container", containerName,
+			"error", err,
+		)
+	}
 	if err := lockContainerDNS(ctx, containerName); err != nil {
 		return fmt.Errorf("re-lock container DNS after network connect: %w", err)
+	}
+	return nil
+}
+
+func syncContainerSingBoxInterface(ctx context.Context, containerName string) error {
+	script := strings.Join([]string{
+		"set -e",
+		"if command -v cloud-cli-proxy-sync-singbox-interface >/dev/null 2>&1; then",
+		"  cloud-cli-proxy-sync-singbox-interface --source /etc/sing-box/config.json --config /run/sing-box/config.json --if-present",
+		"else",
+		"  echo 'cloud-cli-proxy-sync-singbox-interface not found; skip'",
+		"fi",
+	}, "\n")
+	out, err := execInContainer(ctx, containerName, script, "")
+	if err != nil {
+		return fmt.Errorf("sync sing-box egress interface: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
