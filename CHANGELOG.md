@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.17 - 2026-07-09
+## What's Changed
+
+### Backend (Go / API)
+- fix(network): auto-detect sing-box egress interface (7db3c4a)
+
+### Runtime & Deployment
+- fix(network): auto-detect sing-box egress interface (7db3c4a)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.16...v4.2.17
+
+
 ## v4.2.16 - 2026-07-08
 ## What's Changed
 
