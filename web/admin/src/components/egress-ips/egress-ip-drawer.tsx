@@ -246,12 +246,16 @@ export function EgressIPDrawer({
       delete proxyConfig.password;
     }
 
+    // ip_address 不再默认塞 0.0.0.0 占位：仅当用户显式填写时才带。
+    // 留空时后端存空，验证阶段会通过 SOCKS5 探测自动回填真实出口 IP。
     const payload: Record<string, unknown> = {
       label: values.label,
-      ip_address: ipAddress,
       provider: values.provider || "manual",
       proxy_config: proxyConfig,
     };
+    if (values.ip_address) {
+      payload.ip_address = values.ip_address;
+    }
 
     if (mode === "edit") {
       payload.status = values.status;
