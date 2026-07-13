@@ -13,6 +13,7 @@ import {
   formValuesToProxyConfig,
   proxyConfigToFormValues,
 } from "./proxy-fields";
+import { normalizeEgressIPAddress } from "@/lib/egress-ip-address";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,8 +30,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
 
 const formSchema = z
   .object({
@@ -229,12 +228,8 @@ export function EgressIPDrawer({
   }, [mode, ipData, form]);
 
   function onSubmit(values: FormValues) {
-    // ip_address 仅当用户显式填写时使用；空值时用 0.0.0.0 占位，
-    // 后端验证阶段会通过 SOCKS5 探测自动纠正为真实出口 IP。
-    let ipAddress = values.ip_address;
-    if (!ipAddress) {
-      ipAddress = "0.0.0.0";
-    }
+    // 空值表示尚未检测，后端验证阶段会通过 SOCKS5 探测真实出口 IP。
+    const ipAddress = normalizeEgressIPAddress(values.ip_address);
 
     let proxyConfig: Record<string, unknown>;
     if (values.edit_mode === "json") {

@@ -124,6 +124,21 @@ func TestAdminEgressIPsHandler(t *testing.T) {
 			wantStatus: 400,
 		},
 		{
+			name:   "Create egress IP without detected address 201",
+			method: "POST",
+			path:   "/v1/admin/egress-ips",
+			body: map[string]any{
+				"label":      "pending-detection",
+				"ip_address": "",
+				"proxy_config": map[string]any{
+					"type": "socks", "server": "proxy.example.com", "server_port": 1080,
+				},
+			},
+			store:      &stubEgressIPStore{createIP: sampleIP},
+			wantStatus: 201,
+			wantField:  "egress_ip",
+		},
+		{
 			name:       "Get egress IP 200",
 			method:     "GET",
 			path:       "/v1/admin/egress-ips/ip1",
@@ -165,6 +180,22 @@ func TestAdminEgressIPsHandler(t *testing.T) {
 			},
 			store:      &stubEgressIPStore{updateErr: sql.ErrNoRows},
 			wantStatus: 404,
+		},
+		{
+			name:   "Update egress IP invalid non-empty address 400",
+			method: "PUT",
+			path:   "/v1/admin/egress-ips/ip1",
+			body: map[string]any{
+				"label":      "updated",
+				"ip_address": "not-an-ip",
+				"provider":   "manual",
+				"status":     "available",
+				"proxy_config": map[string]any{
+					"type": "socks", "server": "proxy.example.com", "server_port": 1080,
+				},
+			},
+			store:      &stubEgressIPStore{updateIP: sampleIP},
+			wantStatus: 400,
 		},
 		{
 			name:       "Delete egress IP 204",
