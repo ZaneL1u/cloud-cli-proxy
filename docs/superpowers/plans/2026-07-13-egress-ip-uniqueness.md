@@ -32,23 +32,23 @@ TypeScript、Vitest、GitHub Actions。
 - Consumes: `migrator.RunMigrations(context.Context, *sql.DB, embed.FS)`
 - Produces: 最终结构中 `egress_ips.ip_address TEXT NOT NULL` 且不唯一
 
-- [ ] **Step 1: 写失败的升级测试**
+- [x] **Step 1: 写失败的升级测试**
 
 测试先建立仅应用 `0001`、`0002` 的旧数据库，写入用户、主机、出口和绑定，
 再通过 migrator 应用 `0003`。断言重复 IP 可插入、绑定保留、外键仍生效。
 
-- [ ] **Step 2: 运行测试确认红灯**
+- [x] **Step 2: 运行测试确认红灯**
 
 Run: `go test ./internal/store/repository -run TestMigration0003 -count=1`
 
 Expected: 因缺少 `0003_drop_egress_ip_address_unique.sql` 或重复 IP 唯一冲突失败。
 
-- [ ] **Step 3: 实现最小迁移**
+- [x] **Step 3: 实现最小迁移**
 
 迁移按以下顺序执行：备份 `host_egress_bindings`、删除子表、重建
 `egress_ips`、复制数据、恢复子表和索引、删除备份表。
 
-- [ ] **Step 4: 运行迁移测试确认绿灯**
+- [x] **Step 4: 运行迁移测试确认绿灯**
 
 Run: `go test ./internal/store/repository -run TestMigration0003 -count=1`
 
@@ -64,21 +64,21 @@ Expected: PASS。
 - Consumes: `createEgressIPRequest.IPAddress`、`updateEgressIPRequest.IPAddress`
 - Produces: 空字符串合法；非空值必须通过 `net.ParseIP`
 
-- [ ] **Step 1: 写创建空 IP 和更新非法 IP 的失败测试**
+- [x] **Step 1: 写创建空 IP 和更新非法 IP 的失败测试**
 
 创建请求传 `ip_address: ""` 应返回 201；更新请求传 `not-an-ip` 应返回 400。
 
-- [ ] **Step 2: 运行测试确认红灯**
+- [x] **Step 2: 运行测试确认红灯**
 
 Run: `go test ./internal/controlplane/http -run TestAdminEgressIPsHandler -count=1`
 
 Expected: 创建空 IP 用例得到 400，或更新非法 IP 用例得到 200。
 
-- [ ] **Step 3: 实现统一校验**
+- [x] **Step 3: 实现统一校验**
 
 对创建和更新都执行 `strings.TrimSpace`；仅在非空时调用 `net.ParseIP`。
 
-- [ ] **Step 4: 运行 API 测试确认绿灯**
+- [x] **Step 4: 运行 API 测试确认绿灯**
 
 Run: `go test ./internal/controlplane/http -run TestAdminEgressIPsHandler -count=1`
 
@@ -95,22 +95,22 @@ Expected: PASS。
 - Produces: `normalizeEgressIPAddress(value: string): string`
 - Consumes: 表单 `values.ip_address`
 
-- [ ] **Step 1: 写失败的纯函数测试**
+- [x] **Step 1: 写失败的纯函数测试**
 
 断言空白输入返回空字符串，显式 IP 去除首尾空格后保持原值。
 
-- [ ] **Step 2: 运行测试确认红灯**
+- [x] **Step 2: 运行测试确认红灯**
 
 Run: `pnpm test:unit -- src/lib/__tests__/egress-ip-address.test.ts`
 
 Expected: 因模块或导出不存在失败。
 
-- [ ] **Step 3: 实现函数并接入提交载荷**
+- [x] **Step 3: 实现函数并接入提交载荷**
 
 `normalizeEgressIPAddress` 只执行 `trim()`；抽屉提交时直接把结果放入
 `ip_address`，删除 `0.0.0.0` 回退逻辑和未使用的正则。
 
-- [ ] **Step 4: 运行前端测试确认绿灯**
+- [x] **Step 4: 运行前端测试确认绿灯**
 
 Run: `pnpm test:unit -- src/lib/__tests__/egress-ip-address.test.ts`
 
@@ -121,21 +121,23 @@ Expected: PASS。
 **Files:**
 - Modify: `.planning/debug/egress-ip-unique-collision.md`
 
-- [ ] **Step 1: 运行格式化与定向验证**
+- [x] **Step 1: 运行格式化与定向验证**
 
 Run: `gofmt -w internal/controlplane/http/admin_egress_ips.go internal/controlplane/http/admin_egress_ips_test.go internal/store/repository/migration_0003_test.go`
 
 Run: `go test ./internal/store/... ./internal/controlplane/http/...`
 
-Run: `pnpm test:unit && pnpm typecheck && pnpm build`
+Run: `pnpm test:unit && pnpm build`
 
-- [ ] **Step 2: 运行全量 Go 验证**
+Run: `pnpm typecheck`，并与 `origin/main` 基线比较；本次不新增类型错误。
+
+- [x] **Step 2: 运行全量 Go 验证**
 
 Run: `go test ./...`
 
 Expected: PASS。
 
-- [ ] **Step 3: 检查隐私、差异和迁移结构**
+- [x] **Step 3: 检查隐私、差异和迁移结构**
 
 确认新增文件没有绝对路径、凭据或个人信息；确认迁移后
 `PRAGMA foreign_key_check` 无结果。

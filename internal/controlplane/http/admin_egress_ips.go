@@ -182,7 +182,7 @@ func (h *AdminEgressIPsHandler) Create() nethttp.Handler {
 			return
 		}
 		req.IPAddress = strings.TrimSpace(req.IPAddress)
-		if net.ParseIP(req.IPAddress) == nil {
+		if req.IPAddress != "" && net.ParseIP(req.IPAddress) == nil {
 			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "invalid ip address"})
 			return
 		}
@@ -247,6 +247,11 @@ func (h *AdminEgressIPsHandler) Update() nethttp.Handler {
 
 		if req.Status != "" && req.Status != "available" && req.Status != "disabled" {
 			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "status must be available or disabled"})
+			return
+		}
+		req.IPAddress = strings.TrimSpace(req.IPAddress)
+		if req.IPAddress != "" && net.ParseIP(req.IPAddress) == nil {
+			writeJSON(w, nethttp.StatusBadRequest, map[string]string{"error": "invalid ip address"})
 			return
 		}
 
