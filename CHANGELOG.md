@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 <!-- release-entries -->
 
+## v4.2.19 - 2026-07-13
+## What's Changed
+
+### Backend (Go / API)
+- fix(egress): allow duplicate undetected addresses (bb6828e)
+
+### Frontend (Admin Web)
+- fix(egress): allow duplicate undetected addresses (bb6828e)
+
+### Docs
+- fix(egress): allow duplicate undetected addresses (bb6828e)
+
+**Full Changelog:** https://github.com/ZaneL1u/cloud-cli-proxy/compare/v4.2.18...v4.2.19
+
+
 ## v4.2.18 - 2026-07-09
 ## What's Changed
 
