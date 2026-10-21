@@ -2,6 +2,10 @@
 #
 # 以伪装身份启动 Claude Code
 #
+# 注入通道实测结论（claude 2.1.304，bun 编译二进制）：
+#   - NODE_OPTIONS="--require"：对 bun 编译版无效，仅适用于 node 直跑旧版 cli.js
+#   - BUN_OPTIONS="--preload"：对 bun 编译版有效，是当前唯一有效的注入通道
+#
 # 用法：
 #   ./claude-spoofed.sh                           # 默认伪装
 #   SPOOF_HOSTNAME=my-vm ./claude-spoofed.sh      # 自定义主机名
@@ -9,11 +13,12 @@
 #
 # 可配合代理使用（推荐）：
 #   HTTPS_PROXY=http://127.0.0.1:8888 ./claude-spoofed.sh
+#   （claude 经 undici EnvHttpProxyAgent 读取该变量；遥测事件中不含
+#    "使用代理"字段，不会因此被额外标记。全流量隧道场景无需设置。）
 #
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SPOOF_SCRIPT="$SCRIPT_DIR/spoof-fingerprint.js"
-DNS_GUARD="$SCRIPT_DIR/dns-guard.js"
 
 if [ ! -f "$SPOOF_SCRIPT" ]; then
   echo "Error: spoof-fingerprint.js not found at $SPOOF_SCRIPT"
@@ -23,10 +28,9 @@ fi
 # 如果没有设置伪装 hostname，生成一个稳定的
 export SPOOF_HOSTNAME="${SPOOF_HOSTNAME:-cloud-vm-$(echo -n "$(whoami)-$(date +%Y%m)" | shasum | cut -c1-6)}"
 
-# 将 spoof 脚本 + DNS guard 注入到 Node.js 启动流程
-export NODE_OPTIONS="--require $SPOOF_SCRIPT --require $DNS_GUARD ${NODE_OPTIONS:-}"
-# Bun 二进制（Claude Code standalone）使用 BUN_OPTIONS --preload
-export BUN_OPTIONS="--preload $SPOOF_SCRIPT --preload $DNS_GUARD ${BUN_OPTIONS:-}"
+# 注入伪装模块（BUN_OPTIONS 对 bun 编译版生效；NODE_OPTIONS 兼容 node 旧版）
+export NODE_OPTIONS="--require $SPOOF_SCRIPT ${NODE_OPTIONS:-}"
+export BUN_OPTIONS="--preload $SPOOF_SCRIPT ${BUN_OPTIONS:-}"
 
 # ── 遥测阻断环境变量 ─────────────────────────────────────────
 export DISABLE_TELEMETRY=1

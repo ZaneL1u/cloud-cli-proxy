@@ -128,19 +128,54 @@ prepare_persistent_state() {
 }
 
 prepare_container_disguise() {
-  # Per-container unique machine-id（基于 hostname + uptime，保证唯一性）
-  local h; h="$(hostname)"
-  local t; t="$(cat /proc/uptime 2>/dev/null | tr -d ' .')"
-  local mid; mid="$(echo -n "${h}-${t}" | sha256sum | cut -c1-32)"
+  # Per-container unique machine-id。持久化到 /var/lib/claude-persist：
+  # 容器重启后保持稳定，避免遥测 device_id 漂移引发"频繁新设备"异常。
+  local persist_mid=/var/lib/claude-persist/machine-id
+  local mid
+  if [ -s "$persist_mid" ]; then
+    mid="$(cat "$persist_mid")"
+  else
+    mid="$(echo -n "$(hostname)-$(date +%s)" | sha256sum | cut -c1-32)"
+    echo "$mid" > "$persist_mid"
+    chown "${RUN_USER:-workspace}:${RUN_USER:-workspace}" "$persist_mid" 2>/dev/null || true
+    chmod 444 "$persist_mid"
+  fi
   echo "$mid" > /etc/machine-id
   echo "$mid" > /var/lib/dbus/machine-id 2>/dev/null || true
   chmod 444 /etc/machine-id
 
+  # 时区伪装：与出口 IP 地理位置配套（由控制面经 DISGUISE_TZ 注入，缺省美东）。
+  # 同时作用于 Date/Intl（TZ 变量）与 shell 工具（/etc/localtime），三层一致。
+  local tz="${DISGUISE_TZ:-America/New_York}"
+  if [ -f "/usr/share/zoneinfo/${tz}" ]; then
+    echo "$tz" > /etc/timezone
+    ln -sfn "/usr/share/zoneinfo/${tz}" /etc/localtime
+  else
+    echo "[entrypoint] WARN unknown DISGUISE_TZ=${tz}, fallback America/New_York" >&2
+    tz=America/New_York
+    echo "$tz" > /etc/timezone
+    ln -sfn "/usr/share/zoneinfo/${tz}" /etc/localtime
+  fi
+
+  # 内存配额透传给 spoof 模块：os.totalmem() 返回 /proc 物理内存（宿主值），
+  # 按 cgroup 限额伪装，避免泄漏宿主机内存容量。未限额时不注入（spoof 用 8G 缺省）。
+  local mem_bytes=""
+  if [ -r /sys/fs/cgroup/memory.max ]; then
+    local v; v="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)"
+    case "$v" in max|'') ;; *[!0-9]*) ;; *) mem_bytes="$v" ;; esac
+  fi
+  if [ -z "$mem_bytes" ] && [ -r /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
+    local v1; v1="$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo '')"
+    case "$v1" in ''|*[!0-9]*) ;; 9223372036854771712) ;; *) mem_bytes="$v1" ;; esac
+  fi
+
   # 删除容器检测标志
   rm -f /.dockerenv
 
-  # 遥测阻断环境变量。覆盖写入（非追加）防止容器 restart 重复追加。
-  cat > /etc/environment <<'ENVTELEM'
+  # 遥测阻断 + 伪装模块注入。覆盖写入（非追加）防止容器 restart 重复追加。
+  # BUN_OPTIONS 是 claude（bun 编译二进制）唯一有效的 preload 注入通道；
+  # 不注入 NODE_OPTIONS，避免干扰用户自己的 node 程序。
+  cat > /etc/environment <<ENVTELEM
 DISABLE_TELEMETRY=1
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=
@@ -152,9 +187,39 @@ OTEL_LOGS_EXPORTER=none
 SENTRY_DSN=
 DISABLE_ERROR_REPORTING=1
 TELEMETRY_DISABLED=1
+TZ=${tz}
+SPOOF_TIMEZONE=${tz}
+BUN_OPTIONS=--preload /usr/local/lib/cloud-cli-proxy/spoof-fingerprint.js
+BROWSER=/usr/local/bin/cc-browser-open
+${mem_bytes:+SPOOF_TOTAL_MEM=${mem_bytes}}
 ENVTELEM
 
-  echo "[entrypoint] container disguise: machine-id generated, /.dockerenv removed, telemetry blocked"
+  # UsePAM=no 时 /etc/environment 不进 login shell，SPOOF_* 需经 profile.d 传递。
+  # 此文件由 entrypoint 按实际配额动态生成，与上方静态 /etc/environment 双通道冗余。
+  {
+    echo "export TZ=\"${tz}\""
+    echo "export SPOOF_TIMEZONE=\"${tz}\""
+    echo "export BROWSER=/usr/local/bin/cc-browser-open"
+    if [ -n "$mem_bytes" ]; then
+      echo "export SPOOF_TOTAL_MEM=${mem_bytes}"
+    fi
+  } > /etc/profile.d/zz-disguise.sh
+  chmod 0644 /etc/profile.d/zz-disguise.sh
+
+  echo "[entrypoint] container disguise: machine-id=${mid:0:8}…(persistent) /.dockerenv removed TZ=${tz} mem=${mem_bytes:-default8G} telemetry blocked"
+
+  # 导出到 entrypoint（PID 1）进程环境：sshd 会话与 VNC 桌面终端均为其
+  # 子进程，统一继承；覆盖非 login shell 不读 /etc/environment 的场景。
+  # 必须在 start_sshd_or_die / start_desktop_stack 之前完成（见 main 流程）。
+  export TZ="${tz}"
+  export SPOOF_TIMEZONE="${tz}"
+  export BUN_OPTIONS="--preload /usr/local/lib/cloud-cli-proxy/spoof-fingerprint.js"
+  # OAuth 浏览器入口：claude /login 经 $BROWSER 在 VNC 桌面 Chromium 打开，
+  # 认证流量与 API 同出口，回调走容器内 localhost。
+  export BROWSER=/usr/local/bin/cc-browser-open
+  if [ -n "$mem_bytes" ]; then
+    export SPOOF_TOTAL_MEM="${mem_bytes}"
+  fi
 }
 
 prepare_mergerfs_check() {
@@ -522,7 +587,6 @@ YAML
 
   prepare_workspace_dirs
   prepare_persistent_state
-  prepare_container_disguise
   prepare_mergerfs_check
   assert_tmux_version
 
@@ -623,6 +687,11 @@ start_vnc_watchdog_async() {
 
 # SSH setup
 mkdir -p /var/run/sshd
+
+# 容器伪装在 sshd / 桌面栈启动前完成：machine-id、TZ、BUN_OPTIONS 注入
+# 需先进入 PID 1 环境，sshd 会话与 VNC 桌面才能继承。
+prepare_container_disguise
+
 if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
   ssh-keygen -A
 fi
