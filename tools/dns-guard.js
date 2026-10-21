@@ -3,6 +3,13 @@
 // ── DNS 遥测拦截模块 ──────────────────────────────────────────
 // 拦截 DNS 查询和网络连接，阻止 Claude Code 向遥测/分析端点发送数据。
 // 兼容 Node.js (--require) 和 Bun (--preload) 两种加载方式。
+//
+// ⚠️ 局限性（实测，claude 2.1.304 bun 编译二进制）：
+//   bun 编译版的网络层（fetch / dns / net / tls）为内建实现，不经过
+//   node 兼容层的 JS 模块对象，本模块的 patch 对其无效。
+//   对 bun 编译版 Claude Code，遥测拦截只能依赖容器网络层
+//   （sing-box tun + nftables 默认拒绝）；本模块仅对 node 直跑的
+//   程序（旧版 cli.js、自研脚本等）有效，故不再注入 claude 启动链路。
 
 var dns = require("dns");
 var net = require("net");

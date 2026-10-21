@@ -25,8 +25,21 @@ if [[ -z "${browser_cmd}" ]]; then
     -e bash -lc "echo Chromium is not installed.; exec bash"
 fi
 
+# 带参数（URL / flags）时同样附加防泄漏与固定 profile 参数，保证
+# OAuth 等场景新开的标签与桌面会话一致（chromium 自动复用已有实例）。
 if [[ $# -gt 0 ]]; then
-  exec "${browser_cmd}" "$@"
+  exec "${browser_cmd}" \
+    --no-sandbox \
+    --disable-dev-shm-usage \
+    --user-data-dir=/workspace/.chrome-data \
+    --lang="${CHROMIUM_LANG}" \
+    --accept-lang="${CHROMIUM_ACCEPT_LANG}" \
+    --no-first-run \
+    --disable-gpu \
+    --disable-features=WebRtcHideLocalIpsWithMdns \
+    --enforce-webrtc-ip-permission-check \
+    --force-webrtc-ip-handling-policy=disable_non_proxied_udp \
+    "$@"
 fi
 
 exec "${browser_cmd}" \

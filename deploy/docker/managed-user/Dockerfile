@@ -57,6 +57,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         nano \
         less \
         unzip \
+        tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 RUN sed -i 's/^#user_allow_other/user_allow_other/' /etc/fuse.conf \
@@ -223,6 +224,15 @@ COPY deploy/docker/managed-user/sync-singbox-interface.sh /usr/local/bin/cloud-c
 COPY deploy/docker/managed-user/launch-chromium.sh /usr/local/bin/launch-chromium.sh
 COPY deploy/docker/managed-user/restart-vnc.sh /usr/local/bin/restart-vnc
 COPY deploy/docker/managed-user/vnc-status.sh /usr/local/bin/vnc-status
+
+# v4.3: 进程内环境伪装模块（经 BUN_OPTIONS=--preload 注入 claude 进程）。
+# entrypoint 写 /etc/environment，profile.d 做非 login shell 双保险。
+COPY tools/spoof-fingerprint.js /usr/local/lib/cloud-cli-proxy/spoof-fingerprint.js
+# v4.3: OAuth 浏览器入口 — claude /login 等认证流程在 VNC 桌面 Chromium 打开，
+# 浏览器流量与 API 同走 sing-box 出口，OAuth 回调走容器内 localhost。
+COPY deploy/docker/managed-user/browser-open.sh /usr/local/bin/cc-browser-open
+RUN chmod 0644 /usr/local/lib/cloud-cli-proxy/spoof-fingerprint.js \
+    && chmod 0755 /usr/local/bin/cc-browser-open
 
 # v4.0: 容器内 nft default-deny 规则集（D-V4-3 / NET-01 / NET-02）
 COPY deploy/docker/managed-user/default-deny.nft /etc/cloud-claude/default-deny.nft
